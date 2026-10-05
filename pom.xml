@@ -9,9 +9,9 @@
 		<!-- lookup parent from repository -->
 	</parent>
 	<groupId>se.sundsvall</groupId>
-	<artifactId>template-spring-boot</artifactId>
+	<artifactId>api-service-aot-loader</artifactId>
 	<version>1.0</version>
-	<name>template</name>
+	<name>api-service-aot-loader</name>
 	<properties />
 	<dependencies>
 		<dependency>
