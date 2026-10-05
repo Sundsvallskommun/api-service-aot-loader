@@ -18,7 +18,7 @@ bin/
 *.iml
 *.iws
 
-# Visual sturdio
+# Visual Studio
 .vscode/
 
 # Compiled class file
@@ -54,3 +54,6 @@ hs_err_pid*
 # Spring
 application-default.*
 
+/CLAUDE.md
+/.claude/
+/build.log

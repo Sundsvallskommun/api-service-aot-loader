@@ -1,4 +1,4 @@
-package se.sundsvall.template;
+package se.sundsvall.aotloader;
 
 import se.sundsvall.dept44.ServiceApplication;
 
