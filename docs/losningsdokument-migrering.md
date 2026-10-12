@@ -10,7 +10,7 @@
 
 ## 1. Sammanfattning
 
-Gällande alkohol- och tobakstillstånd och tillsynsärendena flyttas från de gamla systemen till SupportManagement och PartyAssets. Varje tillstånd blir ett avslutat ärende i SupportManagement och ett tillstånd i PartyAssets, och de två kopplas ihop. Tillsynsärendena blir avslutade ärenden i SupportManagement. Migrerade ärenden får samma etiketter som vanliga ärenden plus etiketten "Migrerat ärende". Den etiketten spärrar processer, vilket kräver en liten ändring i SupportManagement.
+Gällande alkohol- och tobakstillstånd och tillsynsärendena flyttas från de gamla systemen till SupportManagement och PartyAssets. Varje tillstånd blir ett avslutat ärende i SupportManagement och ett tillstånd i PartyAssets, och de två kopplas ihop. Tillsynsärendena blir avslutade ärenden i SupportManagement, och migreringsappen skapar en relation från tillståndsärendet till varje tillsynsärende som gällde samma serveringsställe och tillståndshavare. Migrerade ärenden får samma etiketter som vanliga ärenden plus etiketten "Migrerat ärende". Den etiketten spärrar processer, vilket kräver en liten ändring i SupportManagement.
 
 Under migreringen skickas inga mail, sms eller meddelanden, och inga processer startar. Inga processer får heller starta senare, när handläggare ändrar de migrerade ärendena.
 
@@ -33,21 +33,22 @@ Efter migreringen gäller följande:
 
 - Varje gällande tillstånd finns som ett ärende i namespace ALKT (kommun 2281) som handläggarna kan söka fram och läsa. Ärendet innehåller tillståndets uppgifter och är märkt som migrerat.
 - Varje gällande tillstånd finns i PartyAssets, tillhör tillståndshavaren och är kopplat till ärendet.
-- Varje tillsynsärende som ingår finns som ett avslutat, migrerat ärende, kopplat till serveringsstället.
+- Varje tillsynsärende som ingår finns som ett avslutat, migrerat ärende, kopplat till serveringsstället. Har serveringsstället ett migrerat tillstånd, och gällde tillsynsärendet samma tillståndshavare, finns en relation mellan tillståndsärendet och tillsynsärendet.
 - Ingen kund har fått något meddelande, ingen process har startat, och inga mail har skickats.
 
 ### 2.2 Krav
 
-| Nr |                                                                                     Krav                                                                                      |
-|----|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| K1 | Inga mail, sms eller andra meddelanden skickas, varken under eller efter migreringen.                                                                                         |
-| K2 | Ingen process i pw-alkt startar, varken under migreringen eller när ett migrerat ärende ändras senare.                                                                        |
-| K3 | Migreringen kan köras om utan att det blir dubbletter, även efter ett avbrott mitt i ett tillstånd.                                                                           |
-| K4 | Det finns ett provkörningsläge som bara rapporterar vad som skulle skapas, utan att skriva något.                                                                             |
-| K5 | Varje migrerat tillstånd och tillsynsärende går att spåra från källrad till ärende och tillstånd, och tillbaka.                                                               |
-| K6 | Tillståndshavarens och andra personers namn, personnummer och organisationsnummer finns bara i källsystemen och målsystemen, aldrig i loggar, rapporter eller statustabeller. |
-| K7 | Källsystemen ändras inte av migreringen.                                                                                                                                      |
-| K8 | Migrerade ärenden är märkta, så att handläggare ser att ärendet är migrerat och kan söka fram alla migrerade ärenden.                                                         |
+| Nr |                                                                                                Krav                                                                                                |
+|----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| K1 | Inga mail, sms eller andra meddelanden skickas, varken under eller efter migreringen.                                                                                                              |
+| K2 | Ingen process i pw-alkt startar, varken under migreringen eller när ett migrerat ärende ändras senare.                                                                                             |
+| K3 | Migreringen kan köras om utan att det blir dubbletter, även efter ett avbrott mitt i ett tillstånd.                                                                                                |
+| K4 | Det finns ett provkörningsläge som bara rapporterar vad som skulle skapas, utan att skriva något.                                                                                                  |
+| K5 | Varje migrerat tillstånd och tillsynsärende går att spåra från källrad till ärende och tillstånd, och tillbaka.                                                                                    |
+| K6 | Tillståndshavarens och andra personers namn, personnummer och organisationsnummer finns bara i källsystemen och målsystemen, aldrig i loggar, rapporter eller statustabeller.                      |
+| K7 | Källsystemen ändras inte av migreringen.                                                                                                                                                           |
+| K8 | Migrerade ärenden är märkta, så att handläggare ser att ärendet är migrerat och kan söka fram alla migrerade ärenden.                                                                              |
+| K9 | Migreringsappen skapar relationen mellan varje migrerat tillsynsärende och tillståndsärendet för samma serveringsställe och tillståndshavare, en gång per par, även vid omkörning (avsnitt 7.7.1). |
 
 ### 2.3 Vad som ingår (beslut 1)
 
@@ -184,13 +185,14 @@ Dokument som inte migreras ska ändå bevaras enligt kommunens dokumenthantering
 
 ## 4. Målsystem
 
-|      System       |                                              Vad det får                                               |                                        Anrop                                        |
-|-------------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| SupportManagement | Ett avslutat, märkt ärende per tillstånd i namespace ALKT                                              | Söka på extern tagg, skapa ärende, aktivera ärende. I fas 2 även ladda upp bilagor. |
-| PartyAssets       | Ett tillstånd per tillstånd, kopplat till ärendet                                                      | Skapa tillstånd, söka på tillståndets id tillsammans med partyId                    |
-| Party             | Ingenting. Används för att slå upp partyId.                                                            | Slå upp partyId från organisations- eller personnummer                              |
-| licensed-business | Ingenting. Serveringsställenumret och dess nuvarande tilldelning stäms av mot registret (avsnitt 7.6). | Slå upp ett serveringsställenummer och dess tilldelning                             |
-| pw-alkt           | Ingenting. Får aldrig nås av migreringen.                                                              | Inga                                                                                |
+|      System       |                                                          Vad det får                                                          |                                        Anrop                                        |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| SupportManagement | Ett avslutat, märkt ärende per tillstånd i namespace ALKT                                                                     | Söka på extern tagg, skapa ärende, aktivera ärende. I fas 2 även ladda upp bilagor. |
+| PartyAssets       | Ett tillstånd per tillstånd, kopplat till ärendet                                                                             | Skapa tillstånd, söka på tillståndets id tillsammans med partyId                    |
+| Party             | Ingenting. Används för att slå upp partyId.                                                                                   | Slå upp partyId från organisations- eller personnummer                              |
+| licensed-business | Ingenting. Serveringsställenumret och dess nuvarande tilldelning stäms av mot registret (avsnitt 7.6).                        | Slå upp ett serveringsställenummer och dess tilldelning                             |
+| Relation          | En relation mellan tillståndsärendet och varje tillsynsärende med samma serveringsställe och tillståndshavare (avsnitt 7.7.1) | Söka relationer, skapa relation                                                     |
+| pw-alkt           | Ingenting. Får aldrig nås av migreringen.                                                                                     | Inga                                                                                |
 
 ## 5. Lösningsöversikt
 
@@ -198,8 +200,8 @@ Dokument som inte migreras ska ändå bevaras enligt kommunens dokumenthantering
 AlkT (SQL Server) ─┐                                ┌─► Party              (partyId)
                    ├─► Migreringsapp ──────────────┼─► licensed-business  (serveringsställenummer)
 Tobaksdatabas ─────┤   · källor per databas         ├─► PartyAssets        (tillstånd, länkat till ärendet)
-(fas 2)            │   · regler och mappning        └─► SupportManagement  (ärende: utkast → aktivt)
-Filarea (fas 2) ───┘   · statustabell och rapport
+(fas 2)            │   · regler och mappning        ├─► SupportManagement  (ärende: utkast → aktivt)
+Filarea (fas 2) ───┘   · statustabell och rapport   └─► Relation           (tillståndsärende → tillsynsärende)
                                                         ✕ pw-alkt    ingen process får starta
                                                         ✕ Messaging  inga mail eller sms
 ```
@@ -277,6 +279,7 @@ Vilka tillstånd som ska granskas avgörs av regler, inte av handpåläggning. S
 | G14 | En fil som ska följa med finns inte på filarean. Upplysning, stoppar inte migreringen.                                                                               | Filarean          | Syns i fas 2                       |
 | G15 | Tillståndet saknar diarienummer (beslut 4)                                                                                                                           | AlkT              | 9                                  |
 | G16 | Diarienumret finns på mer än ett tillstånd (beslut 4)                                                                                                                | AlkT              | Okänt, syns i granskningslistan    |
+| G17 | Tillståndet går inte att ge någon undertyp enligt avsnitt 7.3.4                                                                                                      | AlkT              | Okänt, syns i granskningslistan    |
 
 Ett tillstånd kan träffas av flera regler. I dag ger G1–G8, G12 och G15 drygt 30 träffar.
 
@@ -333,22 +336,22 @@ Intressentens parametrar följer samma regler som ärendets: nyckeln högst 255 
 
 ### 7.3 Ärende i SupportManagement
 
-|       Fält        |                                                                                                 Värde                                                                                                  |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `title`           | "Serveringstillstånd – {serveringsställets namn}"                                                                                                                                                      |
-| `description`     | En läsbar sammanfattning av drycker, vem serveringen gäller, omfattning, tider och villkor                                                                                                             |
-| `priority`        | MEDIUM                                                                                                                                                                                                 |
-| `status`          | En avslutad status i ALKT (beslut 5)                                                                                                                                                                   |
-| `classification`  | Kategori och typ för befintliga tillstånd (beslut 5)                                                                                                                                                   |
-| `labels`          | Samma etiketter som ett vanligt ärende av samma typ, även etiketter med `processKey`, plus etiketten "Migrerat ärende". Etiketten spärrar alla processer för ärendet (avsnitt 7.3.1, beslut 5 och 17). |
-| `channel`         | MIGRATION (förslag)                                                                                                                                                                                    |
-| `reporterUserId`  | alkt-migration. Fältet är obligatoriskt och ingen person har anmält ärendet.                                                                                                                           |
-| `assignedUserId`  | Tomt, så att ingen handläggare får en notis om ärendet. Prenumeranter får ändå interna notiser när ärendet aktiveras, se R3.                                                                           |
-| `businessRelated` | true                                                                                                                                                                                                   |
-| `lifecycle`       | DRAFT när ärendet skapas, ACTIVE i sista steget                                                                                                                                                        |
-| `externalTags`    | `diarienummer` = tillståndets diarienummer i AlkT, nyckeln mot AlkT och skyddet mot dubbletter (beslut 4, avsnitt 6)                                                                                   |
-| `stakeholders`    | Tillståndshavaren, serveringsstället med serveringsställenumret som parameter (avsnitt 7.2.1) och, om beslut 15 säger det, personer med betydande inflytande (avsnitt 7.2)                             |
-| `parameters`      | Enligt tabellen nedan                                                                                                                                                                                  |
+|       Fält        |                                                                                                                Värde                                                                                                                |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `title`           | "Serveringstillstånd – {serveringsställets namn}"                                                                                                                                                                                   |
+| `description`     | En läsbar sammanfattning av drycker, vem serveringen gäller, omfattning, tider och villkor                                                                                                                                          |
+| `priority`        | MEDIUM                                                                                                                                                                                                                              |
+| `status`          | En avslutad status i ALKT (beslut 5). Statusen syns för kunden på Mina sidor och måste också finnas i case-status (avsnitt 7.3.5).                                                                                                  |
+| `classification`  | Kategori och typ för befintliga tillstånd (beslut 5)                                                                                                                                                                                |
+| `labels`          | Samma etiketter som ett vanligt ärende för samma sorts tillstånd (avsnitt 7.3.4), även etiketter med `processKey`, plus etiketten "Migrerat ärende". Etiketten spärrar alla processer för ärendet (avsnitt 7.3.1, beslut 5 och 17). |
+| `channel`         | MIGRATION (förslag)                                                                                                                                                                                                                 |
+| `reporterUserId`  | alkt-migration. Fältet är obligatoriskt och ingen person har anmält ärendet.                                                                                                                                                        |
+| `assignedUserId`  | Tomt, så att ingen handläggare får en notis om ärendet. Prenumeranter får ändå interna notiser när ärendet aktiveras, se R3.                                                                                                        |
+| `businessRelated` | true                                                                                                                                                                                                                                |
+| `lifecycle`       | DRAFT när ärendet skapas, ACTIVE i sista steget                                                                                                                                                                                     |
+| `externalTags`    | `diarienummer` = tillståndets diarienummer i AlkT, nyckeln mot AlkT och skyddet mot dubbletter (beslut 4, avsnitt 6)                                                                                                                |
+| `stakeholders`    | Tillståndshavaren, serveringsstället med serveringsställenumret som parameter (avsnitt 7.2.1) och, om beslut 15 säger det, personer med betydande inflytande (avsnitt 7.2)                                                          |
+| `parameters`      | Enligt tabellen nedan                                                                                                                                                                                                               |
 
 #### 7.3.1 Märkning av migrerade ärenden
 
@@ -361,7 +364,7 @@ Migrerade ärenden märks på fyra sätt. Etiketten är det handläggarna ser. D
 | Kanal `MIGRATION`                                | Beror på gränssnittet        | Ja                  | Skiljer migrerade ärenden från inkomna                                           |
 | Extern tagg `diarienummer` (diarienumret i AlkT) | Normalt inte                 | Ja                  | Nyckel mot källsystemet och skydd mot dubbletter                                 |
 
-Etiketten läggs som en egen etikett i ALKT, utanför trädet med tillståndstyper. Källsystemet (AlkT eller tobaksdatabasen) syns i parametern och den externa taggen, så det räcker med en etikett för båda källorna.
+Etiketten läggs som en egen etikett i ALKT, utanför trädet med tillståndstyper: under taggroten som `TAGROOT/MIGRATED_ERRAND`, med klassificeringen `TAG` som de övriga etiketterna där och attributet `processBlocked=true` (avsnitt 7.3.2). Källsystemet (AlkT eller tobaksdatabasen) syns i parametern och den externa taggen, så det räcker med en etikett för båda källorna.
 
 #### 7.3.2 Spärr mot processer
 
@@ -409,6 +412,54 @@ Tomma värden utelämnas, och ett värde får vara högst 3 000 tecken. Serverin
 | `migrerad`        | Migrerad              | –                                                                                                                                         | "ÅÅÅÅ-MM-DD från AlkT"                                                                                                                                     |
 
 Nycklarna är förslag och samordnas med parametrarna i pw-alkt (beslut 3).
+
+#### 7.3.4 Etiketter per tillstånd
+
+Ett migrerat ärende får samma etiketter som ett ärende som kommer in för samma sorts tillstånd (beslut 5). Etiketterna nedan kommer ur etikettträdet i ALKT (Bilaga B).
+
+- Appen anger bara den djupaste etiketten. SupportManagement lägger själv till föräldrarna, så ett ärende med "Stadigvarande servering" bär också "Serveringstillstånd för alkoholdrycker" och "Alkohol".
+- En etikett pekas ut med sitt id, och id:t är olika i test och produktion. Appen slår därför upp id:t för varje etikett via `resourcePath` när den startar, och startar inte om någon etikett saknas.
+- Appen skickar bara etikettens id, aldrig dess `version`. Varje ändring av etikettträdet räknar upp versionen på alla etiketter med attribut, även oförändrade, och en inaktuell version avvisas med 412.
+- Etiketterna under `CATEGORYROOT` har `processKey`. De migrerade ärendena bär dem ändå, eftersom "Migrerat ärende" spärrar alla processer (avsnitt 7.3.2).
+
+**Etiketter som varje migrerat serveringstillstånd får:**
+
+|              Etikett              |                   `resourcePath`                    |
+|-----------------------------------|-----------------------------------------------------|
+| Migrerat ärende                   | `TAGROOT/MIGRATED_ERRAND`                           |
+| En undertyp enligt tabellen nedan | `CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/…` |
+
+**Undertyp (förslag, godkänns av verksamheten).** Reglerna prövas i tur och ordning, och den första som stämmer avgör. `…` står för `CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION`.
+
+| Ordning |                                           Villkor i AlkT                                           |                                                         Undertyp                                                         |                       `resourcePath`                        |                 Antal 2026-10-05                 |
+|---------|----------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|--------------------------------------------------|
+| 1       | Gäller inte året runt och har en datumperiod                                                       | Tillfälligt tillstånd – allmänheten när `ServeringAllmanhet` är markerad, annars Tillfälligt tillstånd – slutet sällskap | `…/TEMPORARY_SERVING_PUBLIC`, `…/TEMPORARY_SERVING_PRIVATE` | 1 (samma tillstånd som får `validTo` i 7.4)      |
+| 2       | Servering till allmänheten eller slutna sällskap (`ServeringAllmanhet`, `ServeringSlutetSallskap`) | Stadigvarande servering                                                                                                  | `…/PERMANENT_SERVING`                                       | Nästan alla: allmänheten 119, slutna sällskap 68 |
+| 3       | Catering                                                                                           | Stadigvarande catering – slutna sällskap                                                                                 | `…/PERMANENT_CATERING`                                      | Högst 22                                         |
+| 4       | Gårdsförsäljning                                                                                   | Gårdsförsäljning                                                                                                         | `…/FARM_SALES`                                              | Högst 1                                          |
+| 5       | Provsmakning                                                                                       | Provsmakning                                                                                                             | `…/TASTING`                                                 | Högst 3                                          |
+| –       | Inget av ovanstående                                                                               | Granskas (G17)                                                                                                           | –                                                           | Okänt, syns i granskningslistan                  |
+
+Antalen gäller markeringarna var för sig, eftersom de inte är korskörda. Har ett tillstånd för enbart catering också slutna sällskap markerat i AlkT träffas det av regel 2 och inte av regel 3. Hur ett sådant tillstånd känns igen stäms av med verksamheten.
+
+**Ett tillstånd med flera markeringar får en undertyp (förslag).** I AlkT är catering, provsmakning och gårdsförsäljning markeringar på samma tillstånd som serveringen. Förslaget ger varje tillstånd en undertyp, och övriga markeringar står i parametern `omfattning` (avsnitt 7.3.3).
+- Nackdelen är att en sökning på undertypen "Stadigvarande catering" inte hittar de tillstånd där catering står bredvid serveringen. De hittas via parametern `omfattning`.
+- Alternativet är att ge tillståndet alla undertyper som stämmer. Det fungerar i SupportManagement, eftersom alla undertyper har samma `processKey`. Men Mina sidor visar bara en av dem, den som råkar komma först (avsnitt 7.3.5).
+
+Valet är en öppen fråga (avsnitt 16).
+
+#### 7.3.5 Ärendet på Mina sidor
+
+Tillståndshavaren ser de migrerade ärendena på Mina sidor. case-status, som visar ärendena där, hämtar ärenden i alla namespaces i SupportManagement där kunden är intressent med rollen `PRIMARY`, om inte case-status är inställd på en annan roll för namespacet. Tillståndshavaren har den rollen (avsnitt 7.2), så varje migrerat tillstånd syns i kundens ärendelista från det att ärendet aktiveras (steg 5 i avsnitt 6). Utkast syns inte, eftersom sökningen i SupportManagement utesluter dem.
+
+| Det kunden ser |                                                                     Varifrån det kommer                                                                      |                                                                                                          Följd för migreringen                                                                                                          |
+|----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Status         | case-status översätter ärendets status i sin egen tabell `statuses`. En status som saknas där visas som "Handläggning pågår".                                | Den avslutade statusen (beslut 5) måste finnas i `statuses` med en extern status som visar att ärendet är avslutat. Annars ser kunden ett avslutat tillstånd som pågående. Raden läggs i case-status databas, inte i SupportManagement. |
+| Ärendetyp      | Visningsnamnet för den kategori och typ i ALKT som matchar ärendets `classification`. Finns ingen sådan används visningsnamnet på ärendets djupaste etikett. | Utan matchande kategori och typ ser kunden undertypen, till exempel "Stadigvarande servering". "Migrerat ärende" ligger grundare i trädet och visas aldrig.                                                                             |
+
+Tillsynsärendena syns på samma sätt om tillståndshavaren får rollen `PRIMARY` på dem (avsnitt 7.7). Rollen avgör alltså om kunden ser tillsynen.
+
+Om de migrerade ärendena ska synas för kunden är inte beslutat (avsnitt 16). Ska de inte synas måste det lösas före produktionskörningen, utanför migreringsappen.
 
 ### 7.4 Tillstånd i PartyAssets
 
@@ -499,33 +550,97 @@ Beslut 1 tar med tillsynsärendena i den första migreringen. Tillsynen i AlkT �
 | Filer från tillsyn                        | 745 på serveringsställen med tillstånd | PDF 452, doc 241, övrigt                                                                                                                                             |
 
 **Så blir ett tillsynsärende i SupportManagement.**
-- Ett avslutat ärende per tillsynsärende i AlkT. Det får etiketterna för tillsyn i ALKT plus etiketten "Migrerat ärende", som spärrar processer också här (avsnitt 7.3.2).
+- Ett avslutat ärende per tillsynsärende i AlkT. Det får etiketterna för tillsyn i ALKT enligt tabellen nedan, plus etiketten "Migrerat ärende", som spärrar processer också här (avsnitt 7.3.2).
 - Intressenter: serveringsstället, med serveringsställenumret som parameter (avsnitt 7.2.1), och den tillståndshavare som ärendet gällde, med uppslag i Party som i 7.2.
 - Parametrar: ärendetyp, diarienummer, öppnat och avslutat datum, beslutet i tillsynsärendet (typ och datum) och anmärkningar.
 - Diarienumret ligger i den externa taggen `diarienummer`, precis som för tillstånden (beslut 4).
-- Ärendet kopplas till ärendet för serveringsställets migrerade tillstånd med en relation, när serveringsstället har ett sådant.
+- Migreringsappen skapar en relation från ärendet för serveringsställets migrerade tillstånd till tillsynsärendet, när serveringsstället har ett sådant och tillsynsärendet gällde samma tillståndshavare (avsnitt 7.7.1, K9).
 - Filerna i tillsynsärendet följer med enligt samma princip som för tillstånden (beslut 7).
 - Inga tillstånd skapas eller ändras i PartyAssets.
+
+**Etiketter för tillsynsärenden (förslag, godkänns av verksamheten).** Etikettträdet i ALKT har kategorin Tillsyn med typerna Yttre tillsyn, Inre tillsyn och Åtgärder, och taggen Alkoholtillsyn. Enligt pw-alkt är yttre tillsyn tillsyn på serveringsstället och inre tillsyn prövning av tillståndshavarens lämplighet. Precis som för tillstånden anger appen bara den djupaste etiketten (avsnitt 7.3.4).
+
+|                          AlkT                          |         Etikett         |                `resourcePath`                 |
+|--------------------------------------------------------|-------------------------|-----------------------------------------------|
+| Ärendetyp 07 "Tillsyn, ifrågasatt åtgärd"              | Inre tillsyn            | `CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION` |
+| Ärendetyp 08 "Tillsyn, restaurangrapport"              | Inre tillsyn            | `CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION` |
+| Ärendetyp 09 "Tillsyn, information m m"                | Bestäms av verksamheten | –                                             |
+| Tillsynsbesök, om de blir egna ärenden (punkt 2 nedan) | Yttre tillsyn           | `CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION` |
+| Alla tillsynsärenden                                   | Alkoholtillsyn          | `TAGROOT/ALCOHOL_INSPECTION`                  |
+| Alla tillsynsärenden                                   | Migrerat ärende         | `TAGROOT/MIGRATED_ERRAND`                     |
+
+Typen Åtgärder motsvarar troligen de åtgärdsärenden som skapas ur en tillsyn i den nya handläggningen, och föreslås inte för migrerade ärenden. Inre och yttre tillsyn har `processKey` med `processStartMode=MANUAL`. Spärren gäller även dem, så "Starta process" avvisas för migrerade tillsynsärenden.
 
 **Det som återstår innan mappningen är klar.**
 1. Analys omgång 6: hur många tillsynsärenden och tillsynsbesök som gäller serveringsställen med och utan gällande tillstånd, vilka år de spänner över, hur ägare och diarienummer är ifyllda, och filerna per ärende.
 2. Avgränsning: om alla tillsynsärenden tas med eller bara de på serveringsställen med gällande tillstånd, och om tillsynsbesöken blir egna ärenden, uppgifter på tillsynsärendet eller bara datum för senaste tillsyn på serveringsstället.
-3. Vilka etiketter i ALKT som tillsynsärendena ska ha.
+3. Att verksamheten godkänner etiketterna i tabellen ovan och bestämmer etiketten för ärendetyp 09.
 4. Vilka personer som följer med. Serveringspersonal vid besöken finns med personnummer i `Tillsyn_Servpers`. Enligt beslut 15 följer personal inte med.
+5. Vilken roll tillståndshavaren får på tillsynsärendet. Med rollen `PRIMARY` syns tillsynsärendet för kunden på Mina sidor (avsnitt 7.3.5).
+
+#### 7.7.1 Relation mellan tillsynsärende och tillståndsärende
+
+Relationen mellan tillsynsärendet och tillståndsärendet måste skapas av migreringsappen (K9). Den kopplar ihop de två ärendena i SupportManagement, så att handläggarna kan gå från tillståndet till tillsynen på serveringsstället och tillbaka. Paren bildas via serveringsstället och tillståndshavaren (valt 2026-10-12):
+- tillsynsärendet och tillståndet hör till samma serveringsställe i AlkT, och
+- tillsynsärendet gällde samma tillståndshavare som det migrerade tillståndet har, alltså serveringsställets nuvarande ägare (beslut 13). Gällde tillsynsärendet en tidigare tillståndshavare skapas ingen relation.
+
+Tillståndshavarna jämförs på organisations- eller personnummer, normaliserade enligt 7.2, och inte på ägarpost, eftersom samma nummer kan finnas på flera ägarposter (G7). Jämförelsen görs i minnet; numren sparas inte i statustabellen eller rapporten (K6).
+
+|   Fält    |                                                                                                                  Värde                                                                                                                  |
+|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`    | `LINK`, samma relationstyp som pw-alkt använder när ett ärende kopplas till ett annat ärende                                                                                                                                            |
+| `source`  | Tillståndsärendet: ärendets id som `resourceId`, `type` = `case` och `namespace` = ALKT                                                                                                                                                 |
+| `target`  | Tillsynsärendet, på samma sätt                                                                                                                                                                                                          |
+| `service` | `supportmanagement` på både källa och mål, samma värde som pw-alkt skickar för ärenden i SupportManagement (`SupportManagementMapper.java` i pw-alkt) och som länken från tillståndet i PartyAssets har (avsnitt 7.4). Valt 2026-10-12. |
+
+Riktningen följer pw-alkt, där det ärende som det andra utgår från är källa. Där är tillsynsärendet källa och åtgärdsärendet som skapas ur tillsynen mål. På samma sätt utgår tillsynen från tillståndet.
+
+**Så skapas relationen.**
+- Appen anropar relationstjänsten direkt (`POST /2281/relations`). Parametern `referredFrom` när tillsynsärendet skapas används inte. SupportManagement loggar bara en varning om relationen inte går att skapa den vägen, och när en omkörning hittar ett befintligt ärende skapas relationen aldrig (`ErrandService.java` rad 168–175).
+- Tillståndsärendets id hämtas ur statustabellen via serveringsställets id. Tillståndet måste ha status KLAR. Därefter jämförs tillståndshavarna enligt ovan.
+- Före skapandet söker appen efter en relation med samma källa och mål (`GET /2281/relations` med `filter` på källans och målets id). Finns en används dess id, annars skapas relationen. Finns flera skapas ingen ny, och avvikelsen visas i rapporten. Skyddet mot dubbletter görs alltså i kod och förutsätter, som för ärenden och tillstånd, att bara en körning pågår åt gången (avsnitt 6).
+- Relationens id, från `Location`, sparas i statustabellen.
+- Relationen skapas när tillsynsärendet finns som utkast och före aktiveringen. Ett aktivt tillsynsärende har därför alltid sin relation.
+- Efter körningen stämmer appen av mot relationstjänsten att varje klart tillsynsärende som ska ha en relation har exakt en till tillståndsärendet, och att övriga tillsynsärenden inte har någon. Avvikelser visas i rapporten.
+
+**När relationen inte skapas.**
+
+|                                                       Läge                                                        |                                                               Vad som händer                                                                |
+|-------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| Serveringsstället har inget gällande tillstånd, eller tillståndet avslutas i AlkT under granskningen              | Ingen relation skapas. Tillsynsärendet migreras om avgränsningen tar med det (punkt 2 ovan), och rapporten visar att det saknar relation.   |
+| Serveringsställets tillstånd är inte klart, till exempel för att det granskas eller har fått fel                  | Tillsynsärendet skapas inte. Det tas med i en senare körning, när tillståndet är klart.                                                     |
+| Tillsynsärendet gällde en tidigare tillståndshavare, eller det går inte att se vilken tillståndshavare det gällde | Ingen relation skapas. Tillsynsärendet migreras ändå, och rapporten visar att det saknar relation och varför.                               |
+| Relationstjänsten svarar med fel                                                                                  | Felet sparas, och steget görs om vid nästa körning, som övriga steg (avsnitt 6). Tillsynsärendet förblir ett utkast tills relationen finns. |
+
+**Likriktning i SupportManagement (kontrollerat 2026-10-12).** SupportManagement skriver i dag `support-management` i de relationer som tjänsten själv skapar:
+- på det nya ärendet när ett ärende skapas med `referredFrom` (`ErrandMapper.java` rad 70),
+- på båda ärendena vid överlämning mellan kommuner (`HandoverService.java` rad 61).
+
+Övriga tjänster skriver tjänstens namn utan bindestreck: pw-alkt `supportmanagement`, PartyAssets `partyassets` och pw-parking-permit `casedata`. En relation som pw-alkt skapar via `referredFrom`, från tillsynen till åtgärdsärendet, får därför `supportmanagement` på källan och `support-management` på målet.
+
+Ändringen går att göra och är liten:
+- De två konstanterna ändras till `supportmanagement`, och enhetstesterna som anger värdet uppdateras (`ErrandServiceTest`, `ErrandMapperTest`). Enhetstesterna för överlämning (`HandoverServiceTest`) och integrationstesterna kontrollerar inte innehållet i anropet till relationstjänsten, så de bör samtidigt börja göra det.
+- SupportManagements egen läsning av relationer, i synken av konversationer, tar redan bort bindestreck och godtar båda stavningarna (`MessageExchangeWorker.java` rad 107–108, sedan DRAKEN-4040).
+- Klient-id:t `support-management` mot Notes (`ErrandNoteService.java`) är något annat och ändras inte.
+- Befintliga relationer behåller `support-management` om de inte uppdateras i relationstjänsten.
+- Vi har inte kunnat kontrollera om handläggargränssnittet eller tjänster utanför de repon vi har gått igenom söker relationer på exakt `support-management`. Det stäms av med dem som äger dem innan ändringen görs.
+
+Migreringen beror inte på ändringen. Den skriver `supportmanagement` på båda ärendena oavsett.
 
 ## 8. Statustabell, rapport och spårbarhet
 
-Statustabellen har en rad per källtillstånd.
+Statustabellen har en rad per källtillstånd. Tillsynsärendena får egna rader när mappningen i avsnitt 7.7 är klar.
 
-|                   Kolumn                   |                                                 Innehåll                                                 |
-|--------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| Källa                                      | ALKT eller TOBAK                                                                                         |
-| Käll-id                                    | `ObjektID` i AlkT, eller motsvarande i tobaksdatabasen                                                   |
-| Status                                     | NY, GRANSKAS, TILLSTANDSHAVARE_KLAR, ARENDE_SKAPAT, TILLSTAND_SKAPAT, KLAR eller FEL                     |
-| Orsak                                      | Granskningsregel (G1–G14) och detalj, eller vad som gick fel, utan namn eller nummer                     |
-| Ärende-id och ärendenummer                 | Från SupportManagement                                                                                   |
-| Tillståndets id och PartyAssets interna id | `assetId` och id:t ur `Location`. Det interna id:t behövs för att hämta, ändra eller radera tillståndet. |
-| Körning och tidpunkter                     | För spårbarhet                                                                                           |
+|                   Kolumn                   |                                                       Innehåll                                                        |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| Källa                                      | ALKT eller TOBAK                                                                                                      |
+| Käll-id                                    | `ObjektID` i AlkT, eller motsvarande i tobaksdatabasen                                                                |
+| Status                                     | NY, GRANSKAS, TILLSTANDSHAVARE_KLAR, ARENDE_SKAPAT, TILLSTAND_SKAPAT, KLAR eller FEL                                  |
+| Orsak                                      | Granskningsregel (G1–G17) och detalj, eller vad som gick fel, utan namn eller nummer                                  |
+| Ärende-id och ärendenummer                 | Från SupportManagement                                                                                                |
+| Tillståndets id och PartyAssets interna id | `assetId` och id:t ur `Location`. Det interna id:t behövs för att hämta, ändra eller radera tillståndet.              |
+| Relationens id                             | Bara för tillsynsärenden: relationen till tillståndsärendet (avsnitt 7.7.1). Behövs för avstämning och återställning. |
+| Körning och tidpunkter                     | För spårbarhet                                                                                                        |
 
 Rapporten efter varje körning visar antal per status och en lista med en rad per tillstånd:
 - käll-id,
@@ -552,7 +667,7 @@ SupportManagement har ingen tyst import, så varje sidoeffekt stoppas för sig.
 
 Avstängningen i R6 gäller hela namespacet. Ärenden som skapas på vanligt sätt under körningen får alltså inga automatiska åtgärder. Körningen läggs därför vid en tid när få ärenden kommer in.
 
-PartyAssets skickar varken händelser eller meddelanden. Länken till ärendet skrivs till relationstjänsten; att den inte skickar något har vi inte kunnat kontrollera i kod.
+PartyAssets skickar varken händelser eller meddelanden. Länken till ärendet och relationerna mellan tillstånds- och tillsynsärenden skrivs till relationstjänsten; att den inte skickar något har vi inte kunnat kontrollera i kod.
 
 **Kontroller före körning, i varje miljö:**
 - inga aktiva automatiska åtgärder för ALKT,
@@ -561,7 +676,10 @@ PartyAssets skickar varken händelser eller meddelanden. Länken till ärendet s
 - etiketten "Migrerat ärende" finns och har attributet som spärrar processer,
 - ett testärende med etiketten skriver ingen processhändelse när det ändras eller när "Starta process" används,
 - statusen, rollerna och klassificeringen finns i ALKT,
-- PartyAssets kräver inget skäl för statusarna ACTIVE och EXPIRED.
+- etiketterna i avsnitt 7.3.4 och 7.7 finns, och appen hittar dem via `resourcePath`,
+- den avslutade statusen finns i case-status tabell `statuses` med en extern status som visar att ärendet är avslutat (avsnitt 7.3.5),
+- PartyAssets kräver inget skäl för statusarna ACTIVE och EXPIRED,
+- relationstypen `LINK` finns i relationstjänsten.
 
 **Kontroller efter körning,** samma dag, som ska vara noll för de migrerade ärendena:
 
@@ -581,9 +699,10 @@ Dessutom ska varken pw-alkt eller Messaging ha tagit emot något från migrering
 ### 10.1 Förutsättningar
 
 - Etiketter, status, roller (även rollen för serveringsställe) och klassificering finns i ALKT i test och produktion, även etiketterna för tillsynsärenden (avsnitt 7.7).
+- Den avslutade statusen finns i case-status i test och produktion, och det är beslutat om de migrerade ärendena ska synas på Mina sidor (avsnitt 7.3.5).
 - pw-alkt har bestämt roll och nycklar för serveringsställenumret (beslut 18).
 - Mappningen av tillsynsärendena är klar (avsnitt 7.7).
-- Klientnycklar finns för SupportManagement, PartyAssets, Party och licensed-business i test och produktion.
+- Klientnycklar finns för SupportManagement, PartyAssets, Party, licensed-business och relationstjänsten i test och produktion.
 - Ett konto med bara läsrätt finns till AlkT, och senare till tobaksdatabasen.
 - Utvecklardatorn har VPN-åtkomst till AlkT:s SQL Server och till API-gatewayen i test och produktion (beslut 10).
 - Serveringsställenumren är inlästa i licensed-business, och uppslaget är driftsatt.
@@ -609,6 +728,7 @@ AlkT låses inte (beslut 11). Från och med produktionskörningen är SupportMan
 - Utkast kan raderas utan sidoeffekter.
 - Aktiva ärenden raderas inte (R7). Om ett ärende ändå måste bort skickas en borttagningshändelse till pw-alkt. Den gör ingenting eftersom ärendet saknar process, men den ska vara känd i förväg.
 - Tillstånd i PartyAssets raderas via API:et med det interna id:t. Raderingen är slutgiltig, och relationen till ärendet ligger kvar i relationstjänsten.
+- Relationer mellan tillstånds- och tillsynsärenden raderas i relationstjänsten med relationens id i statustabellen.
 - Statustabellens rad återställs, och tillståndet körs om.
 
 ## 11. Test och kvalitetssäkring
@@ -622,6 +742,17 @@ AlkT låses inte (beslut 11). Från och med produktionskörningen är SupportMan
   - sökningen efter befintligt ärende anger `lifecycle`,
   - inga anrop görs till kommunikation, konversationer eller beslut,
   - en omkörning efter ett avbrott i varje steg inte skapar dubbletter.
+- **Tester för relationen mellan tillsynsärende och tillståndsärende (K9, avsnitt 7.7.1).** Både integrationstester och tillhörande enhetstester skapas.
+  - Enhetstester: relationens innehåll (typ, källa, mål, `service` = `supportmanagement` och namespace), uppslaget av tillståndsärendet i statustabellen, jämförelsen av tillståndshavare (samma nummer på flera ägarposter, nummer skrivna i olika format, saknad ägare), valet mellan att skapa, återanvända, vänta och hoppa över, och felhanteringen.
+  - Integrationstester, med relationstjänsten i WireMock:
+    - relationen skapas med rätt innehåll, och dess id sparas i statustabellen,
+    - ett tillsynsärende som gällde en tidigare tillståndshavare migreras men får ingen relation,
+    - en omkörning skapar ingen andra relation, inte heller efter ett avbrott mellan att relationen skapades och att statustabellen uppdaterades,
+    - finns flera relationer för samma par skapas ingen ny, och avvikelsen syns i rapporten,
+    - ett tillsynsärende på ett serveringsställe utan gällande tillstånd får ingen relation,
+    - ett tillsynsärende vars tillstånd inte är klart skapas inte, och tas med i nästa körning,
+    - ett fel från relationstjänsten lämnar tillsynsärendet som utkast, och steget görs om,
+    - tillsynsärendet skapas utan `referredFrom`.
 - **Tester i SupportManagement för spärren:**
   - ett ärende med en spärretikett skriver ingen processhändelse, oavsett händelsetyp, övriga etiketter och status,
   - startkommandot och signaler avvisas för ett sådant ärende,
@@ -646,6 +777,20 @@ AlkT låses inte (beslut 11). Från och med produktionskörningen är SupportMan
 ## 13. Fas 2: tobakstillstånd och dokument
 
 **Tobak.** När åtkomsten finns analyseras databasen enligt 3.4. Mappningen läggs till som ett nytt avsnitt 7.8, och hur tobakstillstånden ska se ut i PartyAssets avgörs (beslut 3). pw-alkt skapar inga tobakstillstånd, så det finns ingen förlaga.
+
+**Etiketter i fas 2.** Etiketterna finns redan i etikettträdet i ALKT (Bilaga B). Vilka anmälningar som ska med avgörs när tobaksdatabasen är analyserad (avsnitt 16).
+
+|            Tillstånd eller anmälan             |                                  Etikett                                  |                         `resourcePath`                          |
+|------------------------------------------------|---------------------------------------------------------------------------|-----------------------------------------------------------------|
+| Tobakstillstånd                                | Ansökan om försäljning av tobaksvaror                                     | `CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION`                 |
+| Anmälan om e-cigaretter                        | Anmälan om försäljning av elektroniska cigaretter och påfyllnadsbehållare | `CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION`            |
+| Anmälan om tobaksfria nikotinprodukter         | Anmälan om försäljning av tobaksfria nikotinprodukter                     | `CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION` |
+| Anmälan om försäljning av folköl               | Anmälan om försäljning av folköl                                          | `CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION`                |
+| Anmälan om servering av folköl                 | Anmälan om servering av endast folköl (klass 2)                           | `CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION`              |
+| Anmälan om försäljning och servering av folköl | Anmälan om försäljning och servering av folköl                            | `CATEGORYROOT/ALCOHOL/FOLKOL_SALES_SERVING_NOTIFICATION`        |
+| Tillsyn av tobak, om den ingår                 | Tobakstillsyn                                                             | `TAGROOT/TOBACCO_INSPECTION`                                    |
+
+Alla migrerade ärenden i fas 2 får också etiketten "Migrerat ärende".
 
 **Dokument.** Enligt beslut 7 följer filerna i det ärende som utfärdade tillståndet med, plus serveringsställets egna filer:
 - **Urval.** Tillståndet kopplas till sitt utfärdandeärende via beslutet det pekar på eller via utfärdandediarienumret. 113 av 135 tillstånd får en koppling, och 18 av dem kopplas till mer än ett ärende; då följer filerna från alla de ärendena med. De 22 utan koppling listas (G13), så att verksamheten kan leta fram dokument för hand om de behövs.
@@ -687,27 +832,29 @@ Alla arton beslut är tagna och står också på sidan "Migrering av alkohol- oc
 
 ## 15. Risker
 
-|                                Risk                                 |                                        Följd                                         |                                                                          Åtgärd                                                                           |
-|---------------------------------------------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Spärren i SupportManagement är inte driftsatt när ärendena migreras | Första ändringen av ett migrerat ärende startar en process                           | Spärren är en förutsättning för körningen (10.1) och kontrolleras med ett testärende (avsnitt 9)                                                          |
-| Etiketten "Migrerat ärende" saknar spärrattributet i någon miljö    | Som ovan                                                                             | Kontroll före körning (avsnitt 9)                                                                                                                         |
-| Automatiska åtgärder är inte avstängda                              | Mail skickas vid körningen                                                           | Kontroll före körning (R6)                                                                                                                                |
-| En åtgärd som reagerar på ändringar matchar migrerade ärenden       | Mail skickas första gången en handläggare ändrar ett migrerat ärende                 | Kontroll före körning (R6)                                                                                                                                |
-| Prenumerationer på hela namespacet finns                            | Interna notiser för varje migrerat ärende                                            | Kontroll före körning (R3)                                                                                                                                |
-| Bolag saknas i Party, till exempel avregistrerade bolag             | Tillståndet kan inte skapas                                                          | Granskning (G10, beslut 8)                                                                                                                                |
-| Ett värde i tillståndets parametrar är längre än 255 tecken         | Tillståndet kan inte sparas                                                          | Korta värden och test av längdgränsen (avsnitt 7.4)                                                                                                       |
-| Åtkomsten till tobaksdatabasen eller filarean dröjer                | Fas 2 försenas                                                                       | Faserna är oberoende av varandra                                                                                                                          |
-| Tillståndet visar omfattningen från ett tillägg som har upphört     | Fel uppgifter i det migrerade tillståndet                                            | Granskning (G3, G12)                                                                                                                                      |
-| Perioder och beslut passerar innan produktionskörningen             | Granskningslistan växer                                                              | Analyserna körs om före produktion (10.2)                                                                                                                 |
-| AlkT ändras under eller efter körningen                             | Ändringen följer inte med till de migrerade ärendena                                 | Accepterat (beslut 11). Körningen tar kort tid och görs utanför kontorstid, och verksamheten informeras om att AlkT inte längre är facit efter körningen. |
-| Produktionsnycklar och data hanteras på en utvecklardator           | Nycklarna kan komma på avvägar om datorn tappas bort eller nycklarna sparas i en fil | Säkerhetskraven i avsnitt 12, och nycklarna byts eller spärras efter godkänd migrering                                                                    |
-| Diarienummer saknas eller finns på flera tillstånd                  | Dubblettskyddet fungerar inte för de tillstånden                                     | Granskning (G15, G16) och registervård i AlkT                                                                                                             |
-| Tillsynsärendena är inte analyserade                                | Omfång och mappning kan bli större än väntat                                         | Analys omgång 6 och mappning innan bygget av den delen (avsnitt 7.7)                                                                                      |
-| Migrerade och nya tillstånd ser olika ut                            | Mina sidor och handläggarstödet visar dem olika                                      | Samordning med pw-alkt (beslut 3)                                                                                                                         |
-| Uppslaget av serveringsställenummer är inte driftsatt               | Avstämningen kan inte göras                                                          | Beroende i planeringen                                                                                                                                    |
-| Filer saknas på filarean eller är mycket stora                      | Ärenden blir utan dokument, eller uppladdningen misslyckas                           | Kartläggningen av filarean i 3.5 visar det i förväg, och saknade filer listas (G14)                                                                       |
-| Historiken bevaras inte när AlkT stängs                             | Uppgifter som ska arkiveras går förlorade                                            | Arkivleveransen bestäms innan AlkT stängs (avsnitt 3.5)                                                                                                   |
-| Skapat-datum blir migreringsdagen                                   | Handläggare kan tro att ärendet är nytt                                              | Etiketten "Migrerat ärende", parametrarna `utfardat` och `migrerad`, och information till handläggarna                                                    |
+|                                           Risk                                           |                                                                 Följd                                                                  |                                                                          Åtgärd                                                                           |
+|------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Spärren i SupportManagement är inte driftsatt när ärendena migreras                      | Första ändringen av ett migrerat ärende startar en process                                                                             | Spärren är en förutsättning för körningen (10.1) och kontrolleras med ett testärende (avsnitt 9)                                                          |
+| Etiketten "Migrerat ärende" saknar spärrattributet i någon miljö                         | Som ovan                                                                                                                               | Kontroll före körning (avsnitt 9)                                                                                                                         |
+| Automatiska åtgärder är inte avstängda                                                   | Mail skickas vid körningen                                                                                                             | Kontroll före körning (R6)                                                                                                                                |
+| En åtgärd som reagerar på ändringar matchar migrerade ärenden                            | Mail skickas första gången en handläggare ändrar ett migrerat ärende                                                                   | Kontroll före körning (R6)                                                                                                                                |
+| Prenumerationer på hela namespacet finns                                                 | Interna notiser för varje migrerat ärende                                                                                              | Kontroll före körning (R3)                                                                                                                                |
+| Bolag saknas i Party, till exempel avregistrerade bolag                                  | Tillståndet kan inte skapas                                                                                                            | Granskning (G10, beslut 8)                                                                                                                                |
+| Ett värde i tillståndets parametrar är längre än 255 tecken                              | Tillståndet kan inte sparas                                                                                                            | Korta värden och test av längdgränsen (avsnitt 7.4)                                                                                                       |
+| Åtkomsten till tobaksdatabasen eller filarean dröjer                                     | Fas 2 försenas                                                                                                                         | Faserna är oberoende av varandra                                                                                                                          |
+| Tillståndet visar omfattningen från ett tillägg som har upphört                          | Fel uppgifter i det migrerade tillståndet                                                                                              | Granskning (G3, G12)                                                                                                                                      |
+| Perioder och beslut passerar innan produktionskörningen                                  | Granskningslistan växer                                                                                                                | Analyserna körs om före produktion (10.2)                                                                                                                 |
+| AlkT ändras under eller efter körningen                                                  | Ändringen följer inte med till de migrerade ärendena                                                                                   | Accepterat (beslut 11). Körningen tar kort tid och görs utanför kontorstid, och verksamheten informeras om att AlkT inte längre är facit efter körningen. |
+| Produktionsnycklar och data hanteras på en utvecklardator                                | Nycklarna kan komma på avvägar om datorn tappas bort eller nycklarna sparas i en fil                                                   | Säkerhetskraven i avsnitt 12, och nycklarna byts eller spärras efter godkänd migrering                                                                    |
+| Diarienummer saknas eller finns på flera tillstånd                                       | Dubblettskyddet fungerar inte för de tillstånden                                                                                       | Granskning (G15, G16) och registervård i AlkT                                                                                                             |
+| Tillsynsärendena är inte analyserade                                                     | Omfång och mappning kan bli större än väntat                                                                                           | Analys omgång 6 och mappning innan bygget av den delen (avsnitt 7.7)                                                                                      |
+| Migrerade och nya tillstånd ser olika ut                                                 | Mina sidor och handläggarstödet visar dem olika                                                                                        | Samordning med pw-alkt (beslut 3)                                                                                                                         |
+| Den avslutade statusen saknas i case-status                                              | Kunden ser ett avslutat tillstånd som "Handläggning pågår" på Mina sidor                                                               | Kontroll före körning (avsnitt 9, 7.3.5)                                                                                                                  |
+| SupportManagement skriver fortfarande `support-management` i relationer till nya ärenden | Relationer till migrerade och nya ärenden har olika `service`-värde, och en tjänst som söker på exakt värde hittar bara den ena sorten | Likriktning i SupportManagement (avsnitt 7.7.1, 16). SupportManagements egen läsning godtar redan båda stavningarna.                                      |
+| Uppslaget av serveringsställenummer är inte driftsatt                                    | Avstämningen kan inte göras                                                                                                            | Beroende i planeringen                                                                                                                                    |
+| Filer saknas på filarean eller är mycket stora                                           | Ärenden blir utan dokument, eller uppladdningen misslyckas                                                                             | Kartläggningen av filarean i 3.5 visar det i förväg, och saknade filer listas (G14)                                                                       |
+| Historiken bevaras inte när AlkT stängs                                                  | Uppgifter som ska arkiveras går förlorade                                                                                              | Arkivleveransen bestäms innan AlkT stängs (avsnitt 3.5)                                                                                                   |
+| Skapat-datum blir migreringsdagen                                                        | Handläggare kan tro att ärendet är nytt                                                                                                | Etiketten "Migrerat ärende", parametrarna `utfardat` och `migrerad`, och information till handläggarna                                                    |
 
 ## 16. Beroenden och öppna frågor
 
@@ -722,7 +869,10 @@ Alla arton beslut är tagna och står också på sidan "Migrering av alkohol- oc
 - Hur AlkT:s ärendehistorik och de dokument som inte migreras bevaras enligt dokumenthanteringsplanen, till exempel genom leverans till e-arkiv.
 - Vilka anmälningar som räknas som gällande och var de finns. AlkT har bara ärenden om anmälningar; tobaksdatabasen väntas ha anmälningar om folköl och e-cigaretter.
 - Formatet på villkorens giltighetsdatum, och serveringstiderna i intervall 2–8.
-- Tillsynsärendena: omfång, avgränsning, etiketter och personer (avsnitt 7.7).
+- Tillsynsärendena: omfång, avgränsning, personer, tillståndshavarens roll och godkännande av de föreslagna etiketterna (avsnitt 7.7).
+- Om ett tillstånd med flera markeringar får en undertyp eller flera, och att verksamheten godkänner reglerna för undertyp (avsnitt 7.3.4).
+- Om de migrerade ärendena ska synas för tillståndshavaren på Mina sidor (avsnitt 7.3.5).
+- Likriktningen av `service`-värdet till `supportmanagement` i SupportManagement: när ändringen görs, om befintliga relationer med `support-management` ska uppdateras i relationstjänsten, och om handläggargränssnittet eller andra tjänster söker relationer på exakt `support-management` (avsnitt 7.7.1).
 - Vilket namn tillstånden får per tillståndstyp i AoT-lösningen, så att migrerade tillstånd får samma (beslut 4).
 
 ## Bilaga A. Kodlistor ur AlkT som används
@@ -770,4 +920,7 @@ Koderna UNG (ungdomlig målgrupp) och UTOK (utökad tillsyn) finns i samma kodli
 | Uppslag av partyId och skapande av tillstånd i PartyAssets | `api-service-permit-loader`                                                                                        |
 | Att hitta befintligt ärende via extern tagg                | `api-service-sm-loader`, `SupportManagementService.java`. Sökningen där saknar `lifecycle` och hittar inte utkast. |
 | Import av serveringsställenummer                           | `api-service-licensed-business`, `ImportService.java`                                                              |
+| Etikettträdet i ALKT                                       | `GET /2281/ALKT/metadata/labels`, hämtat 2026-10-12                                                                |
+| Ärenden på Mina sidor                                      | `api-service-case-status`, `SupportManagementService.java` och `StatusVocabulary.java`                             |
+| Inre och yttre tillsyn                                     | `pw-alkt` (origin/main), `README.md`                                                                               |
 
