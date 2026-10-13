@@ -81,7 +81,7 @@ final class AlktTestData {
 		}
 
 		SnapshotBuilder condition(final ConditionRow row) {
-			conditions.computeIfAbsent(row.objektId(), key -> new ArrayList<>()).add(row);
+			conditions.computeIfAbsent(row.objektId(), _ -> new ArrayList<>()).add(row);
 			return this;
 		}
 
@@ -96,12 +96,12 @@ final class AlktTestData {
 		}
 
 		SnapshotBuilder file(final FileRow row) {
-			files.computeIfAbsent(row.arendeId(), key -> new ArrayList<>()).add(row);
+			files.computeIfAbsent(row.arendeId(), _ -> new ArrayList<>()).add(row);
 			return this;
 		}
 
 		SnapshotBuilder person(final PersonRow row) {
-			persons.computeIfAbsent(row.agarId(), key -> new ArrayList<>()).add(row);
+			persons.computeIfAbsent(row.agarId(), _ -> new ArrayList<>()).add(row);
 			return this;
 		}
 

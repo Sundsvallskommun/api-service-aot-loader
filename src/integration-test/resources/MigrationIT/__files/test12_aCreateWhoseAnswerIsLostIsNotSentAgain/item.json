@@ -1,0 +1,13 @@
+{
+	"source": "ALKOL",
+	"kind": "ANMALAN",
+	"sourceId": "1-FOLKOL",
+	"errandType": "FOLKOL_SALES_NOTIFICATION",
+	"status": "FEL",
+	"placeName": "Kiosken",
+	"municipalityId": "2281",
+	"failedStep": "ARENDE",
+	"reason": "${json-unit.regex}RetryableException: Connection reset executing POST http://localhost:\\d+/support-management/2281/AOT/errands",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

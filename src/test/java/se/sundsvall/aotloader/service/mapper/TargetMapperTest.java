@@ -1,11 +1,15 @@
 package se.sundsvall.aotloader.service.mapper;
 
+import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ContactChannel;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Priority;
+import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +19,7 @@ import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
@@ -66,7 +71,7 @@ class TargetMapperTest {
 			tuple("restaurantNumber", "Serveringsställenummer", List.of("12345678")));
 
 		final var stakeholders = errand.getStakeholders();
-		assertThat(stakeholders).hasSize(3);
+		assertThat(stakeholders).hasSize(4);
 		assertThat(stakeholders.getFirst()).satisfies(holder -> {
 			assertThat(holder.getRole()).isEqualTo("PRIMARY");
 			assertThat(holder.getExternalId()).isEqualTo("party-id");
@@ -76,9 +81,17 @@ class TargetMapperTest {
 			assertThat(holder.getZipCode()).isEqualTo("85230");
 			assertThat(holder.getCity()).isEqualTo("Sundsvall");
 			assertThat(holder.getContactChannels()).extracting(ContactChannel::getType, ContactChannel::getValue).containsExactly(tuple("EMAIL", "bolag@example.com"), tuple("PHONE", "060-1"));
-			assertThat(holder.getParameters()).extracting("key", "values").containsExactly(tuple("kontaktperson", List.of("Kontakt Person")));
+			assertThat(holder.getParameters()).isNullOrEmpty();
 		});
-		assertThat(stakeholders.get(1)).satisfies(person -> {
+		// The holder's contact person, without PBI
+		assertThat(stakeholders.get(1)).satisfies(contact -> {
+			assertThat(contact.getRole()).isEqualTo("CONTACT");
+			assertThat(contact.getFirstName()).isEqualTo("Kontakt Person");
+			assertThat(contact.getExternalId()).isNull();
+			assertThat(contact.getContactChannels()).isNullOrEmpty();
+			assertThat(contact.getParameters()).isNullOrEmpty();
+		});
+		assertThat(stakeholders.get(2)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
 			assertThat(person.getFirstName()).isEqualTo("Person Ett");
 			assertThat(person.getExternalId()).isEqualTo("person-party-id");
@@ -87,7 +100,7 @@ class TargetMapperTest {
 				tuple("PBI", "Person med betydande inflytande", List.of("true")),
 				tuple("befattning", "Befattning", List.of("Ledamot")));
 		});
-		assertThat(stakeholders.get(2)).satisfies(person -> {
+		assertThat(stakeholders.get(3)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
 			assertThat(person.getExternalId()).isNull();
 			assertThat(person.getExternalIdType()).isNull();
@@ -109,6 +122,18 @@ class TargetMapperTest {
 		assertThat(errand.getLifecycle()).isNull();
 		assertThat(errand.getReporterUserId()).isNull();
 		assertThat(errand.getStakeholders()).isEmpty();
+	}
+
+	@Test
+	void aHolderWithoutAContactPersonGetsNoContact() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.labelPath("TAGROOT/MIGRATED_ERRAND")
+			.holder(new Holder(TestData.HOLDER_ID, "Bolaget AB", null, null, null, null, null, " "))
+			.build();
+
+		final var errand = mapper.toDraftUpdate(candidate, new PartyIds("party-id", List.of()), TestData.labelIds());
+
+		assertThat(errand.getStakeholders()).singleElement().extracting(Stakeholder::getRole).isEqualTo("PRIMARY");
 	}
 
 	@Test
@@ -160,8 +185,28 @@ class TargetMapperTest {
 	}
 
 	@Test
+	void toContentUpdate() {
+		final var wanted = mapper.toAsset(TestData.permit("1"), ERRAND_ID, "party-id", false).validTo(LocalDate.of(2027, 6, 30));
+		final var same = new Asset().title(wanted.getTitle()).validTo(wanted.getValidTo()).additionalParameters(Map.copyOf(wanted.getAdditionalParameters()));
+
+		assertThat(mapper.toContentUpdate(same, wanted)).isEmpty();
+		assertThat(mapper.toContentUpdate(same.type("Annan typ").description("Annan beskrivning"), wanted)).isEmpty();
+		assertThat(mapper.toContentUpdate(new Asset().title("Gammal").validTo(wanted.getValidTo()).additionalParameters(wanted.getAdditionalParameters()), wanted))
+			.contains(new AssetUpdateRequest().title(wanted.getTitle()));
+		assertThat(mapper.toContentUpdate(new Asset().title(wanted.getTitle()).additionalParameters(wanted.getAdditionalParameters()), wanted))
+			.contains(new AssetUpdateRequest().validTo(LocalDate.of(2027, 6, 30)));
+		// PartyAssets replaces the whole map, so every parameter is sent
+		assertThat(mapper.toContentUpdate(new Asset().title(wanted.getTitle()).validTo(wanted.getValidTo()), wanted))
+			.contains(new AssetUpdateRequest().additionalParameters(wanted.getAdditionalParameters()));
+
+		final var withoutTitleOrLastDay = new AssetCreateRequest().additionalParameters(Map.of("errandId", ERRAND_ID));
+		assertThat(mapper.toContentUpdate(new Asset().title("Gammal").validTo(LocalDate.of(2020, 1, 1)).additionalParameters(Map.of("errandId", ERRAND_ID)), withoutTitleOrLastDay))
+			.contains(new AssetUpdateRequest().title("").indefinitely(true));
+	}
+
+	@Test
 	void sourceReferenceRelationAndActivation() {
-		assertThat(mapper.toSourceReference(ERRAND_ID)).isEqualTo("LINK|" + ERRAND_ID + ";case;supportmanagement;ALKT|");
+		assertThat(mapper.toSourceReference(ERRAND_ID)).isEqualTo("LINK|" + ERRAND_ID + ";case;supportmanagement;AOT|");
 
 		final var relation = mapper.toRelation("permit-errand", "inspection-errand");
 		assertThat(relation.getType()).isEqualTo("LINK");
@@ -169,7 +214,7 @@ class TargetMapperTest {
 			assertThat(source.getResourceId()).isEqualTo("permit-errand");
 			assertThat(source.getType()).isEqualTo("case");
 			assertThat(source.getService()).isEqualTo("supportmanagement");
-			assertThat(source.getNamespace()).isEqualTo("ALKT");
+			assertThat(source.getNamespace()).isEqualTo("AOT");
 		});
 		assertThat(relation.getTarget().getResourceId()).isEqualTo("inspection-errand");
 

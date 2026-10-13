@@ -1,0 +1,21 @@
+{
+	"id": "${json-unit.any-string}",
+	"municipalityId": "2281",
+	"dryRun": true,
+	"sources": [
+		"ALKT",
+		"ALKOL"
+	],
+	"kinds": [
+		"TILLSTAND",
+		"ANMALAN",
+		"TILLSYN"
+	],
+	"status": "COMPLETED",
+	"started": "${json-unit.any-string}",
+	"finished": "${json-unit.any-string}",
+	"outcomes": {
+		"SKULLE_MIGRERAS": 9,
+		"GRANSKAS": 1
+	}
+}

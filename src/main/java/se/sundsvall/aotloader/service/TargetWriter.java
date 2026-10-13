@@ -1,9 +1,14 @@
 package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
+import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
@@ -77,22 +82,130 @@ class TargetWriter {
 	}
 
 	/**
-	 * Finds the post in PartyAssets by the errand id and the partyId, and creates it only when it is not found. A 409 on
-	 * the create means it exists after all; it is then read, since the answer has no id.
+	 * Finds the post in PartyAssets, by its id in the status table or by the errand id and the partyId, and creates it
+	 * only when neither finds it. A 409 on the create means it exists after all; it is then read, since the answer has no
+	 * id. A post found, made by an earlier run, is brought up to date with what the item gives now.
 	 *
-	 * @param  candidate      the item
-	 * @param  municipalityId the municipality the item belongs to
-	 * @param  errandId       the id of the errand, which is the asset id of the post (decision 4)
-	 * @param  parties        the partyIds, of which the holder's is required
-	 * @param  expired        true to create the post as EXPIRED
-	 * @return                the id PartyAssets gave the post
+	 * @param  candidate          the item
+	 * @param  municipalityId     the municipality the item belongs to
+	 * @param  errandId           the id of the errand, which is the asset id of the post (decision 4)
+	 * @param  partyAssetsId      the id of the post in the status table, null when it has none
+	 * @param  parties            the partyIds; the holder's is required unless the post is found by its id
+	 * @param  expired            true when the post is to be EXPIRED, false when ACTIVE
+	 * @param  notes              the report of the item, told what was found and changed
+	 * @return                    the id PartyAssets gave the post
+	 * @throws MigrationException when the post found has a status the migration never gives, or belongs to another party
+	 *                            than the item now gives; it is then left as it is
 	 */
-	String ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final PartyIds parties, final boolean expired) {
-		final var partyId = parties.holderPartyId().orElseThrow(() -> new MigrationException("Tillståndshavaren saknar partyId"));
-		return partyAssets.findAsset(municipalityId, partyId, errandId).map(Asset::getId)
-			.or(() -> partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), mapper.toAsset(candidate, errandId, partyId, expired)))
-			.or(() -> partyAssets.findAsset(municipalityId, partyId, errandId).map(Asset::getId))
-			.orElseThrow(() -> new MigrationException("PartyAssets svarade att tillståndet redan finns, men det gick inte att hitta"));
+	String ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties, final boolean expired,
+		final ReportNotes notes) {
+		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, notes))
+			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId));
+		if (found.isPresent()) {
+			// The holder may be gone from Party since the post was made; the post keeps its party anyway
+			final var wanted = mapper.toAsset(candidate, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
+			return bringUpToDate(municipalityId, found.get(), wanted, notes);
+		}
+		final var wanted = mapper.toAsset(candidate, errandId, holderPartyId(parties), expired);
+		return partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
+			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId)
+				.orElseThrow(() -> new MigrationException("PartyAssets svarade att tillståndet redan finns, men det gick inte att hitta")), wanted, notes));
+	}
+
+	private static String holderPartyId(final PartyIds parties) {
+		return parties.holderPartyId().orElseThrow(() -> new MigrationException("Tillståndshavaren saknar partyId"));
+	}
+
+	private Optional<Asset> assetInStatusTable(final String municipalityId, final String partyAssetsId, final ReportNotes notes) {
+		final var asset = partyAssets.getAsset(municipalityId, partyAssetsId);
+		if (asset.isEmpty()) {
+			notes.line("Tillståndet %s fanns inte längre i PartyAssets".formatted(partyAssetsId));
+		}
+		return asset;
+	}
+
+	/**
+	 * Gives a post an earlier run made the status the item is to have, and the title, last day and parameters it gives
+	 * now. PartyAssets changes those only while the post is ACTIVE, so a post that stays EXPIRED keeps them, and the report
+	 * says so. A post that is to become EXPIRED gets its content first, checked, and its status after.
+	 *
+	 * @return                    the id of the post
+	 * @throws MigrationException when the post has a status the migration never gives, or belongs to another party than
+	 *                            the item now gives, which is then left as it is; and when PartyAssets does not make the
+	 *                            change
+	 */
+	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final ReportNotes notes) {
+		final var from = asset.getStatus();
+		final var to = wanted.getStatus();
+		if (from != Status.ACTIVE && from != Status.EXPIRED) {
+			throw new MigrationException("Tillståndet %s i PartyAssets har status %s, som migreringen aldrig ger, och ändras inte".formatted(asset.getId(), from));
+		}
+		// The content describes the holder, so another party's post must not get it
+		if (!Objects.equals(asset.getPartyId(), wanted.getPartyId())) {
+			throw new MigrationException("Tillståndet %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(asset.getId()));
+		}
+		final var content = mapper.toContentUpdate(asset, wanted);
+		final var statusChanges = from != to;
+		final var contentChanges = content.isPresent() && (from == Status.ACTIVE || statusChanges);
+		if (from == Status.ACTIVE) {
+			// Checked before the status changes, since an EXPIRED post can no longer get the content
+			if (content.isPresent()) {
+				partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
+				verifyUpdated(municipalityId, asset.getId(), wanted, from);
+			}
+			if (statusChanges) {
+				partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+				verifyUpdated(municipalityId, asset.getId(), wanted, to);
+			}
+		} else if (statusChanges) {
+			partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+			content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
+			verifyUpdated(municipalityId, asset.getId(), wanted, to);
+		}
+
+		if (statusChanges) {
+			notes.line("Tillståndet i PartyAssets hade status %s från en tidigare körning och fick status %s".formatted(from, to));
+		}
+		if (contentChanges) {
+			notes.line("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
+		} else if (content.isPresent()) {
+			notes.line("Tillståndet i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu");
+		}
+		unchangeable(asset, wanted).ifPresent(notes::line);
+		return asset.getId();
+	}
+
+	/**
+	 * Reads the post again and checks that it has the status it was given and the content the item gives.
+	 *
+	 * @throws MigrationException when it does not, or when it is gone
+	 */
+	private void verifyUpdated(final String municipalityId, final String id, final AssetCreateRequest wanted, final Status status) {
+		final var updated = partyAssets.getAsset(municipalityId, id)
+			.orElseThrow(() -> new MigrationException("Tillståndet %s fanns inte i PartyAssets efter ändringen".formatted(id)));
+		// PartyAssets before 6.8 answers a change of the content with 204 and leaves the content as it was
+		if (updated.getStatus() != status || mapper.toContentUpdate(updated, wanted).isPresent()) {
+			throw new MigrationException("PartyAssets gjorde inte hela ändringen av tillståndet %s, vilket kräver PartyAssets 6.8 eller senare".formatted(id));
+		}
+	}
+
+	/**
+	 * @return a note on what differs from what the item gives now but cannot be changed in PartyAssets, empty when nothing
+	 *         does
+	 */
+	private static Optional<String> unchangeable(final Asset asset, final AssetCreateRequest wanted) {
+		final var differs = new ArrayList<String>();
+		if (!Objects.equals(asset.getType(), wanted.getType())) {
+			differs.add("typ");
+		}
+		if (!Objects.equals(asset.getIssued(), wanted.getIssued())) {
+			differs.add("utfärdandedatum");
+		}
+		if (!Objects.equals(asset.getDescription(), wanted.getDescription())) {
+			differs.add("beskrivning");
+		}
+		return differs.isEmpty() ? Optional.empty()
+			: Optional.of("Tillståndets %s i PartyAssets skiljer sig från det källan ger nu och kan inte ändras där (avsnitt 10.3)".formatted(String.join(", ", differs)));
 	}
 
 	/**

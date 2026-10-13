@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service.model;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,15 +62,6 @@ public record Candidate(
 
 	public static Builder builder(final ItemKey key, final ErrandType type) {
 		return new Builder(key, type);
-	}
-
-	/**
-	 * @return a copy of this candidate with the given rule hits added
-	 */
-	public Candidate withAddedRuleHits(final List<RuleHit> added) {
-		final var hits = new ArrayList<>(ruleHits);
-		hits.addAll(added);
-		return new Candidate(key, type, placeName, placeNumber, hits, holder, place, persons, title, description, labelPaths, externalTags, parameters, asset, files, permitLink);
 	}
 
 	@Override
@@ -144,8 +136,17 @@ public record Candidate(
 			return this;
 		}
 
+		/** Adds the label, unless the path is null or blank. */
 		public Builder labelPath(final String value) {
-			this.labelPaths.add(value);
+			if (value != null && !value.isBlank()) {
+				this.labelPaths.add(value);
+			}
+			return this;
+		}
+
+		/** Adds the labels, leaving out the paths that are null or blank. */
+		public Builder labelPaths(final Collection<String> values) {
+			values.forEach(this::labelPath);
 			return this;
 		}
 

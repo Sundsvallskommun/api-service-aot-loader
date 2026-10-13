@@ -8,10 +8,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.support.MigrationException;
@@ -51,17 +53,18 @@ class FileUploader {
 		final var problems = new FileProblems();
 		for (final var reference : candidate.files()) {
 			final var lookup = fileArea.find(reference);
-			switch (lookup.result()) {
-				case FOUND -> uploadFile(municipalityId, errandId, lookup, attached, problems);
-				case DIRECTORY_UNAVAILABLE -> throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
-				default -> problems.add(FileProblem.of(lookup.result()), lookup.name());
+			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
+				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
 			}
+			problemOf(reference, lookup).ifPresentOrElse(
+				problem -> problems.add(problem, lookup.name()),
+				() -> uploadFile(municipalityId, errandId, lookup, attached, problems));
 		}
 		problems.report(notes, maxFileSizeText());
 	}
 
 	/**
-	 * Checks that the files can be found, without uploading anything.
+	 * Checks that the files can be found and would be uploaded, without uploading anything.
 	 */
 	void check(final Candidate candidate, final RunContext context, final ReportNotes notes) {
 		if (candidate.files().isEmpty()) {
@@ -69,11 +72,25 @@ class FileUploader {
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var problems = new FileProblems();
-		candidate.files().stream()
-			.map(fileArea::find)
-			.filter(lookup -> lookup.result() != LookupResult.FOUND)
-			.forEach(lookup -> problems.add(FileProblem.of(lookup.result()), lookup.name()));
+		for (final var reference : candidate.files()) {
+			final var lookup = fileArea.find(reference);
+			problemOf(reference, lookup).ifPresent(problem -> problems.add(problem, lookup.name()));
+		}
 		problems.report(notes, maxFileSizeText());
+	}
+
+	/**
+	 * Why a file is not uploaded. A link or an invalid name is that whatever its name; any other file is not uploaded when
+	 * another place refers to a file with the same name, since the file may belong to that place.
+	 *
+	 * @return the problem, or empty when the file is found and is to be uploaded
+	 */
+	private static Optional<FileProblem> problemOf(final FileReference reference, final FileArea.Lookup lookup) {
+		return switch (lookup.result()) {
+			case LINK, INVALID_NAME, DIRECTORY_UNAVAILABLE -> Optional.of(FileProblem.of(lookup.result()));
+			case FOUND -> reference.sharedWithAnotherPlace() ? Optional.of(FileProblem.SHARED_NAME) : Optional.empty();
+			default -> Optional.of(reference.sharedWithAnotherPlace() ? FileProblem.SHARED_NAME : FileProblem.of(lookup.result()));
+		};
 	}
 
 	private void uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final List<AttachedFile> attached, final FileProblems problems) {
@@ -146,7 +163,8 @@ class FileUploader {
 		INVALID_NAME("filreferens har ett ogiltigt namn", "filreferenser har ett ogiltigt namn"),
 		UNREADABLE("fil gick inte att läsa", "filer gick inte att läsa"),
 		DIRECTORY_UNAVAILABLE("fil kunde inte kontrolleras, filarean gick inte att läsa", "filer kunde inte kontrolleras, filarean gick inte att läsa"),
-		REJECTED("fil togs inte emot av SupportManagement", "filer togs inte emot av SupportManagement");
+		REJECTED("fil togs inte emot av SupportManagement", "filer togs inte emot av SupportManagement"),
+		SHARED_NAME("fil har ett namn som också används på ett annat ställe och laddas inte upp", "filer har namn som också används på andra ställen och laddas inte upp");
 
 		private final String one;
 		private final String several;
@@ -188,7 +206,7 @@ class FileUploader {
 		private final Map<FileProblem, List<String>> names = new EnumMap<>(FileProblem.class);
 
 		void add(final FileProblem problem, final String name) {
-			names.computeIfAbsent(problem, key -> new ArrayList<>()).add(name);
+			names.computeIfAbsent(problem, _ -> new ArrayList<>()).add(name);
 		}
 
 		void report(final ReportNotes notes, final String maxFileSize) {

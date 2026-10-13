@@ -69,8 +69,8 @@ class PersonalDataTest {
 		assertThat(CodeTexts.textOf(Map.of("KIO", "Kiosk"), "KIO")).isEqualTo("Kiosk");
 		assertThat(CodeTexts.textOf(Map.of(), "KIO")).isEqualTo("KIO");
 		assertThat(CodeTexts.textOf(Map.of(), null)).isNull();
-		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", LocalDateTime.of(2020, 1, 2, 3, 4), null, null, null, null).beslutsDatum()).isEqualTo(LocalDate.of(2020, 1, 2));
-		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", null, null, null, null, null).beslutsDatum()).isNull();
+		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", LocalDateTime.of(2020, 1, 2, 3, 4), null, null, null).beslutsDatum()).isEqualTo(LocalDate.of(2020, 1, 2));
+		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", null, null, null, null).beslutsDatum()).isNull();
 	}
 
 	private static void assertHidden(final Object object) {

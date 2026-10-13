@@ -30,10 +30,7 @@ import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.SourceReader;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.support.ErrorTexts;
-import se.sundsvall.aotloader.support.PiiScrubber;
 import se.sundsvall.aotloader.support.Texts;
-
-import static se.sundsvall.aotloader.Constants.REPORT_TEXT_MAX_LENGTH;
 
 /**
  * Runs the migration: the checks before the run, then each source with its items in order, permits before notifications
@@ -96,10 +93,11 @@ public class MigrationRunner {
 	 * @param  run    the run, saved as RUNNING
 	 * @param  scope  the sources and their kinds
 	 * @param  single the one item to migrate, empty for every item of the scope
-	 * @return        the result of the single item, empty for a full run or when the item was not migrated
+	 * @return        the result of the single item, whatever its outcome; empty for a full run, and when the item was not
+	 *                found or the run stopped or failed before it
 	 */
 	public Optional<ItemResult> execute(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
-		final var stop = stopFlags.computeIfAbsent(run.getId(), key -> new AtomicBoolean());
+		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
 		try {
 			checkBeforeRun(run, scope, progress).ifPresent(labelIds -> {
@@ -218,7 +216,7 @@ public class MigrationRunner {
 		final var line = newLine(run, candidate.key());
 		line.setOutcome(result.outcome());
 		line.setRules(Texts.truncate(String.join(",", result.rules()), MAX_RULES_LENGTH, null));
-		line.setDetail(toReportText(result.detail()));
+		line.setDetail(ReportNotes.reportText(result.detail()));
 		line.setPlaceName(candidate.placeName());
 		line.setPlaceNumber(candidate.placeNumber());
 		line.setErrandNumber(result.errandNumber());
@@ -228,7 +226,7 @@ public class MigrationRunner {
 	private void saveLine(final MigrationRunEntity run, final Notice notice) {
 		final var line = newLine(run, notice.key());
 		line.setOutcome(notice.outcome());
-		line.setDetail(toReportText(notice.detail()));
+		line.setDetail(ReportNotes.reportText(notice.detail()));
 		line.setPlaceName(notice.placeName());
 		save(line);
 	}
@@ -254,17 +252,13 @@ public class MigrationRunner {
 	private void finish(final MigrationRunEntity run, final Progress progress) {
 		run.setStatus(progress.status);
 		run.setFinished(OffsetDateTime.now(clock));
-		run.setMessage(toReportText(Texts.join("\n", progress.messages)));
+		run.setMessage(ReportNotes.reportText(Texts.join("\n", progress.messages)));
 		try {
 			runRepository.save(run);
 			LOG.info("Run {} ({}) finished as {}: {}", run.getId(), run.isDryRun() ? "dry run" : "real run", progress.status, OutcomeCounts.of(runItemRepository.findByRunIdOrderById(run.getId())));
 		} catch (final RuntimeException e) {
 			LOG.error("Run {} could not be saved as {}: {}", run.getId(), progress.status, e.getClass().getSimpleName());
 		}
-	}
-
-	private static String toReportText(final String text) {
-		return Texts.truncate(PiiScrubber.scrub(text), REPORT_TEXT_MAX_LENGTH, null);
 	}
 
 	/**

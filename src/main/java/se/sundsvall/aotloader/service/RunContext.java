@@ -78,14 +78,16 @@ public final class RunContext {
 	}
 
 	/**
-	 * Gives the partyId of a number, looking it up the first time the run asks for it. A failed lookup is not remembered.
+	 * Gives the partyId of a number in a municipality, looking it up the first time the run asks for it. A failed lookup
+	 * is not remembered.
 	 *
-	 * @param  legalId the number
-	 * @param  lookup  looks the number up in Party
-	 * @return         the partyId, empty when Party does not know the number
+	 * @param  municipalityId the municipality Party is asked for
+	 * @param  legalId        the number
+	 * @param  lookup         looks the number up in Party
+	 * @return                the partyId, empty when Party does not know the number
 	 */
-	public Optional<String> partyId(final LegalId legalId, final Function<LegalId, Optional<String>> lookup) {
-		final var key = cacheKey(legalId);
+	public Optional<String> partyId(final String municipalityId, final LegalId legalId, final Function<LegalId, Optional<String>> lookup) {
+		final var key = cacheKey(municipalityId, legalId);
 		final var cached = partyIds.get(key);
 		if (cached != null) {
 			return cached;
@@ -119,7 +121,7 @@ public final class RunContext {
 		return true;
 	}
 
-	private static String cacheKey(final LegalId legalId) {
-		return legalId.type() + ":" + legalId.number();
+	private static String cacheKey(final String municipalityId, final LegalId legalId) {
+		return municipalityId + ":" + legalId.type() + ":" + legalId.number();
 	}
 }

@@ -4,11 +4,9 @@ import java.time.LocalDate;
 import java.time.MonthDay;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.support.SourceValues;
-
-import static se.sundsvall.aotloader.source.CandidateTexts.DASH;
+import se.sundsvall.aotloader.support.Texts;
 
 /**
  * The season and the date period of a permit, interpreted as section 7.5 says.
@@ -35,7 +33,7 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 				seasonStart = start.get();
 				seasonEnd = end.get();
 			} else {
-				rawSeason = raw(permit.arligPeriodStart(), permit.arligPeriodSlut());
+				rawSeason = Texts.range(permit.arligPeriodStart(), permit.arligPeriodSlut());
 				problems.add("säsong '" + rawSeason + "'");
 			}
 		}
@@ -51,7 +49,7 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 			if (datesOk) {
 				periodStart = startDate.orElse(null);
 				periodEnd = endDate.orElse(null);
-				final var period = raw(permit.periodStart(), permit.periodSlut());
+				final var period = Texts.range(permit.periodStart(), permit.periodSlut());
 				if (periodStart == null || periodEnd == null) {
 					// A period open at one end would make a temporary permit that never ends, or one without a start
 					problems.add("perioden '%s' saknar %s".formatted(period, periodStart == null ? "början" : "slut"));
@@ -63,7 +61,7 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 				seasonStart = startDay.get();
 				seasonEnd = endDay.get();
 			} else {
-				rawPeriod = raw(permit.periodStart(), permit.periodSlut());
+				rawPeriod = Texts.range(permit.periodStart(), permit.periodSlut());
 				problems.add("period '" + rawPeriod + "'");
 			}
 		}
@@ -76,19 +74,15 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 
 	String seasonText() {
 		if (seasonStart != null) {
-			return SourceValues.format(seasonStart) + DASH + SourceValues.format(seasonEnd);
+			return Texts.range(SourceValues.format(seasonStart), SourceValues.format(seasonEnd));
 		}
 		return rawSeason;
 	}
 
 	String periodText() {
 		if (hasDatePeriod()) {
-			return Optional.ofNullable(SourceValues.format(periodStart)).orElse("") + DASH + Optional.ofNullable(SourceValues.format(periodEnd)).orElse("");
+			return Texts.range(SourceValues.format(periodStart), SourceValues.format(periodEnd));
 		}
 		return rawPeriod;
-	}
-
-	private static String raw(final String start, final String end) {
-		return Optional.ofNullable(start).orElse("") + DASH + Optional.ofNullable(end).orElse("");
 	}
 }

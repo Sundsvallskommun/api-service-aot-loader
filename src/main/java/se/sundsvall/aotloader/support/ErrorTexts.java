@@ -11,7 +11,8 @@ public final class ErrorTexts {
 	private ErrorTexts() {}
 
 	/**
-	 * @return the error described for the business, with numbers and email addresses masked
+	 * @return the error described for the business: the message of a {@link MigrationException} as it is, and any other
+	 *         error with numbers and email addresses masked
 	 */
 	public static String describe(final Throwable e) {
 		return switch (e) {

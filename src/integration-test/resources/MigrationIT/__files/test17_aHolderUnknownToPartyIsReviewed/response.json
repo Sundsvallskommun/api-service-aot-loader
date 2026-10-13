@@ -1,0 +1,10 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "4",
+	"placeNumber": "12345681",
+	"placeName": "Timråkrogen",
+	"outcome": "GRANSKAS",
+	"rules": "G13,G10",
+	"detail": "G10 Tillståndshavaren finns inte i Party; Kommun 2262 (område Timrå); 1 person(er) med betydande inflytande finns inte i Party och läggs in utan partyId; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+}

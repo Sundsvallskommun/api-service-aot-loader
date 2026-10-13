@@ -5,7 +5,7 @@ info:
   license:
     name: MIT License
     url: https://opensource.org/licenses/MIT
-  version: "6.7"
+  version: "6.8"
 servers:
 - url: http://localhost:51822
   description: Generated server url
@@ -600,6 +600,12 @@ paths:
                   description: Attachment description
                   maxLength: 255
                   minLength: 0
+                replaces:
+                  type: string
+                  description: "Id of an attachment this one replaces. The replaced\
+                    \ attachment is removed from the asset but kept in its revision\
+                    \ history, and its category and description are carried over unless\
+                    \ new ones are given"
               required:
               - attachment
         required: true
@@ -1296,28 +1302,8 @@ components:
         instance:
           type: string
           format: uri
-        causeAsProblem:
-          $ref: "#/components/schemas/ThrowableProblem"
         detail:
           type: string
-    ThrowableProblem:
-      type: object
-      properties:
-        type:
-          type: string
-          format: uri
-        title:
-          type: string
-        status:
-          type: integer
-          format: int32
-        detail:
-          type: string
-        instance:
-          type: string
-          format: uri
-        causeAsProblem:
-          $ref: "#/components/schemas/ThrowableProblem"
     Violation:
       type: object
       properties:
@@ -1501,6 +1487,42 @@ components:
           description: Status reason
           examples:
           - Status reason
+        validTo:
+          type: string
+          format: date
+          description: Valid to date. Can only be changed while the asset is ACTIVE
+            or TEMPORARY
+          examples:
+          - 2021-12-31
+        indefinitely:
+          type: boolean
+          description: "If true, validTo will be cleared (asset becomes indefinite).\
+            \ Takes precedence over validTo when both are supplied. Can only be used\
+            \ while the asset is ACTIVE or TEMPORARY"
+          examples:
+          - true
+        title:
+          type: string
+          description: "Asset title, shown to the party. Can only be changed while\
+            \ the asset is ACTIVE or TEMPORARY"
+          examples:
+          - Stadigvarande tillstånd för servering av alkohol
+          maxLength: 255
+          minLength: 0
+        additionalParameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Additional parameters, replacing the current ones. Can only\
+            \ be changed while the asset is ACTIVE or TEMPORARY"
+          examples:
+          - foo: bar
+        jsonParameters:
+          type: array
+          description: "JSON parameters, replacing the current ones. Can only be changed\
+            \ while the asset is ACTIVE or TEMPORARY"
+          items:
+            $ref: "#/components/schemas/AssetJsonParameter"
     AssetAttachmentUpdateRequest:
       type: object
       description: Attachment update request. Null values are left untouched

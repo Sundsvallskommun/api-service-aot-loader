@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
@@ -41,7 +42,7 @@ import static org.springframework.http.HttpStatus.UNSUPPORTED_MEDIA_TYPE;
 class SupportManagementIntegrationTest {
 
 	private static final String MUNICIPALITY_ID = "2281";
-	private static final String NAMESPACE = "ALKT";
+	private static final String NAMESPACE = "AOT";
 	private static final byte[] CONTENT = {
 		1, 2, 3
 	};
@@ -85,11 +86,12 @@ class SupportManagementIntegrationTest {
 		when(client.getErrand(MUNICIPALITY_ID, NAMESPACE, "a")).thenReturn(errand);
 		when(client.getErrand(MUNICIPALITY_ID, NAMESPACE, "gone")).thenThrow(Problem.valueOf(NOT_FOUND, "Finns inte"));
 		when(client.getErrand(MUNICIPALITY_ID, NAMESPACE, "broken")).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-		when(client.createErrand(MUNICIPALITY_ID, NAMESPACE, errand)).thenReturn(ResponseEntity.created(URI.create("/2281/ALKT/errands/new-id")).build());
+		when(client.createErrand(MUNICIPALITY_ID, NAMESPACE, errand)).thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/new-id")).build());
 		when(client.updateErrand(MUNICIPALITY_ID, NAMESPACE, "a", errand)).thenReturn(errand);
 		when(client.getAttachments(MUNICIPALITY_ID, NAMESPACE, "a")).thenReturn(List.of(new ErrandAttachment()));
 		when(client.getAttachments(MUNICIPALITY_ID, NAMESPACE, "b")).thenReturn(null);
 		when(client.getLabels(MUNICIPALITY_ID, NAMESPACE)).thenReturn(new Labels().labelStructure(List.of(new Label().id("l"))), new Labels());
+		when(client.getActionConfigs(MUNICIPALITY_ID, NAMESPACE)).thenReturn(List.of(new Config().name("SEND_EMAIL"))).thenReturn(null);
 		assertThat(integration.getErrand(MUNICIPALITY_ID, "a")).contains(errand);
 		assertThat(integration.getErrand(MUNICIPALITY_ID, "gone")).isEmpty();
 		assertThatThrownBy(() -> integration.getErrand(MUNICIPALITY_ID, "broken")).isInstanceOf(ThrowableProblem.class);
@@ -99,6 +101,8 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getAttachments(MUNICIPALITY_ID, "b")).isEmpty();
 		assertThat(integration.getLabelTree(MUNICIPALITY_ID)).hasSize(1);
 		assertThat(integration.getLabelTree(MUNICIPALITY_ID)).isEmpty();
+		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).extracting(Config::getName).containsExactly("SEND_EMAIL");
+		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).isEmpty();
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isTrue();
 		verify(client).createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), argThat(file -> "errandAttachment".equals(file.getName()) && "beslut.pdf".equals(file.getOriginalFilename())));
 	}

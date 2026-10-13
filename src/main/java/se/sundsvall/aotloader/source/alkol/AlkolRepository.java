@@ -28,9 +28,8 @@ import static se.sundsvall.aotloader.source.Rows.text;
 
 /**
  * Reads AlkOL2, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
- * queries only select. The view FS_GT_Tobak is read as the system's own list of
- * current tobacco permits (section 7.8.1); its columns are read whatever their type, since its definition is not
- * visible to the account.
+ * queries only select. The view FS_GT_Tobak is read as the system's own list of current tobacco permits (section
+ * 7.8.1); its columns are read whatever their type, since its definition is not visible to the account.
  */
 @Repository
 public class AlkolRepository {
@@ -58,7 +57,7 @@ public class AlkolRepository {
 		""";
 
 	private static final String SELECT_DECISIONS = """
-		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum, b.GiltigtTOM_Datum,
+		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum,
 		       b.Worddokument, b.Bifogadfil
 		FROM dbo.Beslut b
 		""";
@@ -166,7 +165,6 @@ public class AlkolRepository {
 			text(rs, "BeslutsTyp"),
 			dateTime(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtFROM_Datum"),
-			date(rs, "GiltigtTOM_Datum"),
 			text(rs, "Worddokument"),
 			text(rs, "Bifogadfil"));
 	}

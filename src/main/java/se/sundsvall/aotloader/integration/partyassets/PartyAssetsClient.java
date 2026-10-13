@@ -2,10 +2,12 @@ package se.sundsvall.aotloader.integration.partyassets;
 
 import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +27,11 @@ public interface PartyAssetsClient {
 		@RequestParam("partyId") String partyId,
 		@RequestParam("assetId") String assetId);
 
+	@GetMapping(path = "/{municipalityId}/assets/{id}", produces = APPLICATION_JSON_VALUE)
+	Asset getAsset(
+		@PathVariable String municipalityId,
+		@PathVariable String id);
+
 	/**
 	 * @param sourceReference the relation PartyAssets writes from the permit to the errand
 	 */
@@ -33,4 +40,10 @@ public interface PartyAssetsClient {
 		@PathVariable String municipalityId,
 		@RequestParam("sourceReference") String sourceReference,
 		@RequestBody AssetCreateRequest asset);
+
+	@PatchMapping(path = "/{municipalityId}/assets/{id}", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
+	ResponseEntity<Void> updateAsset(
+		@PathVariable String municipalityId,
+		@PathVariable String id,
+		@RequestBody AssetUpdateRequest asset);
 }

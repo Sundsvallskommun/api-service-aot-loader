@@ -2,6 +2,7 @@ package se.sundsvall.aotloader.integration.partyassets;
 
 import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.support.Locations;
@@ -10,6 +11,7 @@ import se.sundsvall.dept44.problem.ThrowableProblem;
 
 import static java.util.Collections.emptyList;
 import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Component
 public class PartyAssetsIntegration {
@@ -18,6 +20,20 @@ public class PartyAssetsIntegration {
 
 	PartyAssetsIntegration(final PartyAssetsClient client) {
 		this.client = client;
+	}
+
+	/**
+	 * @return the post, or empty when there is none with the id
+	 */
+	public Optional<Asset> getAsset(final String municipalityId, final String id) {
+		try {
+			return Optional.ofNullable(client.getAsset(municipalityId, id));
+		} catch (final ThrowableProblem problem) {
+			if (problem.getStatus() == NOT_FOUND) {
+				return Optional.empty();
+			}
+			throw problem;
+		}
 	}
 
 	/**
@@ -46,5 +62,14 @@ public class PartyAssetsIntegration {
 			}
 			throw problem;
 		}
+	}
+
+	/**
+	 * Changes the post. What the request leaves out stays as it is, and PartyAssets refuses a change of more than the
+	 * status
+	 * and its reason unless the post is ACTIVE or TEMPORARY.
+	 */
+	public void updateAsset(final String municipalityId, final String id, final AssetUpdateRequest request) {
+		client.updateAsset(municipalityId, id, request);
 	}
 }

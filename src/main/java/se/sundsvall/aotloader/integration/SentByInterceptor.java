@@ -6,9 +6,8 @@ import se.sundsvall.dept44.support.Identifier;
 
 /**
  * Sends the migration as the only sender of the requests to the target systems. dept44 passes on the sender of the
- * incoming request, which
- * for a single item migrated through the API is the caller; the target systems read the first value, and would then see
- * a person instead of the migration.
+ * incoming request, which for a single item migrated through the API is the caller; the target systems read the first
+ * value, and would then see a person instead of the migration.
  */
 public class SentByInterceptor implements RequestInterceptor {
 

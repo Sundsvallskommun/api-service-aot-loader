@@ -3,7 +3,7 @@
 _Migrates the current alcohol and tobacco permits, the notifications and the inspection errands from the old systems
 (AlkT, and AlkOL2 with the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products) to SupportManagement and PartyAssets._
 
-Every permit and notification becomes a closed errand in the namespace ALKT and a post in PartyAssets, linked to the
+Every permit and notification becomes a closed errand in the namespace AOT and a post in PartyAssets, linked to the
 errand. Every inspection errand becomes a closed errand, related to the permit errand of its place when it concerned the
 same permit holder. The migrated errands carry the label "Migrerat ärende", which keeps every process away from them. No
 mail, SMS or message is sent, and no process is started. The design, the mapping and the decisions are in
@@ -50,6 +50,10 @@ mvn spring-boot:run
 yourself. The service listens on `127.0.0.1:8080` only. Close the window when the run is done; the variables, the
 secret included, live only in it.
 
+The log never holds a request or a response: they hold names and personal identity numbers (K6). Whatever the log
+levels say, only the migration's own loggers write below INFO; the DEBUG and TRACE of the libraries, which show whole
+requests, are filtered out.
+
 ## Configuration
 
 ### The .env file
@@ -84,8 +88,6 @@ When the migration is approved, the production secret is changed or the client i
 | `ALKT_DOCUMENTS_DIR`, `ALKT_ATTACHMENTS_DIR`                              | The directories of AlkT on the file area (`Dokument` and `Bilder`)                                          |
 | `ALKOL_DOCUMENTS_DIR`, `ALKOL_ATTACHMENTS_DIR`                            | The directory of AlkOL on the file area, the same for both                                                  |
 | `AOT_LOADER_DB_URL`                                                       | The local database, see below. Default `jdbc:h2:file:./data/aot-loader`                                     |
-| `AOT_LOADER_ERRAND_STATUS`                                                | The closed status of the migrated errands (decision 5)                                                      |
-| `AOT_LOADER_ROLE_INSPECTION_HOLDER`                                       | The role of the holder an inspection errand concerned (section 7.7)                                         |
 
 The connection to SQL Server is encrypted and the certificate of the server is verified; if Java does not trust it,
 add it to a truststore. `trustServerCertificate` is not used.
@@ -94,17 +96,32 @@ add it to a truststore. `trustServerCertificate` is not used.
 
 The settings that are the same everywhere are in `application.yml` under `aot-loader`:
 
-- **Errand types:** the classification of each type (decision 5), and the type and title of the post in PartyAssets
-  (decisions 4 and 20). The types are those pw-alkt gives the permits it creates, e.g. `AlcoholServingPermit`.
+- **Errand types:** everything an errand type becomes in the target systems, under `errand-types`:
+
+  - the classification (decision 5);
+  - the labels by their resource path (section 7.3.4): `labels` for every errand of the type, `subtype-labels` for
+    the subtypes of a serving permit, and `source-errand-types` for the errand types in the source that are
+    inspection errands, with the label of each (section 7.7);
+  - for inspection errands, `only-places-with-permit`: only those of places with a current permit (section 7.7);
+  - the type and title of the post in PartyAssets (decisions 4 and 20). The types are those pw-alkt gives the permits
+    it creates, e.g. `AlcoholServingPermit`.
+
+  The label "Migrerat ärende" is not a setting: every migrated errand gets it, since it blocks every process
+  (decision 17).
+
 - **Municipalities:** an errand belongs to the municipality the run is started for, e.g. 2281 in
   `POST /2281/migrations/runs`, unless the area of its place is listed under `municipalities` (decision 19). The places
   in the area Timrå go to Timrå, 2262. Every call for such an errand goes to that municipality, and the status table
   keeps it; an item is never moved to another municipality once it has been written.
-- **Roles:** the permit holder is `PRIMARY`, and the persons with significant influence are `CONTACT` with the parameter
-  `PBI` = `true` (decision 15).
-- **Inspection errands:** the labels of the inspection errand types (section 7.7).
 
-A setting left blank stops a real run, and a dry run lists it.
+- **Status:** `errand-status`, the closed status of the migrated errands: `CLOSED` (decision 5).
+
+- **Roles:** the permit holder is `PRIMARY`, and the persons with significant influence are `CONTACT` with the parameter
+  `PBI` = `true` (decision 15). The holder's contact person is a `CONTACT` of its own, without `PBI`.
+  `inspection-holder` is the role of the holder an inspection errand concerned (section 7.7).
+
+A setting left blank stops a real run, and a dry run lists it. `inspection-holder` is blank until its decision is made
+(section 16 of the solution document).
 
 ### The local database
 
@@ -125,22 +142,26 @@ asset id and partyId, and the relation on its source and target.
 
 Swagger UI: [http://localhost:8080/api-docs](http://localhost:8080/api-docs)
 
-|                               Call                               |                                                                                          What it does                                                                                          |
-|------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `POST /2281/migrations/runs`                                     | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`) and `limit` |
-| `GET /2281/migrations/runs/{runId}`                              | The status of the run, with the number of items per outcome                                                                                                                                    |
-| `POST /2281/migrations/runs/{runId}/stop`                        | Stops the run before its next item                                                                                                                                                             |
-| `GET /2281/migrations/runs/{runId}/report`                       | The report: one row per item, with the review rules and what went wrong                                                                                                                        |
-| `GET /2281/migrations/runs/{runId}/report.csv`                   | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                             |
-| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`  | Migrates a single item and waits for it                                                                                                                                                        |
-| `GET /2281/migrations/items`                                     | The status table                                                                                                                                                                               |
-| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}` | The exception list (section 7.1.1)                                                                                                                                                             |
+|                               Call                               |                                                                                                                          What it does                                                                                                                           |
+|------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST /2281/migrations/runs`                                     | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`) and `limit`. A field it does not know, or an empty list, is refused with 400 |
+| `GET /2281/migrations/runs/{runId}`                              | The status of the run, with the number of items per outcome                                                                                                                                                                                                     |
+| `POST /2281/migrations/runs/{runId}/stop`                        | Stops the run before its next item                                                                                                                                                                                                                              |
+| `GET /2281/migrations/runs/{runId}/report`                       | The report: one row per item, with the review rules and what went wrong                                                                                                                                                                                         |
+| `GET /2281/migrations/runs/{runId}/report.csv`                   | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                                                                                              |
+| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`  | Migrates a single item and waits for it                                                                                                                                                                                                                         |
+| `GET /2281/migrations/items`                                     | The status table                                                                                                                                                                                                                                                |
+| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}` | The exception list (section 7.1.1)                                                                                                                                                                                                                              |
 
 The id of an item is `ObjektID` in AlkT or `FSID` in AlkOL for a permit, `FSID` and product for a
 notification (`1234-FOLKOL`, `1234-ECIGARETTER`, `1234-TOBAKSFRI_NIKOTIN`), and `ArendeID` for an inspection errand.
 
 Only one run at a time: a second call while a run is running gets 409. Starting a run again never migrates an item
 twice; an item already migrated is left as it is, and an item that stopped half way continues from where it stopped.
+Its post in PartyAssets is then brought up to date: it gets the status the item is to have now, ACTIVE or EXPIRED, since
+the exception list may have changed in between, and the title, last day and parameters the source gives now. PartyAssets
+changes those only while the post is ACTIVE, and never its type, issue date, description or party; the report lists
+what could not be changed.
 
 ### Example
 

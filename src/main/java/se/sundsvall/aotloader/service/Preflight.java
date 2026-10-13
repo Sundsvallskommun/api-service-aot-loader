@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.mapper.LabelPaths;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -32,9 +33,10 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 
 /**
  * The checks before a run (section 9): what the configuration still waits for, that the file area and the source
- * databases are configured, and that the labels exist in the namespace of every municipality the run may write to,
- * with the label for migrated errands blocking processes. A real run does not start when a check fails; a dry run lists
- * the problems and goes on.
+ * databases are configured, and in the namespace of every municipality the run may write to that the labels exist, with
+ * the label for migrated errands blocking processes, and that no action is active (R6). A real run does not start when
+ * a
+ * check fails; a dry run lists the problems and goes on.
  */
 @Component
 public class Preflight {
@@ -66,7 +68,8 @@ public class Preflight {
 		for (final var municipality : municipalities(municipalityId, problems)) {
 			final var forMunicipality = municipality.equals(municipalityId) ? "" : " för kommun " + municipality;
 			final var labels = readLabels(municipality, forMunicipality, problems);
-			labels.ifPresent(found -> checkLabels(found, forMunicipality, scope, types, problems));
+			labels.ifPresent(found -> checkLabels(found, forMunicipality, types, problems));
+			checkActions(municipality, forMunicipality, problems);
 			labelIds.put(municipality, labels.map(Preflight::labelIds).orElse(Map.of()));
 		}
 		return new Result(problems, labelIds);
@@ -99,21 +102,38 @@ public class Preflight {
 			if (type.isWithAsset() && Texts.isBlank(settings.assetTitle())) {
 				problems.add("Namn i PartyAssets saknas för %s (aot-loader.errand-types, beslut 4)".formatted(type));
 			}
+			checkTypeLabel(type, settings, problems);
 		});
 	}
 
-	private void checkInspections(final Map<Source, Set<Kind>> scope, final List<String> problems) {
-		if (scope.values().stream().noneMatch(kinds -> kinds.contains(TILLSYN))) {
-			return;
+	/**
+	 * Every errand is to get the label of its type: a serving permit that of its subtype, an inspection errand that of its
+	 * errand type in the source, and the other errands one of the labels of their type.
+	 */
+	private static void checkTypeLabel(final ErrandType type, final ErrandTypeSettings settings, final List<String> problems) {
+		if (type == ErrandType.SERVING_PERMIT) {
+			Arrays.stream(ServingPermitSubtype.values())
+				.filter(subtype -> settings.subtypeLabel(subtype).isEmpty())
+				.forEach(subtype -> problems.add("Etiketten för undertypen %s saknas (aot-loader.errand-types, avsnitt 7.3.4)".formatted(subtype)));
+		} else if (type.getKind() == TILLSYN) {
+			final var source = type.getSource().getDisplayName();
+			if (settings.sourceErrandTypes().isEmpty()) {
+				problems.add("Inga ärendetyper i %s är angivna som tillsynsärenden (aot-loader.errand-types, avsnitt 7.7)".formatted(source));
+			}
+			settings.sourceErrandTypes().forEach((errandType, label) -> {
+				if (label.isEmpty()) {
+					problems.add("Etiketten för ärendetyp '%s' i %s är inte bestämd (aot-loader.errand-types, avsnitt 7.7)".formatted(errandType, source));
+				}
+			});
+		} else if (settings.labels().isEmpty()) {
+			problems.add("Etikett saknas för %s (aot-loader.errand-types, avsnitt 7.3.4)".formatted(type));
 		}
-		if (Texts.isBlank(properties.roles().inspectionHolder())) {
+	}
+
+	private void checkInspections(final Map<Source, Set<Kind>> scope, final List<String> problems) {
+		if (scope.values().stream().anyMatch(kinds -> kinds.contains(TILLSYN)) && Texts.isBlank(properties.roles().inspectionHolder())) {
 			problems.add("Rollen för tillståndshavaren på tillsynsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7)");
 		}
-		inspectionSources(scope).forEach(source -> properties.inspection().errandTypes(source).forEach((errandType, label) -> {
-			if (Texts.isBlank(label)) {
-				problems.add("Etiketten för ärendetyp '%s' i %s är inte bestämd (aot-loader.inspection, avsnitt 7.7)".formatted(errandType, source.getDisplayName()));
-			}
-		}));
 	}
 
 	private void checkSource(final Source source, final List<String> problems) {
@@ -158,33 +178,39 @@ public class Preflight {
 		}
 	}
 
-	private void checkLabels(final Map<String, Label> labels, final String forMunicipality, final Map<Source, Set<Kind>> scope, final Set<ErrandType> types, final List<String> problems) {
-		requiredLabels(scope, types).stream()
+	/**
+	 * Adds a problem when an action is active in the namespace of the municipality (R6).
+	 */
+	private void checkActions(final String municipalityId, final String forMunicipality, final List<String> problems) {
+		// Activating an errand runs the active actions whatever its headers and labels say, and an action may mail the customer
+		try {
+			final var active = supportManagement.getActionConfigs(municipalityId).stream()
+				.filter(config -> Boolean.TRUE.equals(config.getActive()))
+				.map(config -> Optional.ofNullable(config.getName()).orElse("utan namn"))
+				.toList();
+			if (!active.isEmpty()) {
+				problems.add("Åtgärder är aktiva i namespace %s%s och körs när ett migrerat ärende aktiveras: %s. De stängs av under körningen (R6, avsnitt 10.2)"
+					.formatted(properties.namespace(), forMunicipality, String.join(", ", active)));
+			}
+		} catch (final RuntimeException e) {
+			problems.add("Åtgärderna i SupportManagement%s gick inte att hämta: %s".formatted(forMunicipality, ErrorTexts.describe(e)));
+		}
+	}
+
+	private void checkLabels(final Map<String, Label> labels, final String forMunicipality, final Set<ErrandType> types, final List<String> problems) {
+		requiredLabels(types).stream()
 			.filter(path -> !labels.containsKey(LabelPaths.normalize(path)))
 			.forEach(path -> problems.add("Etiketten %s finns inte i namespace %s%s".formatted(path, properties.namespace(), forMunicipality)));
 		Optional.ofNullable(labels.get(LabelPaths.normalize(LABEL_MIGRATED)))
 			.filter(label -> !blocksProcesses(label))
-			.ifPresent(label -> problems.add("Etiketten %s%s saknar attributet %s=true, som spärrar processer (beslut 17)".formatted(LABEL_MIGRATED, forMunicipality, LABEL_ATTRIBUTE_PROCESS_BLOCKED)));
+			.ifPresent(_ -> problems.add("Etiketten %s%s saknar attributet %s=true, som spärrar processer (beslut 17)".formatted(LABEL_MIGRATED, forMunicipality, LABEL_ATTRIBUTE_PROCESS_BLOCKED)));
 	}
 
-	private Set<String> requiredLabels(final Map<Source, Set<Kind>> scope, final Set<ErrandType> types) {
+	private Set<String> requiredLabels(final Set<ErrandType> types) {
 		final var paths = new LinkedHashSet<String>();
 		paths.add(LABEL_MIGRATED);
-		types.forEach(type -> {
-			if (type == ErrandType.SERVING_PERMIT) {
-				Arrays.stream(ServingPermitSubtype.values()).map(ServingPermitSubtype::getLabelPath).forEach(paths::add);
-			} else {
-				paths.add(type.getLabelPath());
-			}
-		});
-		inspectionSources(scope).forEach(source -> properties.inspection().errandTypes(source).values().stream()
-			.filter(label -> !Texts.isBlank(label))
-			.forEach(paths::add));
+		types.forEach(type -> paths.addAll(properties.errandType(type).allLabels()));
 		return paths;
-	}
-
-	private static List<Source> inspectionSources(final Map<Source, Set<Kind>> scope) {
-		return scope.entrySet().stream().filter(entry -> entry.getValue().contains(TILLSYN)).map(Map.Entry::getKey).sorted().toList();
 	}
 
 	private static Map<String, String> labelIds(final Map<String, Label> labels) {

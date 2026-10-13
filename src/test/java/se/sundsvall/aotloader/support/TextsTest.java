@@ -49,4 +49,12 @@ class TextsTest {
 		assertThat(Texts.joinWords("a", null, " b ")).isEqualTo("a b");
 		assertThat(Texts.joinWords(null, " ")).isNull();
 	}
+
+	@Test
+	void titleAndRange() {
+		assertThat(Texts.title("Serveringstillstånd", "Krogen")).isEqualTo("Serveringstillstånd – Krogen");
+		assertThat(Texts.range("08:00", "01:00")).isEqualTo("08:00–01:00");
+		assertThat(Texts.range("2026-05-01", null)).isEqualTo("2026-05-01–");
+		assertThat(Texts.range(null, null)).isEqualTo("–");
+	}
 }

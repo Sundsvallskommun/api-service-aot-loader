@@ -4,22 +4,20 @@
 logging:
   level:
     root: INFO
-    # Request and response bodies hold names and personal identity numbers, which must never reach the log (K6)
-    se.sundsvall.dept44.payload: 'OFF'
 openapi:
   name: ${spring.application.name}
   title: ${spring.application.name}
   version: '@project.version@'
 server:
   # The migration runs on a developer computer (decision 10) and must not be reachable from the network
-  address: ${SERVER_ADDRESS:127.0.0.1}
+  address: 127.0.0.1
 spring:
   application:
     name: api-aot-loader
   datasource:
     # The status table, the exception list and the reports, kept on the computer that runs the migration
     url: ${AOT_LOADER_DB_URL:jdbc:h2:file:./data/aot-loader}
-    username: ${AOT_LOADER_DB_USERNAME:sa}
+    username: sa
     password: ${AOT_LOADER_DB_PASSWORD:}
     driver-class-name: org.h2.Driver
   flyway:
@@ -90,12 +88,12 @@ integration:
 #========================================
 # A setting left blank waits for a decision: a dry run lists it, and a real run refuses to start without it.
 aot-loader:
-  namespace: ALKT
+  namespace: AOT
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
   channel: MIGRATION
   # The closed status of the migrated errands (decision 5)
-  errand-status: ${AOT_LOADER_ERRAND_STATUS:}
+  errand-status: CLOSED
   max-file-size: 50MB
   # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
   # in the code lists of AlkT and AlkOL (decision 19)
@@ -106,41 +104,69 @@ aot-loader:
     # The persons with significant influence (decision 15), with the parameter PBI = true on each
     contact: CONTACT
     # With PRIMARY the inspection errand shows on Mina sidor (section 7.7, item 5)
-    inspection-holder: ${AOT_LOADER_ROLE_INSPECTION_HOLDER:}
-  # The classification (category and type) of each errand type is decided by decision 5, the type in PartyAssets by
-  # decision 20. The asset types are those pw-alkt gives the permits it creates; pw-alkt has none for tobacco-free
-  # nicotine products.
+    inspection-holder: ''
+  # Everything each errand type becomes in the target systems: the classification (category and type, decision 5), the
+  # labels by their resource path (section 7.3.4), and the type and title in PartyAssets (decisions 20 and 4). The asset
+  # types are those pw-alkt gives the permits and notifications it creates, a notification ending in Notification;
+  # pw-alkt has none for tobacco-free nicotine products. Every errand also gets the label TAGROOT/MIGRATED_ERRAND,
+  # which blocks every process (decision 17) and is not a setting.
   errand-types:
     serving-permit:
+      # The label of each subtype, decided by the rules of section 7.3.4
+      subtype-labels:
+        temporary-serving-public: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PUBLIC
+        temporary-serving-private: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PRIVATE
+        permanent-serving: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING
+        permanent-catering: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_CATERING
+        farm-sales: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/FARM_SALES
+        tasting: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING
       asset-type: AlcoholServingPermit
       asset-title: Beslut om serveringstillstånd
     tobacco-permit:
+      labels:
+        - CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION
       asset-type: TobaccoSalesPermit
       # Followed by the kind of permit, e.g. " – detaljhandel"
       asset-title: Tillstånd för tobaksförsäljning
     folkol-sales-notification:
-      asset-type: LowAlcoholBeerSalesPermit
+      labels:
+        - CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION
+      asset-type: LowAlcoholBeerSalesNotification
       asset-title: Anmälan om försäljning av folköl
     folkol-serving-notification:
-      asset-type: LowAlcoholBeerServingPermit
+      labels:
+        - CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION
+      asset-type: LowAlcoholBeerServingNotification
       asset-title: Anmälan om servering av folköl
     ecigarette-notification:
-      asset-type: ECigaretteSalesPermit
+      labels:
+        - CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION
+      asset-type: ECigaretteSalesNotification
       asset-title: Anmälan om försäljning av e-cigaretter och påfyllningsbehållare
     tobacco-free-nicotine-notification:
+      labels:
+        - CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
       asset-type: TobaccoFreeNicotineSalesNotification
       asset-title: Anmälan om försäljning av tobaksfria nikotinprodukter
-  inspection:
-    # Until the scope is decided (section 7.7, item 2), only the inspection errands of places with a current permit
-    only-places-with-permit: true
-    # The errand types that are inspection errands, with the label of each (section 7.7). Blank: not decided.
-    alkt-errand-types:
-      '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
-      '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
-      '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
-    alkol-errand-types:
-      it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
-      tills: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    # Inspection errands get no post in PartyAssets (section 7.7)
+    alcohol-inspection:
+      labels:
+        - TAGROOT/ALCOHOL_INSPECTION
+      # Until the scope is decided (section 7.7, item 2), only the inspection errands of places with a current permit
+      only-places-with-permit: true
+      # The errand types in AlkT that are inspection errands, with the label of each. Blank: not decided.
+      source-errand-types:
+        '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    tobacco-inspection:
+      labels:
+        - TAGROOT/TOBACCO_INSPECTION
+      only-places-with-permit: true
+      # The errand types in AlkOL that are inspection errands, with the label of each. Blank: not decided.
+      source-errand-types:
+        it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        tills: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
   # Windows authentication: the URL has integratedSecurity=true and no user, see README
   databases:
     alkt:

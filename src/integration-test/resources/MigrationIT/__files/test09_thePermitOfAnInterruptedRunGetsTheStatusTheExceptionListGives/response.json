@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "2",
+	"placeNumber": "12345679",
+	"placeName": "Krogen Två",
+	"outcome": "MIGRERAD",
+	"rules": "G2,G13",
+	"detail": "G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt; Undantagslistan: MIGRERA_SOM_UTGANGET; Tillståndet i PartyAssets hade status ACTIVE från en tidigare körning och fick status EXPIRED",
+	"errandNumber": "ALKT-2026-5"
+}

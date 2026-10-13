@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Text handling shared by the readers and the mappers (section 7.5: blanks at the start and end are removed and empty
@@ -12,9 +13,26 @@ import java.util.Objects;
  */
 public final class Texts {
 
+	/** The dash of titles and ranges. */
+	public static final String DASH = "–";
+
 	private static final String ELLIPSIS = "…";
 
 	private Texts() {}
+
+	/**
+	 * @return the title "prefix – name", e.g. "Serveringstillstånd – Krogen"
+	 */
+	public static String title(final String prefix, final String name) {
+		return prefix + " " + DASH + " " + name;
+	}
+
+	/**
+	 * @return the range "start–end", with a missing end left empty, e.g. "2026-05-01–"
+	 */
+	public static String range(final String start, final String end) {
+		return Optional.ofNullable(start).orElse("") + DASH + Optional.ofNullable(end).orElse("");
+	}
 
 	/**
 	 * @return the value without blanks at the start and the end, or null when nothing remains

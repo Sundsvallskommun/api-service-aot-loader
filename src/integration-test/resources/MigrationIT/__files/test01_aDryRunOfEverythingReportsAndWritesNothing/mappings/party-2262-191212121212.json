@@ -1,0 +1,14 @@
+{
+	"name": "party-2262-191212121212",
+	"request": {
+		"method": "GET",
+		"url": "/party/2262/PRIVATE/191212121212/partyId"
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "text/plain"
+		},
+		"body": "22222222-aaaa-bbbb-cccc-000000000002"
+	}
+}

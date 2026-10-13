@@ -1,0 +1,63 @@
+{
+	"name": "support-management-find-ALKT-TILLSTAND-2",
+	"request": {
+		"method": "GET",
+		"urlPath": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"filter": {
+				"equalTo": "externalTags.key:'migreringsid' and externalTags.value:'ALKT-TILLSTAND-2' and (lifecycle:'DRAFT' or lifecycle:'ACTIVE')"
+			},
+			"page": {
+				"equalTo": "0"
+			},
+			"size": {
+				"equalTo": "100"
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"content": [
+				{
+					"id": "11111111-aaaa-bbbb-cccc-000000000005",
+					"errandNumber": "ALKT-2026-5",
+					"lifecycle": "DRAFT",
+					"externalTags": [
+						{
+							"key": "migreringsid",
+							"value": "ALKT-TILLSTAND-2"
+						}
+					]
+				}
+			],
+			"last": true
+		}
+	}
+}

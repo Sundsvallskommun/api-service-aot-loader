@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Labels;
@@ -33,6 +34,11 @@ public interface SupportManagementClient {
 
 	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/labels", produces = APPLICATION_JSON_VALUE)
 	Labels getLabels(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/namespace-config/action-config", produces = APPLICATION_JSON_VALUE)
+	List<Config> getActionConfigs(
 		@PathVariable String municipalityId,
 		@PathVariable String namespace);
 

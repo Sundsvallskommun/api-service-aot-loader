@@ -71,7 +71,7 @@ class ClientSafetyTest {
 		final var capability = new NoResendCapability(new StaticListableBeanFactory().getBeanProvider(Truststore.class));
 		// localhost has two addresses, and OkHttp would on its own try them both
 		final var api = Feign.builder()
-			.retryer(new ActionRetryer(token -> evictedTokens.incrementAndGet(), 1))
+			.retryer(new ActionRetryer(_ -> evictedTokens.incrementAndGet(), 1))
 			.addCapability(capability)
 			.target(TestApi.class, "http://localhost:" + server.port());
 
@@ -104,14 +104,14 @@ class ClientSafetyTest {
 
 	@Test
 	void aWriteRefusedForItsTokenIsSentAgainWithANewOne() {
-		final Client unauthorized = (request, options) -> {
+		final Client unauthorized = (request, _) -> {
 			calls.incrementAndGet();
 			return Response.builder().status(401).reason("Unauthorized").request(request).headers(Map.of()).build();
 		};
 		final var api = Feign.builder()
 			.client(unauthorized)
-			.retryer(new NoResendCapability.NoResendRetryer(new ActionRetryer(token -> evictedTokens.incrementAndGet(), 1)))
-			.errorDecoder((methodKey, response) -> new RetryableException(response.status(), "Unauthorized", response.request().httpMethod(), (Long) null, response.request()))
+			.retryer(new NoResendCapability.NoResendRetryer(new ActionRetryer(_ -> evictedTokens.incrementAndGet(), 1)))
+			.errorDecoder((_, response) -> new RetryableException(response.status(), "Unauthorized", response.request().httpMethod(), (Long) null, response.request()))
 			.target(TestApi.class, "http://localhost");
 
 		assertThatThrownBy(() -> api.create("{}")).isInstanceOf(RetryableException.class);
@@ -124,7 +124,7 @@ class ClientSafetyTest {
 	void theMigrationIsTheOnlySenderAlsoWhenACallerSentTheRequest() {
 		Identifier.set(Identifier.parse("joe01doe; type=adAccount"));
 		final var builder = Feign.builder()
-			.client((request, options) -> {
+			.client((request, _) -> {
 				sentBy.add(request.headers().get(Identifier.HEADER_NAME));
 				return Response.builder().status(200).reason("OK").request(request).headers(Map.of()).build();
 			});
@@ -139,7 +139,7 @@ class ClientSafetyTest {
 	}
 
 	private Client timingOut() {
-		return (request, options) -> {
+		return (_, _) -> {
 			calls.incrementAndGet();
 			throw new SocketTimeoutException("Read timed out");
 		};
@@ -151,7 +151,7 @@ class ClientSafetyTest {
 	private TestApi api(final Client client) {
 		return Feign.builder()
 			.client(client)
-			.retryer(new NoResendCapability.NoResendRetryer(new ActionRetryer(token -> evictedTokens.incrementAndGet(), 1)))
+			.retryer(new NoResendCapability.NoResendRetryer(new ActionRetryer(_ -> evictedTokens.incrementAndGet(), 1)))
 			.target(TestApi.class, "http://localhost");
 	}
 }

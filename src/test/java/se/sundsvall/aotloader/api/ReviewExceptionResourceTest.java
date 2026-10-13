@@ -74,4 +74,15 @@ class ReviewExceptionResourceTest {
 		assertThat(problem.getViolations()).extracting("field").containsExactlyInAnyOrder("outcome", "decidedBy");
 		verifyNoInteractions(service);
 	}
+
+	@Test
+	void aRequestWithAFieldItDoesNotHave() {
+		webTestClient.put().uri("/{municipalityId}/migrations/exceptions/ALKT/TILLSTAND/1", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue("{\"outcome\": \"MIGRERA\", \"decidedBy\": \"handlaggare\", \"decidedat\": \"2026-10-01\"}")
+			.exchange()
+			.expectStatus().isBadRequest();
+
+		verifyNoInteractions(service);
+	}
 }

@@ -1,0 +1,137 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.lifecycle",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "PERMIT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "SERVING_PERMIT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.channel",
+					"equalTo": "MIGRATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.reporterUserId",
+					"equalTo": "alkt-migration"
+				}
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-permanent-serving')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKT-TILLSTAND-1')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'diarienummer' && @.value == 'IAN-2019-1')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'ENTERPRISE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan Tolvansson')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.stakeholders.length()",
+					"equalTo": "3"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesName')].values[0]",
+					"equalTo": "Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesStreetAddress')].values[0]",
+					"equalTo": "Storgatan 1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesPostalCode')].values[0]",
+					"equalTo": "85230"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesPostalArea')].values[0]",
+					"equalTo": "Sundsvall"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'restaurantNumber')].values[0]",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'villkor')].values[0]",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001"
+		}
+	}
+}

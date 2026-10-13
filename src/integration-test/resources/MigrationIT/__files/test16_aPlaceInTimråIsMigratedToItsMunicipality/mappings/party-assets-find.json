@@ -1,0 +1,31 @@
+{
+	"name": "party-assets-find",
+	"request": {
+		"method": "GET",
+		"urlPath": "/party-assets/2262/assets",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"partyId": {
+				"equalTo": "22222222-aaaa-bbbb-cccc-000000000001"
+			},
+			"assetId": {
+				"equalTo": "11111111-aaaa-bbbb-cccc-000000000004"
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": []
+	}
+}

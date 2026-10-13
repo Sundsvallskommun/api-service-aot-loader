@@ -20,7 +20,13 @@ import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementInt
 import se.sundsvall.aotloader.service.FileUploader.AttachedFile;
 import se.sundsvall.aotloader.service.FileUploader.FileProblem;
 import se.sundsvall.aotloader.service.FileUploader.FileProblems;
+import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
+import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 
@@ -32,6 +38,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
 @ExtendWith(MockitoExtension.class)
 class FileUploaderTest {
@@ -99,6 +107,38 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void aFileWhoseNameAnotherPlaceAlsoUsesIsListedAndNotUploaded() throws IOException {
+		Files.writeString(attachments.resolve("delad.pdf"), "kanske ett annat ställes");
+		Files.writeString(attachments.resolve("delad.url"), "[InternetShortcut]");
+		final var candidate = withFiles(
+			new FileReference("beslut.rtf", DOCUMENTS),
+			new FileReference("delad.pdf", ATTACHMENTS, true),
+			new FileReference("saknas.pdf", ATTACHMENTS, true),
+			new FileReference("delad.url", ATTACHMENTS, true));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
+		final var notes = new ReportNotes();
+
+		uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any());
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8));
+		final var result = notes.result(Outcome.MIGRERAD, null);
+		assertThat(result.rules()).containsExactly("G14");
+		assertThat(result.detail()).isEqualTo("1 länk hoppas över (delad.url); G14 2 filer har namn som också används på andra ställen och laddas inte upp (delad.pdf, saknas.pdf)");
+	}
+
+	@Test
+	void aDryRunListsAFileWhoseNameAnotherPlaceAlsoUses() {
+		final var notes = new ReportNotes();
+
+		uploader.check(withFiles(new FileReference("beslut.rtf", DOCUMENTS), new FileReference("ansokan.pdf", ATTACHMENTS, true)), context(), notes);
+
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (ansokan.pdf)");
+		verifyNoInteractions(supportManagement);
+	}
+
+	@Test
 	void attachedFiles() {
 		final var file = new AttachedFile("Beslut.rtf", "ABC", 3);
 
@@ -147,7 +187,8 @@ class FileUploaderTest {
 			"G14 1 filreferens har ett ogiltigt namn (en.pdf)",
 			"G14 1 fil gick inte att läsa (en.pdf)",
 			"G14 1 fil kunde inte kontrolleras, filarean gick inte att läsa (en.pdf)",
-			"G14 1 fil togs inte emot av SupportManagement (en.pdf)"));
+			"G14 1 fil togs inte emot av SupportManagement (en.pdf)",
+			"G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (en.pdf)"));
 		assertThat(severalNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
 			"G14 2 filer saknas på filarean (ett.pdf, två.pdf)",
 			"G14 2 filer är större än 50 MB och laddas inte upp (ett.pdf, två.pdf)",
@@ -155,7 +196,8 @@ class FileUploaderTest {
 			"G14 2 filreferenser har ett ogiltigt namn (ett.pdf, två.pdf)",
 			"G14 2 filer gick inte att läsa (ett.pdf, två.pdf)",
 			"G14 2 filer kunde inte kontrolleras, filarean gick inte att läsa (ett.pdf, två.pdf)",
-			"G14 2 filer togs inte emot av SupportManagement (ett.pdf, två.pdf)"));
+			"G14 2 filer togs inte emot av SupportManagement (ett.pdf, två.pdf)",
+			"G14 2 filer har namn som också används på andra ställen och laddas inte upp (ett.pdf, två.pdf)"));
 	}
 
 	@Test
@@ -183,6 +225,10 @@ class FileUploaderTest {
 		assertThat(linkNotes.result(Outcome.MIGRERAD, null).rules()).isEmpty();
 		assertThat(linkNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("1 länk hoppas över (a.url)");
 		assertThat(noNotes.result(Outcome.MIGRERAD, null)).isEqualTo(new ItemResult(Outcome.MIGRERAD, List.of(), null, null));
+	}
+
+	private static Candidate withFiles(final FileReference... files) {
+		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).files(List.of(files)).build();
 	}
 
 	private RunContext context() {

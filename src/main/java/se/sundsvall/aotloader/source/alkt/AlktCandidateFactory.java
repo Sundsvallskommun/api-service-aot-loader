@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import se.sundsvall.aotloader.configuration.AotLoaderProperties.Inspection;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -22,16 +22,16 @@ import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
-import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.AssetParameters;
 import se.sundsvall.aotloader.source.CandidateTexts;
-import se.sundsvall.aotloader.source.CandidateTexts.InspectionErrand;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
+import se.sundsvall.aotloader.source.InspectionCandidates;
+import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
@@ -39,6 +39,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
+import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
@@ -49,12 +50,10 @@ import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
-import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
-import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
@@ -70,7 +69,6 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
-import static se.sundsvall.aotloader.source.CandidateTexts.DASH;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SERVING_PLACE;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_AREA;
@@ -91,30 +89,28 @@ public final class AlktCandidateFactory {
 
 	private final AlktSnapshot snapshot;
 	private final LocalDate today;
-	private final Inspection inspection;
+	private final AotLoaderProperties properties;
 	private final Map<String, Set<Integer>> ownersByNumber = new HashMap<>();
 	private final Map<String, Integer> permitsByDiaryNumber = new HashMap<>();
 	private final Map<Integer, Integer> permitRowsByPlace = new HashMap<>();
-	private final Map<Integer, PermitRow> permitsByPlace = new HashMap<>();
 	private final Map<Integer, List<DecisionRow>> decisionsByErrand = new HashMap<>();
+	private final SharedFileNames sharedFileNames;
 
-	public AlktCandidateFactory(final AlktSnapshot snapshot, final LocalDate today, final Inspection inspection) {
+	public AlktCandidateFactory(final AlktSnapshot snapshot, final LocalDate today, final AotLoaderProperties properties) {
 		this.snapshot = snapshot;
 		this.today = today;
-		this.inspection = inspection;
+		this.properties = properties;
+		this.sharedFileNames = sharedFileNames(snapshot, properties);
 		snapshot.permits().forEach(permit -> {
-			Optional.ofNullable(permit.objektId()).ifPresent(objektId -> {
-				permitsByPlace.putIfAbsent(objektId, permit);
-				permitRowsByPlace.merge(objektId, 1, Integer::sum);
-			});
+			Optional.ofNullable(permit.objektId()).ifPresent(objektId -> permitRowsByPlace.merge(objektId, 1, Integer::sum));
 			Optional.ofNullable(DiaryNumbers.normalize(permit.utfardandeDiarienr())).ifPresent(number -> permitsByDiaryNumber.merge(number, 1, Integer::sum));
 			ownerOf(placeOf(permit.objektId()))
 				.ifPresent(owner -> PartyRows.numberKey(owner.organisationsNr(), today)
-					.ifPresent(number -> ownersByNumber.computeIfAbsent(number, key -> new HashSet<>()).add(owner.id())));
+					.ifPresent(number -> ownersByNumber.computeIfAbsent(number, _ -> new HashSet<>()).add(owner.id())));
 		});
 		snapshot.decisions().values().stream()
 			.filter(decision -> decision.arendeId() != null)
-			.forEach(decision -> decisionsByErrand.computeIfAbsent(decision.arendeId(), key -> new ArrayList<>()).add(decision));
+			.forEach(decision -> decisionsByErrand.computeIfAbsent(decision.arendeId(), _ -> new ArrayList<>()).add(decision));
 	}
 
 	/**
@@ -141,11 +137,10 @@ public final class AlktCandidateFactory {
 	 *         settings say so
 	 */
 	public ReaderResult inspections() {
-		final var types = inspection.errandTypes(ALKT);
+		final var inspections = new InspectionCandidates(ErrandType.ALCOHOL_INSPECTION, properties, UNKNOWN_SERVING_PLACE, "tillsynsärendet saknar serveringsställe", today);
 		final var candidates = snapshot.errands().values().stream()
-			.filter(errand -> errand.arendeTyp() != null && types.containsKey(errand.arendeTyp().toLowerCase(Locale.ROOT)))
-			.filter(errand -> !inspection.onlyPlacesWithPermit() || permitsByPlace.containsKey(errand.objektId()))
-			.map(errand -> inspectionErrand(errand, types.get(errand.arendeTyp().toLowerCase(Locale.ROOT))))
+			.filter(errand -> inspections.selects(errand.arendeTyp(), permitRowsByPlace.containsKey(errand.objektId())))
+			.map(errand -> inspectionErrand(errand, inspections))
 			.toList();
 		return new ReaderResult(candidates, List.of());
 	}
@@ -177,6 +172,7 @@ public final class AlktCandidateFactory {
 		final var restaurantNumber = place == null ? null : place.restaurangBeteckning();
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SERVING_PLACE);
 		final var premises = place == null ? null : place(place);
+		final var settings = properties.errandType(ErrandType.SERVING_PERMIT);
 		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSTAND, String.valueOf(permit.objektId())), ErrandType.SERVING_PERMIT)
 			.placeName(placeName)
 			.placeNumber(restaurantNumber)
@@ -184,8 +180,9 @@ public final class AlktCandidateFactory {
 			.holder(holder)
 			.place(premises)
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
-			.title("Serveringstillstånd " + DASH + " " + name)
+			.title(Texts.title("Serveringstillstånd", name))
 			.description(permitDescription(name, content))
+			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
 			.parameters(new ParameterList()
 				.add("alktObjektId", "AlkT-id", String.valueOf(permit.objektId()))
@@ -211,48 +208,26 @@ public final class AlktCandidateFactory {
 				!permit.aretRunt() && periods.hasDatePeriod() ? periods.periodEnd() : null,
 				assetParameters(content, holder, premises, restaurantNumber)))
 			.files(permitFiles(place, issuingErrands));
-		Optional.ofNullable(subtype).ifPresent(found -> builder.labelPath(found.getLabelPath()));
+		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
 
-	private Candidate inspectionErrand(final ErrandRow errand, final String labelPath) {
+	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
 		final var place = placeOf(errand.objektId());
-		final var owner = ownerOf(place).orElse(null);
-		final var hits = new ArrayList<RuleHit>();
-		if (place == null) {
-			hits.add(RuleHit.of(PLACE_MISSING, "tillsynsärendet saknar serveringsställe"));
-		}
-		if (errand.avslutad() == null) {
-			hits.add(RuleHit.of(ERRAND_OPEN));
-		}
-		final var holder = PartyRows.holder(errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId()), today);
-		final var permitKey = permitsByPlace.containsKey(errand.objektId()) ? new ItemKey(ALKT, TILLSTAND, String.valueOf(errand.objektId())) : null;
-		final var ownerLegalId = Optional.ofNullable(PartyRows.holder(owner, today)).map(Holder::legalId).orElse(null);
-		final var placeName = place == null ? null : place.namn();
-		final var source = new InspectionErrand(ALKT, errand.arendeId(), snapshot.codeText(CODE_TYPE_ERRAND, errand.arendeTyp()), errand.diarieNr(), errand.oppnad(), errand.avslutad());
+		final var source = new InspectionErrand(ALKT, errand.arendeId(), errand.arendeTyp(), snapshot.codeText(CODE_TYPE_ERRAND, errand.arendeTyp()), errand.diarieNr(), errand.oppnad(),
+			errand.avslutad());
+		final var applicant = errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId());
+		final var permitKey = permitRowsByPlace.containsKey(errand.objektId()) ? new ItemKey(ALKT, TILLSTAND, String.valueOf(errand.objektId())) : null;
 		final var decisions = decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()
 			.sorted((a, b) -> Objects.compare(a.beslutsDatum(), b.beslutsDatum(), Comparator.nullsFirst(Comparator.naturalOrder())))
 			.map(decision -> decisionText(decision, false))
 			.filter(Objects::nonNull)
 			.toList();
 
-		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSYN, String.valueOf(errand.arendeId())), ErrandType.ALCOHOL_INSPECTION)
-			.placeName(placeName)
+		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions)
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
-			.ruleHits(hits)
-			.holder(holder)
-			.place(place == null ? null : place(place))
-			.title(source.typeText() + " " + DASH + " " + Optional.ofNullable(placeName).orElse(UNKNOWN_SERVING_PLACE))
-			.description(CandidateTexts.inspectionDescription(source, decisions))
-			.labelPath(ErrandType.ALCOHOL_INSPECTION.getLabelPath())
-			.externalTag(TAG_DIARY_NUMBER, errand.diarieNr())
-			.parameters(CandidateTexts.inspectionParameters(source, decisions, today))
-			.files(errandFiles(List.of(errand.arendeId()), new FileList()).build())
-			.permitLink(new PermitLink(permitKey, ownerLegalId, holder == null ? null : holder.legalId()));
-		if (!Texts.isBlank(labelPath)) {
-			builder.labelPath(labelPath);
-		}
-		return builder.build();
+			.files(errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames)).build())
+			.build();
 	}
 
 	/**
@@ -274,7 +249,7 @@ public final class AlktCandidateFactory {
 		if (restaurantNumber == null || !restaurantNumber.matches("\\d{8}")) {
 			hits.add(RuleHit.of(RESTAURANT_NUMBER_INVALID, restaurantNumber == null ? null : "'%s'".formatted(restaurantNumber)));
 		}
-		if (permit.gtRestaurangBeteckning() != null && restaurantNumber != null && !permit.gtRestaurangBeteckning().equals(restaurantNumber)) {
+		if (permit.gtRestaurangBeteckning() != null && restaurantNumber != null && !digitsOf(permit.gtRestaurangBeteckning()).equals(digitsOf(restaurantNumber))) {
 			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), restaurantNumber)));
 		}
 		if (holder == null || holder.legalId() == null) {
@@ -283,7 +258,7 @@ public final class AlktCandidateFactory {
 		Optional.ofNullable(owner)
 			.flatMap(found -> PartyRows.numberKey(found.organisationsNr(), today))
 			.filter(number -> ownersByNumber.getOrDefault(number, Set.of()).size() > 1)
-			.ifPresent(number -> hits.add(RuleHit.of(LEGAL_ID_ON_SEVERAL_OWNERS, "AgarID " + owner.id())));
+			.ifPresent(_ -> hits.add(RuleHit.of(LEGAL_ID_ON_SEVERAL_OWNERS, "AgarID " + owner.id())));
 	}
 
 	/**
@@ -334,6 +309,13 @@ public final class AlktCandidateFactory {
 		return objektId == null ? null : snapshot.places().get(objektId);
 	}
 
+	/**
+	 * A restaurant number without the spaces and dots it is sometimes written with on the permit.
+	 */
+	private static String digitsOf(final String restaurantNumber) {
+		return restaurantNumber.replaceAll("[\\s.]", "");
+	}
+
 	private Optional<ContactRow> ownerOf(final PlaceRow place) {
 		return Optional.ofNullable(place).map(PlaceRow::agarId).map(snapshot.owners()::get);
 	}
@@ -360,9 +342,9 @@ public final class AlktCandidateFactory {
 			final var start = SourceValues.parseTime(time.start());
 			final var end = SourceValues.parseTime(time.end());
 			if (start.isPresent() && end.isPresent()) {
-				times.add(start.get() + DASH + end.get());
+				times.add(Texts.range(start.get(), end.get()));
 			} else {
-				final var raw = Optional.ofNullable(time.start()).orElse("") + DASH + Optional.ofNullable(time.end()).orElse("");
+				final var raw = Texts.range(time.start(), time.end());
 				hits.add(RuleHit.of(UNPARSEABLE, "serveringstid %d '%s'".formatted(i + 1, raw)));
 				times.add(raw);
 			}
@@ -415,7 +397,7 @@ public final class AlktCandidateFactory {
 	}
 
 	private List<FileReference> permitFiles(final PlaceRow place, final Set<Integer> issuingErrands) {
-		final var files = errandFiles(issuingErrands, new FileList());
+		final var files = errandFiles(issuingErrands, new FileList(sharedFileNames));
 		if (place != null) {
 			files.add(place.bifogadfil(), ATTACHMENTS).add(place.bifogadfil2(), ATTACHMENTS);
 		}
@@ -430,6 +412,33 @@ public final class AlktCandidateFactory {
 				.add(decision.bifogadFil(), ATTACHMENTS));
 		}
 		return files;
+	}
+
+	/**
+	 * Every file reference of AlkT with the place it belongs to: the place of its errand, or the errand itself when it
+	 * has no place, and the place's own files.
+	 */
+	private static SharedFileNames sharedFileNames(final AlktSnapshot snapshot, final AotLoaderProperties properties) {
+		final var names = SharedFileNames.builder(properties.fileArea(ALKT));
+		snapshot.errandFiles().forEach((arendeId, files) -> {
+			final var place = placeKeyOfErrand(snapshot, arendeId);
+			files.forEach(file -> names.add(place, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS));
+		});
+		snapshot.decisions().values().forEach(decision -> {
+			final var place = decision.arendeId() == null ? "beslut:" + decision.beslutsId() : placeKeyOfErrand(snapshot, decision.arendeId());
+			names.add(place, decision.worddokument(), DOCUMENTS).add(place, decision.bifogadFil(), ATTACHMENTS);
+		});
+		snapshot.places().forEach((objektId, place) -> names
+			.add("objekt:" + objektId, place.bifogadfil(), ATTACHMENTS)
+			.add("objekt:" + objektId, place.bifogadfil2(), ATTACHMENTS));
+		return names.build();
+	}
+
+	private static String placeKeyOfErrand(final AlktSnapshot snapshot, final Integer arendeId) {
+		return Optional.ofNullable(snapshot.errands().get(arendeId))
+			.map(ErrandRow::objektId)
+			.map(objektId -> "objekt:" + objektId)
+			.orElse("arende:" + arendeId);
 	}
 
 	/**
@@ -467,7 +476,7 @@ public final class AlktCandidateFactory {
 		final var permit = content.permit();
 		final var lines = new ArrayList<String>();
 		lines.add("Serveringstillstånd för " + name + ", migrerat från " + ALKT.getDisplayName() + ".");
-		lines.add(line("Utfärdat", Texts.joinWords(SourceValues.format(permit.utfardandeDatum()), Optional.ofNullable(permit.utfardandeDiarienr()).map(number -> "(" + number + ")").orElse(null))));
+		lines.add(CandidateTexts.issuedLine(permit.utfardandeDatum(), permit.utfardandeDiarienr()));
 		lines.add(line("Drycker", Texts.join(", ", content.drinks())));
 		lines.add(line("Servering till", Texts.join(", ", content.servingTo())));
 		lines.add(line("Omfattning", Texts.join(", ", content.scope())));

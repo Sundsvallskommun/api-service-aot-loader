@@ -7,7 +7,7 @@ CREATE TABLE dbo.[FörsäljningsStällen] (
     TobaksfriNikotinTyp bit NOT NULL DEFAULT 0, Upphort bit NULL, Agarid int NULL
 )
 GO
-CREATE TABLE dbo.FS_GT_Tobak (FSID int NULL, GTDE datetime NULL, GTPH datetime NULL, GTDI datetime NULL)
+CREATE TABLE dbo.FS_GT_Tobak (FSID int NULL, GTDE bit NULL, GTPH bit NULL, GTDI bit NULL)
 GO
 CREATE TABLE dbo.[Ägare] (
     AgarID int NOT NULL PRIMARY KEY, OrganisationsNr varchar(12) NULL, Bolagsnamn varchar(100) NULL, KontaktPerson varchar(35) NULL, GAdress varchar(50) NULL,
@@ -54,7 +54,7 @@ INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, Po
     VALUES (1, 'Kiosken', 'Torget 1', '85230', 'Sundsvall', '12', 'KIO', '556677-8899', 'Öppet alla dagar', 1, 1, 0, 10)
 INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, PostOrt, [Område], Kategori, [ÄgareOrgNr], Notering, OLTYP, TOBAKTYP, Upphort, Agarid)
     VALUES (2, 'Timråkiosken', 'Storgatan 2', '86130', 'Timrå', '13', 'KIO', '556677-8899', NULL, 1, 0, 0, 10)
-INSERT INTO dbo.FS_GT_Tobak VALUES (1, '2019-07-01', NULL, NULL)
+INSERT INTO dbo.FS_GT_Tobak VALUES (1, 1, 0, 0)
 INSERT INTO dbo.[Ärende] VALUES (100, 1, 'WADE', 'IAN-2019-100', '2019-06-01', '2019-07-01', NULL)
 INSERT INTO dbo.Beslut VALUES (200, 100, 'GTDE', '2019-07-01T10:00:00', '2019-07-02', NULL, NULL, NULL)
 INSERT INTO dbo.[Händelser] VALUES (300, 1, 100, '001', '2019-06-01T09:00:00', 'IAN-2019-100', '33333333.rtf', NULL)

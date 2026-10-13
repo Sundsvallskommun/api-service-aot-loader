@@ -45,7 +45,7 @@ class RunSupportTest {
 	void runContext() {
 		final var stop = new AtomicBoolean();
 		final var fileAreas = new AtomicInteger();
-		final var context = new RunContext("run", "2281", true, Map.of("2281", Map.of("A", "1")), 2, stop, source -> {
+		final var context = new RunContext("run", "2281", true, Map.of("2281", Map.of("A", "1")), 2, stop, _ -> {
 			fileAreas.incrementAndGet();
 			return new FileArea(null, 1);
 		});
@@ -56,15 +56,17 @@ class RunSupportTest {
 		assertThat(context.dryRun()).isTrue();
 		assertThat(context.labelIds("2281")).containsEntry("A", "1");
 		assertThat(context.labelIds("2262")).isEmpty();
-		assertThat(context.partyId(TestData.HOLDER_ID, id -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
-		assertThat(context.partyId(TestData.HOLDER_ID, id -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
-		assertThat(context.partyId(TestData.PERSON_ID, id -> Optional.empty())).isEmpty();
+		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
+		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
+		// Party is asked again for another municipality
+		assertThat(context.partyId("2262", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p2");
+		assertThat(context.partyId("2281", TestData.PERSON_ID, _ -> Optional.empty())).isEmpty();
 		final var failing = new LegalId("190001011234", PartyType.PRIVATE);
-		assertThatThrownBy(() -> context.partyId(failing, id -> {
+		assertThatThrownBy(() -> context.partyId("2281", failing, _ -> {
 			throw new IllegalStateException();
 		})).isInstanceOf(IllegalStateException.class);
 		// A failed lookup is not remembered
-		assertThat(context.partyId(failing, id -> Optional.of("later"))).contains("later");
+		assertThat(context.partyId("2281", failing, _ -> Optional.of("later"))).contains("later");
 		assertThat(context.fileArea(Source.ALKT)).isSameAs(context.fileArea(Source.ALKT));
 		assertThat(fileAreas).hasValue(1);
 		assertThat(context.outcomeOf(new ItemKey(Source.ALKT, TILLSTAND, "1"))).isEmpty();

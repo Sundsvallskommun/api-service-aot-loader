@@ -1,6 +1,8 @@
 package se.sundsvall.aotloader.service.mapper;
 
+import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.relation.ResourceIdentifier;
@@ -17,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -44,7 +47,6 @@ import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_CODE;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_STREET_ADDRESS;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
-import static se.sundsvall.aotloader.Constants.PARAMETER_CONTACT_PERSON;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_DISPLAY_NAME;
 import static se.sundsvall.aotloader.Constants.PARAMETER_POSITION;
@@ -63,7 +65,6 @@ public class TargetMapper {
 
 	static final String CONTACT_EMAIL = "EMAIL";
 	static final String CONTACT_PHONE = "PHONE";
-	static final String DASH = "–";
 	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
 
@@ -135,7 +136,7 @@ public class TargetMapper {
 	public AssetCreateRequest toAsset(final Candidate candidate, final String errandId, final String partyId, final boolean expired) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
-		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : settings.assetTitle() + " " + DASH + " " + asset.titleSuffix();
+		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : Texts.title(settings.assetTitle(), asset.titleSuffix());
 		final var parameters = new LinkedHashMap<String, String>();
 		parameters.put(ASSET_PARAMETER_ERRAND_ID, errandId);
 		asset.parameters().forEach((key, value) -> parameters.put(key, Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, TRUNCATED_SUFFIX)));
@@ -150,6 +151,38 @@ public class TargetMapper {
 			.validTo(asset.validTo())
 			.status(expired ? Status.EXPIRED : Status.ACTIVE)
 			.additionalParameters(parameters);
+	}
+
+	/**
+	 * Compares a post with what it is to be, as far as PartyAssets lets the post change: its title, its last day and its
+	 * parameters.
+	 *
+	 * @param  found  the post in PartyAssets
+	 * @param  wanted the post the item gives now
+	 * @return        the change of what differs, or empty when nothing does
+	 */
+	public Optional<AssetUpdateRequest> toContentUpdate(final Asset found, final AssetCreateRequest wanted) {
+		final var update = new AssetUpdateRequest();
+		var changes = false;
+		if (!Objects.equals(found.getTitle(), wanted.getTitle())) {
+			// A blank title removes the title in PartyAssets, while a missing one leaves it
+			update.title(Optional.ofNullable(wanted.getTitle()).orElse(""));
+			changes = true;
+		}
+		if (!Objects.equals(found.getValidTo(), wanted.getValidTo())) {
+			if (wanted.getValidTo() == null) {
+				update.indefinitely(true);
+			} else {
+				update.validTo(wanted.getValidTo());
+			}
+			changes = true;
+		}
+		if (!Objects.equals(Optional.ofNullable(found.getAdditionalParameters()).orElse(Map.of()), wanted.getAdditionalParameters())) {
+			// PartyAssets replaces the whole map
+			update.additionalParameters(wanted.getAdditionalParameters());
+			changes = true;
+		}
+		return changes ? Optional.of(update) : Optional.empty();
 	}
 
 	/**
@@ -214,10 +247,14 @@ public class TargetMapper {
 				.address(holder.address())
 				.zipCode(holder.zipCode())
 				.city(holder.city())
-				.contactChannels(contactChannels(holder.email(), holder.phone()))
-				.parameters(toParameters(contactPersonParameter(holder.contactPerson())));
+				.contactChannels(contactChannels(holder.email(), holder.phone()));
 			parties.holderPartyId().ifPresent(partyId -> stakeholder.externalId(partyId).externalIdType(holder.legalId().type().name()));
 			stakeholders.add(stakeholder);
+			// The holder's contact person has only a name; it lacks the parameter PBI that marks a person with significant
+			// influence
+			Optional.ofNullable(Texts.trimToNull(holder.contactPerson())).ifPresent(name -> stakeholders.add(new Stakeholder()
+				.role(properties.roles().contact())
+				.firstName(name)));
 		});
 		for (var i = 0; i < candidate.persons().size(); i++) {
 			final var person = candidate.persons().get(i);
@@ -261,10 +298,6 @@ public class TargetMapper {
 			.add(ERRAND_PARAMETER_PREMISES_EMAIL, "Ställets e-post", place.email())
 			.build();
 		return Stream.concat(premises.stream(), place.parameters().stream()).toList();
-	}
-
-	private static List<Parameter> contactPersonParameter(final String contactPerson) {
-		return Texts.isBlank(contactPerson) ? List.of() : List.of(new Parameter(PARAMETER_CONTACT_PERSON, "Kontaktperson", List.of(contactPerson)));
 	}
 
 	private static List<ContactChannel> contactChannels(final String email, final String phone) {

@@ -13,6 +13,7 @@ import se.sundsvall.dept44.configuration.feign.FeignMultiCustomizer;
 import se.sundsvall.dept44.configuration.feign.decoder.ProblemErrorDecoder;
 
 import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Import(FeignConfiguration.class)
 public class PartyAssetsConfiguration {
@@ -23,8 +24,9 @@ public class PartyAssetsConfiguration {
 	FeignBuilderCustomizer feignBuilderCustomizer(final ClientRegistrationRepository clientRepository, final PartyAssetsProperties properties, final AotLoaderProperties aotLoaderProperties,
 		final NoResendCapability noResend) {
 		return FeignMultiCustomizer.create()
-			// 409 means the permit already exists, which the migration answers by reading it
-			.withErrorDecoder(new ProblemErrorDecoder(CLIENT_ID, List.of(CONFLICT.value())))
+			// 409 means the permit already exists, which the migration answers by reading it, and a permit that is gone is an
+			// answer too: the migration then looks for it, or creates it. The decoder makes every other status 502.
+			.withErrorDecoder(new ProblemErrorDecoder(CLIENT_ID, List.of(NOT_FOUND.value(), CONFLICT.value())))
 			.withRequestTimeoutsInSeconds(properties.connectTimeout(), properties.readTimeout())
 			.withRetryableOAuth2InterceptorForClientRegistration(clientRepository.findByRegistrationId(CLIENT_ID))
 			.withRequestInterceptor(new SentByInterceptor(aotLoaderProperties.sentBy()))

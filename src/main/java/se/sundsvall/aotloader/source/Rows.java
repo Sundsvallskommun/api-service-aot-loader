@@ -68,6 +68,6 @@ public final class Rows {
 	public static <T> Map<Integer, T> byKey(final List<T> rows, final Function<T, Integer> key) {
 		return rows.stream()
 			.filter(row -> key.apply(row) != null)
-			.collect(toMap(key, row -> row, (first, second) -> first, LinkedHashMap::new));
+			.collect(toMap(key, row -> row, (first, _) -> first, LinkedHashMap::new));
 	}
 }

@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 
 /**
- * What the business decided for an item.
+ * What the business decided for an item. A field it does not have is refused.
  *
  * @param outcome   what was decided
  * @param decidedBy who decided
@@ -20,5 +20,7 @@ public record ReviewExceptionRequest(
 	@Schema(description = "MIGRERA to migrate the item despite the rules that hit it, MIGRERA_SOM_UTGANGET to migrate it with the permit as EXPIRED") @NotNull ExceptionOutcome outcome,
 	@Schema(description = "Who decided, e.g. a user id") @NotBlank @Size(max = 100) String decidedBy,
 	@Schema(description = "When it was decided, today when left out") LocalDate decidedAt,
-	@Schema(description = "Why; no names or numbers of permit holders") @Size(max = 1000) String comment) {
+	@Schema(description = "Why; no names or numbers of permit holders") @Size(max = 1000) String comment)
+	implements
+	RejectsUnknownFields {
 }

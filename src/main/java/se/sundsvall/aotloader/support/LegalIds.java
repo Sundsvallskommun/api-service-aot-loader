@@ -92,7 +92,7 @@ public final class LegalIds {
 		}
 		return birthDate(Integer.parseInt(digits.substring(0, 4)), digits.substring(4, 8))
 			.filter(date -> !date.isAfter(today))
-			.map(date -> new LegalId(digits, PRIVATE));
+			.map(_ -> new LegalId(digits, PRIVATE));
 	}
 
 	/**

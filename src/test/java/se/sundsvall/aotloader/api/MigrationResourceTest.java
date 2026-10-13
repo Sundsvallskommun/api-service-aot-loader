@@ -98,6 +98,25 @@ class MigrationResourceTest {
 	}
 
 	@Test
+	void startRunWithAFieldItDoesNotHaveOrAnEmptyList() {
+		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue("{\"dryRun\": false, \"limt\": 10}")
+			.exchange()
+			.expectStatus().isBadRequest();
+
+		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue("{\"dryRun\": false, \"sources\": [], \"kinds\": []}")
+			.exchange()
+			.expectStatus().isBadRequest()
+			.expectBody(ConstraintViolationProblem.class)
+			.value(problem -> assertThat(problem.getViolations()).extracting("field").containsExactlyInAnyOrder("sources", "kinds"));
+
+		verifyNoInteractions(service);
+	}
+
+	@Test
 	void startRunWhileAnotherRuns() {
 		when(service.startRun(eq(MUNICIPALITY_ID), any())).thenThrow(Problem.valueOf(CONFLICT, "En körning pågår redan"));
 

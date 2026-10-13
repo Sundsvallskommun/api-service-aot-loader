@@ -1,0 +1,5 @@
+{
+	"title": "Unprocessable Content",
+	"status": 422,
+	"detail": "Körningen startade inte. Kontrollen före körning: Åtgärder är aktiva i namespace AOT för kommun 2262 och körs när ett migrerat ärende aktiveras: SEND_EMAIL. De stängs av under körningen (R6, avsnitt 10.2)"
+}

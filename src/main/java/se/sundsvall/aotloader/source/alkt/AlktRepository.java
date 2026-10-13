@@ -137,8 +137,8 @@ public class AlktRepository {
 		final var jdbc = sourceDatabases.jdbcTemplate(ALKT);
 		final var fileRows = Stream.of(
 			jdbc.query(SELECT_EVENT_FILES, AlktRepository::toEventFiles).stream().flatMap(List::stream),
-			jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, i) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bifogadfil"), false)).stream(),
-			jdbc.query(SELECT_PICTURES, (rs, i) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bildfilnamn"), false)).stream())
+			jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bifogadfil"), false)).stream(),
+			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bildfilnamn"), false)).stream())
 			.flatMap(s -> s)
 			.filter(row -> row.name() != null && row.arendeId() != null)
 			.collect(groupingBy(FileRow::arendeId));
@@ -163,7 +163,7 @@ public class AlktRepository {
 			final var code = text(rs, "Kod");
 			final var codeText = text(rs, "Klartext");
 			if (codeType != null && code != null && codeText != null) {
-				texts.computeIfAbsent(codeType, key -> new HashMap<>()).put(code, codeText);
+				texts.computeIfAbsent(codeType, _ -> new HashMap<>()).put(code, codeText);
 			}
 		});
 		return texts;

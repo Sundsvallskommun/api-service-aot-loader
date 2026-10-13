@@ -4,7 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import se.sundsvall.aotloader.configuration.AotLoaderProperties.Inspection;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -56,7 +57,7 @@ import static se.sundsvall.aotloader.source.alkt.AlktTestData.snapshot;
 class AlktCandidateFactoryTest {
 
 	private static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
-	private static final Inspection INSPECTION = new Inspection(true, Map.of("07", "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION", "09", ""), Map.of());
+	private static final AotLoaderProperties PROPERTIES = TestData.properties(ErrandType.ALCOHOL_INSPECTION, true, Map.of("07", TestData.INTERNAL_INSPECTION, "09", ""));
 
 	@Test
 	void permitWithoutAnyRuleHit() {
@@ -77,7 +78,7 @@ class AlktCandidateFactoryTest {
 			.condition(new ConditionRow(1, null, "Utgånget villkor", null, "2020-01-01"))
 			.build();
 
-		final var result = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits();
+		final var result = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits();
 
 		assertThat(result.notices()).isEmpty();
 		assertThat(result.candidates()).hasSize(1);
@@ -170,7 +171,7 @@ class AlktCandidateFactoryTest {
 			.condition(new ConditionRow(1, null, "Villkor", "då och då", "tills vidare"))
 			.build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(
 			OWNER_DIFFERS, DECISION_EXPIRED, PERIOD_PASSED, PERIOD_ON_ALL_YEAR, RESTAURANT_NUMBER_DIFFERS, LEGAL_ID_INVALID, UNPARSEABLE, UNPARSEABLE, UNPARSEABLE, NO_ISSUING_ERRAND,
@@ -191,10 +192,57 @@ class AlktCandidateFactoryTest {
 	}
 
 	@Test
+	void aFileNameThatAnotherPlaceAlsoRefersToIsMarked() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, null, "beslut.pdf"))
+			.decision(new DecisionRow(200, null, "GT", null, null, null, "Beslut.pdf"))
+			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(new ErrandRow(501, 1, "07", "TIL-2020-9", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.errand(new ErrandRow(600, 2, "07", "TIL-2021-7", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
+			.file(new FileRow(500, "ansokan.pdf", false))
+			.file(new FileRow(500, "intyg.pdf", false))
+			.file(new FileRow(501, "intyg.pdf", false))
+			.file(new FileRow(600, "ANSOKAN.pdf", false))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.files()).containsExactlyInAnyOrder(
+			new FileReference("ansokan.pdf", ATTACHMENTS, true),
+			new FileReference("intyg.pdf", ATTACHMENTS, false),
+			new FileReference("beslut.pdf", ATTACHMENTS, true),
+			new FileReference("ritning.pdf", ATTACHMENTS, false));
+	}
+
+	@Test
+	void aRestaurantNumberWrittenWithSpacesOrADotIsTheSameNumber() {
+		for (final var written : List.of("1234 5678", "1234 567 8", "1234 5678.", " 12345678 ")) {
+			final var snapshot = snapshot().permit(permit(1).gtRestaurantNumber(written).build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
+
+			final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+			assertThat(candidate.ruleHits()).as(written).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS);
+		}
+	}
+
+	@Test
+	void aRestaurantNumberWithMoreDigitsDiffers() {
+		final var snapshot = snapshot().permit(permit(1).gtRestaurantNumber("1234 5678 01").build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(RESTAURANT_NUMBER_DIFFERS);
+		assertThat(candidate.ruleHits()).extracting(RuleHit::detail).contains("på tillståndet 1234 5678 01, på serveringsstället 12345678");
+	}
+
+	@Test
 	void permitWithoutPlace() {
 		final var snapshot = snapshot().permit(permit(1).build()).build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, NO_ISSUING_ERRAND);
 		assertThat(candidate.holder()).isNull();
@@ -206,7 +254,7 @@ class AlktCandidateFactoryTest {
 	void placeWithoutOwnerAndWithoutRestaurantNumber() {
 		final var snapshot = snapshot().permit(permit(1).build()).place(place(1, null, null)).build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(
 			tuple(RESTAURANT_NUMBER_INVALID, null),
@@ -217,7 +265,7 @@ class AlktCandidateFactoryTest {
 	void restaurantNumberOfWrongFormat() {
 		final var snapshot = snapshot().permit(permit(1).build()).place(place(1, 10, "1234")).owner(owner(10, "5566778899")).build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(RESTAURANT_NUMBER_INVALID, "'1234'"));
 	}
@@ -233,7 +281,7 @@ class AlktCandidateFactoryTest {
 			.owner(owner(11, "5566778899"))
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL));
 	}
@@ -249,7 +297,7 @@ class AlktCandidateFactoryTest {
 			.owner(owner(11, "191212121212"))
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS));
 	}
@@ -263,7 +311,7 @@ class AlktCandidateFactoryTest {
 			.owner(owner(10, "5566778899"))
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates).hasSize(2).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ROWS_ON_PLACE, "2 rader")));
 		assertThat(candidates.getFirst().ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(DECISION_MISSING, "BeslutsID 999"));
@@ -276,7 +324,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(2).aretRunt(false).period(null, "2026-11-30").build())
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '2026-11-01–' saknar slut"));
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '–2026-11-30' saknar början"));
@@ -286,7 +334,7 @@ class AlktCandidateFactoryTest {
 	void notAllYearWithoutPeriod() {
 		final var snapshot = snapshot().permit(permit(1).aretRunt(false).build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(PERIOD_MISSING);
 	}
@@ -298,7 +346,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(2).aretRunt(false).servingTo(false, true).period("2026-11-01", "2026-11-30").build())
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates.get(0).labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PUBLIC");
 		assertThat(candidates.get(0).asset().validTo()).isEqualTo(LocalDate.of(2026, 11, 30));
@@ -314,7 +362,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(3).servingTo(false, false).scope(false, false, true, false).build())
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates).extracting(candidate -> candidate.labelPaths().getFirst()).containsExactly(
 			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_CATERING",
@@ -332,7 +380,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(5).period("2026-09-30", "2026-05-01").aretRunt(false).build())
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(parameters(candidates.get(0))).containsEntry("sasong", List.of("05-01–09-30"));
 		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(UNPARSEABLE);
@@ -357,7 +405,7 @@ class AlktCandidateFactoryTest {
 		final var placeWithMarking = new AlktSnapshot.PlaceRow(1, 10, "12345678", "UNG", "Ungdomsgården", null, null, null, null, null, null, null, null);
 		final var snapshot = snapshot().permit(permit(1).build()).place(placeWithMarking).owner(owner(10, "5566778899")).build();
 
-		final var candidate = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits().candidates().getFirst();
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.place().parameters()).extracting(Parameter::key, Parameter::values).containsExactly(
 			tuple("restaurantNumber", List.of("12345678")),
@@ -370,7 +418,7 @@ class AlktCandidateFactoryTest {
 			List.of(), null, null, null, "IAN-1", null, null);
 		final var snapshot = snapshot().permit(row).build();
 
-		final var result = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).permits();
+		final var result = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits();
 
 		assertThat(result.candidates()).isEmpty();
 		assertThat(result.notices()).singleElement().satisfies(notice -> {
@@ -397,7 +445,7 @@ class AlktCandidateFactoryTest {
 			.file(new FileRow(700, "protokoll.pdf", false))
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, INSPECTION).inspections().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).inspections().candidates();
 
 		assertThat(candidates).extracting(Candidate::key).containsExactlyInAnyOrder(new ItemKey(ALKT, TILLSYN, "700"), new ItemKey(ALKT, TILLSYN, "701"));
 		final var closed = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("700")).findFirst().orElseThrow();
@@ -425,7 +473,7 @@ class AlktCandidateFactoryTest {
 			.errand(new ErrandRow(702, 2, "07", null, LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
 			.build();
 
-		final var candidates = new AlktCandidateFactory(snapshot, TODAY, new Inspection(false, Map.of("07", "X"), Map.of())).inspections().candidates();
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, TestData.properties(ErrandType.ALCOHOL_INSPECTION, false, Map.of("07", "X"))).inspections().candidates();
 
 		assertThat(candidates).singleElement().satisfies(candidate -> {
 			assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactly(ReviewRule.PLACE_MISSING);

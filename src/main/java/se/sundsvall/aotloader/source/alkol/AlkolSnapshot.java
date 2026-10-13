@@ -87,7 +87,7 @@ public record AlkolSnapshot(
 	/**
 	 * A row of Beslut.
 	 */
-	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, LocalDate giltigtTom, String worddokument, String bifogadfil) {
+	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, String worddokument, String bifogadfil) {
 
 		/**
 		 * @return the date the decision was made, null when unknown

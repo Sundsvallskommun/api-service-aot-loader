@@ -2,6 +2,7 @@ package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.supportmanagement.Errand;
@@ -13,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -105,6 +107,9 @@ class ItemMigratorTest {
 	@Captor
 	private ArgumentCaptor<AssetCreateRequest> assetCaptor;
 
+	@Captor
+	private ArgumentCaptor<AssetUpdateRequest> updateCaptor;
+
 	@TempDir
 	private Path documents;
 
@@ -143,7 +148,7 @@ class ItemMigratorTest {
 	@Test
 	void aDryRunWritesNothing() throws IOException {
 		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
-		final var candidate = TestData.permit("1").withAddedRuleHits(List.of(RuleHit.of(NO_ISSUING_ERRAND)));
+		final var candidate = TestData.permit("1", RuleHit.of(NO_ISSUING_ERRAND));
 
 		final var result = migrator.process(candidate, context(true));
 
@@ -158,7 +163,7 @@ class ItemMigratorTest {
 
 	@Test
 	void anItemWithABlockingRuleHitIsReviewed() {
-		final var candidate = TestData.permit("1").withAddedRuleHits(List.of(RuleHit.of(OWNER_DIFFERS, "AgarID 1, 2"), RuleHit.of(NO_ISSUING_ERRAND)));
+		final var candidate = TestData.permit("1", RuleHit.of(OWNER_DIFFERS, "AgarID 1, 2"), RuleHit.of(NO_ISSUING_ERRAND));
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
 
@@ -177,7 +182,7 @@ class ItemMigratorTest {
 
 	@Test
 	void anItemThatStopsTellsWhatAnEarlierRunLeftInTheTargetSystems() {
-		final var candidate = TestData.permit("1").withAddedRuleHits(List.of(RuleHit.of(SALES_PLACE_CEASED)));
+		final var candidate = TestData.permit("1", RuleHit.of(SALES_PLACE_CEASED));
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setErrandNumber(null);
 		existing.setPartyAssetsId("asset-internal-id");
@@ -194,7 +199,7 @@ class ItemMigratorTest {
 
 	@Test
 	void anEndedPermitIsNotMigratedUnlessTheExceptionListSaysSo() {
-		final var candidate = TestData.permit("1").withAddedRuleHits(List.of(RuleHit.of(SALES_PLACE_CEASED)));
+		final var candidate = TestData.permit("1", RuleHit.of(SALES_PLACE_CEASED));
 
 		final var notMigrated = migrator.process(candidate, context(true));
 		assertThat(notMigrated.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);
@@ -241,7 +246,7 @@ class ItemMigratorTest {
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new ErrandAttachment().fileName("BESLUT.rtf").hash(FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8)).toUpperCase())));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
-		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), eq("LINK|" + ERRAND_ID + ";case;supportmanagement;ALKT|"), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), eq("LINK|" + ERRAND_ID + ";case;supportmanagement;AOT|"), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
 		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
@@ -252,10 +257,12 @@ class ItemMigratorTest {
 		assertThat(created.getLifecycle()).isEqualTo(LifecycleEnum.DRAFT);
 		assertThat(created.getReporterUserId()).isEqualTo("alkt-migration");
 		assertThat(created.getExternalTags()).extracting("key", "value").contains(tuple("migreringsid", "ALKT-TILLSTAND-1"));
-		assertThat(created.getStakeholders()).extracting("role", "externalId").containsExactly(
-			tuple("PRIMARY", PARTY_ID),
-			tuple("CONTACT", PERSON_PARTY_ID),
-			tuple("CONTACT", null));
+		// The holder, its contact person, and the persons with significant influence
+		assertThat(created.getStakeholders()).extracting("role", "externalId", "firstName").containsExactly(
+			tuple("PRIMARY", PARTY_ID, null),
+			tuple("CONTACT", null, "Kontakt Person"),
+			tuple("CONTACT", PERSON_PARTY_ID, "Person Ett"),
+			tuple("CONTACT", null, "Utländsk Person"));
 		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any());
 		assertThat(assetCaptor.getValue().getAssetId()).isEqualTo(ERRAND_ID);
 		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.ACTIVE);
@@ -313,7 +320,7 @@ class ItemMigratorTest {
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(new Asset().id("asset-internal-id")));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)));
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
 
@@ -326,6 +333,7 @@ class ItemMigratorTest {
 		verify(supportManagement, never()).findErrandsByExternalTag(anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createErrand(anyString(), any());
 		verify(partyAssets, never()).createAsset(anyString(), anyString(), any());
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
 		// The draft is updated with what the source says now, then activated
 		verify(supportManagement, times(2)).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), errandCaptor.capture());
 		assertThat(errandCaptor.getAllValues().getFirst().getLifecycle()).isNull();
@@ -340,7 +348,7 @@ class ItemMigratorTest {
 		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.ARENDE_SKAPAT, "gone")));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, "gone")).thenReturn(Optional.empty());
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
-		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(new Asset().id("asset-internal-id")));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)));
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
 
@@ -406,11 +414,15 @@ class ItemMigratorTest {
 	@Test
 	void aPermitThatExistsAfterAllIsReadAndOneThatCannotBeFoundIsAnError() {
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
-		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty(), Optional.of(new Asset().id("found-after-409")));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty()).thenReturn(Optional.of(assetAsCreated("found-after-409", Status.EXPIRED)));
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.empty());
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "found-after-409")).thenReturn(Optional.of(assetAsCreated("found-after-409", Status.ACTIVE)));
 
 		final var found = migrator.process(TestData.permit("1"), context(false));
 		assertThat(found.outcome()).isEqualTo(Outcome.MIGRERAD);
+		// The item has no exception now, so the permit an earlier run made EXPIRED is to be ACTIVE
+		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "found-after-409", new AssetUpdateRequest().status(Status.ACTIVE));
+		assertThat(found.detail()).isEqualTo("Tillståndet i PartyAssets hade status EXPIRED från en tidigare körning och fick status ACTIVE");
 
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		final var notFound = migrator.process(TestData.permit("1"), context(false));
@@ -427,9 +439,234 @@ class ItemMigratorTest {
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), assetCaptor.capture())).thenReturn(Optional.of("id"));
 
-		migrator.process(TestData.permit("1").withAddedRuleHits(List.of(RuleHit.of(PERMIT_ENDED))), context(false));
+		migrator.process(TestData.permit("1", RuleHit.of(PERMIT_ENDED)), context(false));
 
 		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.EXPIRED);
+	}
+
+	@Test
+	void thePermitOfAnEarlierRunGetsTheStatusTheExceptionListGivesNow() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.EXPIRED)));
+
+		final var result = migrator.process(TestData.permit("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Tillståndet i PartyAssets hade status ACTIVE från en tidigare körning och fick status EXPIRED");
+		assertThat(existing.getStatus()).isEqualTo(ItemStatus.KLAR);
+		assertThat(existing.getPartyAssetsId()).isEqualTo("asset-internal-id");
+		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
+		verify(partyAssets, never()).findAsset(anyString(), anyString(), anyString());
+		verify(partyAssets, never()).createAsset(anyString(), anyString(), any());
+	}
+
+	@Test
+	void aPermitGoneFromPartyAssetsIsCreatedAgain() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("gone-asset-id");
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "gone-asset-id")).thenReturn(Optional.empty());
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), assetCaptor.capture())).thenReturn(Optional.of("new-asset-id"));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Tillståndet gone-asset-id fanns inte längre i PartyAssets");
+		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.ACTIVE);
+		assertThat(existing.getPartyAssetsId()).isEqualTo("new-asset-id");
+	}
+
+	@Test
+	void aPermitWithAStatusTheMigrationNeverGivesIsLeftAsItIs() {
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(new Asset().id("blocked-asset-id").status(Status.BLOCKED)));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: Tillståndet blocked-asset-id i PartyAssets har status BLOCKED, som migreringen aldrig ger, och ändras inte");
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
+	}
+
+	@Test
+	void thePermitOfAnEarlierRunGetsTheContentTheSourceGivesNow() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
+			.thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		final var wanted = new TargetMapper(properties).toAsset(TestData.permit("1"), ERRAND_ID, PARTY_ID, false);
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
+		// The source gives the permit no last day, so the old one is removed
+		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().title(wanted.getTitle()).indefinitely(true).additionalParameters(wanted.getAdditionalParameters()));
+	}
+
+	@Test
+	void aChangeThatPartyAssetsDoesNotMakeFailsTheStep() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		// PartyAssets before 6.8 answers the change with 204 and keeps the content
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: PartyAssets gjorde inte hela ändringen av tillståndet asset-internal-id, vilket kräver PartyAssets 6.8 eller senare");
+		assertThat(existing.getStatus()).isEqualTo(ItemStatus.FEL);
+		assertThat(existing.getFailedStep()).isEqualTo(Step.TILLSTAND);
+	}
+
+	@Test
+	void aPostOfAnotherPartyIsLeftAsItIs() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		// The holder's number was corrected in the source after the earlier run made the post
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE).partyId("another-party-id")));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: Tillståndet asset-internal-id i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)");
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
+	}
+
+	@Test
+	void anActivePermitThatIsToExpireGetsItsContentBeforeItsStatus() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
+			.thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.EXPIRED)));
+
+		final var result = migrator.process(TestData.permit("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Tillståndet i PartyAssets hade status ACTIVE från en tidigare körning och fick status EXPIRED",
+			"Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
+		// An EXPIRED post can no longer get the content
+		final var order = inOrder(partyAssets);
+		order.verify(partyAssets).updateAsset(eq(MUNICIPALITY_ID), eq("asset-internal-id"), updateCaptor.capture());
+		assertThat(updateCaptor.getValue().getStatus()).isNull();
+		assertThat(updateCaptor.getValue().getTitle()).isNotNull();
+		order.verify(partyAssets).getAsset(MUNICIPALITY_ID, "asset-internal-id");
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
+	}
+
+	@Test
+	void aContentChangeThatPartyAssetsIgnoresStopsBeforeThePostExpires() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		// PartyAssets before 6.8 answers the change with 204 and keeps the content
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)));
+
+		final var result = migrator.process(TestData.permit("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: PartyAssets gjorde inte hela ändringen av tillståndet asset-internal-id, vilket kräver PartyAssets 6.8 eller senare; "
+			+ "Undantagslistan: MIGRERA_SOM_UTGANGET");
+		verify(partyAssets, never()).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
+	}
+
+	@Test
+	void aPostGoneRightAfterItsChangeFailsTheStep() {
+		final var existing = item(ItemStatus.FEL, ERRAND_ID);
+		existing.setFailedStep(Step.AKTIVERA);
+		existing.setPartyAssetsId("asset-internal-id");
+		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE))).thenReturn(Optional.empty());
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: Tillståndet asset-internal-id fanns inte i PartyAssets efter ändringen");
+	}
+
+	@Test
+	void anExpiredPermitThatIsToBeActiveGetsItsStatusBeforeItsContent() {
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(staleAsset("stale-asset-id", Status.EXPIRED)));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "stale-asset-id")).thenReturn(Optional.of(assetAsCreated("stale-asset-id", Status.ACTIVE)));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets hade status EXPIRED från en tidigare körning och fick status ACTIVE; "
+			+ "Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
+		// PartyAssets changes the content of an ACTIVE post only
+		final var order = inOrder(partyAssets);
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "stale-asset-id", new AssetUpdateRequest().status(Status.ACTIVE));
+		order.verify(partyAssets).updateAsset(eq(MUNICIPALITY_ID), eq("stale-asset-id"), updateCaptor.capture());
+		assertThat(updateCaptor.getValue().getStatus()).isNull();
+		assertThat(updateCaptor.getValue().getTitle()).isNotNull();
+	}
+
+	@Test
+	void anExpiredPermitThatStaysExpiredKeepsItsContent() {
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(staleAsset("stale-asset-id", Status.EXPIRED)));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Tillståndet i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu");
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
+	}
+
+	@Test
+	void whatPartyAssetsCannotChangeIsReported() {
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE).type("OldPermitType").issued(LocalDate.of(2018, 1, 1))));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Tillståndets typ, utfärdandedatum i PartyAssets skiljer sig från det källan ger nu och kan inte ändras där (avsnitt 10.3)");
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
 	}
 
 	@Test
@@ -439,7 +676,7 @@ class ItemMigratorTest {
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(new Asset().id("id")));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("id", Status.ACTIVE)));
 		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(false);
 
 		final var rejected = migrator.process(TestData.permit("1"), context(false));
@@ -628,6 +865,22 @@ class ItemMigratorTest {
 	private ItemMigrator migrator(final AotLoaderProperties settings) {
 		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, settings),
 			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings)), settings, CLOCK);
+	}
+
+	/**
+	 * @return the post of permit 1 as the migration creates it
+	 */
+	private Asset assetAsCreated(final String id, final Status status) {
+		final var created = new TargetMapper(properties).toAsset(TestData.permit("1"), ERRAND_ID, PARTY_ID, false);
+		return new Asset().id(id).assetId(created.getAssetId()).partyId(created.getPartyId()).type(created.getType()).title(created.getTitle()).description(created.getDescription())
+			.issued(created.getIssued()).validTo(created.getValidTo()).additionalParameters(created.getAdditionalParameters()).status(status);
+	}
+
+	/**
+	 * @return the post of permit 1 as an earlier run created it, from what the source said then
+	 */
+	private Asset staleAsset(final String id, final Status status) {
+		return assetAsCreated(id, status).title("Gammal titel").validTo(LocalDate.of(2020, 12, 31)).additionalParameters(Map.of("errandId", ERRAND_ID));
 	}
 
 	private RunContext context(final boolean dryRun) {

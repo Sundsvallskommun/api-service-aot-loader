@@ -5,18 +5,27 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableMap;
+import static java.util.function.Function.identity;
+import static java.util.function.Predicate.not;
 
 /**
  * The settings of the migration. Settings that depend on decisions not yet taken may be left blank: a dry run then
@@ -30,7 +39,6 @@ import static java.util.Collections.unmodifiableMap;
  * @param errandStatus   the closed status the migrated errands get (decision 5)
  * @param roles          the stakeholder roles
  * @param errandTypes    the settings per type of errand
- * @param inspection     the settings of the inspection errands
  * @param databases      the source databases
  * @param fileArea       the directories of the file area per source
  * @param maxFileSize    the largest file uploaded (decision 24)
@@ -47,7 +55,6 @@ public record AotLoaderProperties(
 	String errandStatus,
 	@NotNull @Valid Roles roles,
 	Map<ErrandType, ErrandTypeSettings> errandTypes,
-	@NotNull @Valid Inspection inspection,
 	Map<Source, Database> databases,
 	Map<Source, FileAreaDirectories> fileArea,
 	@NotNull DataSize maxFileSize,
@@ -78,7 +85,7 @@ public record AotLoaderProperties(
 	 * @return the settings of the errand type, with every setting blank when none are configured
 	 */
 	public ErrandTypeSettings errandType(final ErrandType type) {
-		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null));
+		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null, null, null, null, false));
 	}
 
 	/**
@@ -110,44 +117,68 @@ public record AotLoaderProperties(
 	}
 
 	/**
-	 * The settings of a type of errand.
+	 * The settings of a type of errand: what its errands become in the target systems and, for inspection errands, which
+	 * errands of the source they are. Every errand also gets the label for migrated errands (decision 17), which is not
+	 * among these settings.
 	 *
-	 * @param category   the category of the classification (decision 5)
-	 * @param type       the type of the classification (decision 5)
-	 * @param assetType  the type of the post in PartyAssets (decision 20)
-	 * @param assetTitle the title of the post in PartyAssets (decision 4)
+	 * @param category             the category of the classification (decision 5)
+	 * @param type                 the type of the classification (decision 5)
+	 * @param assetType            the type of the post in PartyAssets (decision 20)
+	 * @param assetTitle           the title of the post in PartyAssets (decision 4)
+	 * @param labels               the resource paths of the labels every errand of the type gets (section 7.3.4)
+	 * @param subtypeLabels        for serving permits, the resource path of the label of each subtype (section 7.3.4)
+	 * @param sourceErrandTypes    for inspection errands, the errand types in the source that are inspection errands, in
+	 *                             lower case, with the resource path of the label each gets; a blank path means the label
+	 *                             is not decided (section 7.7)
+	 * @param onlyPlacesWithPermit for inspection errands, true to migrate only those of places with a current permit
+	 *                             (section 7.7, item 2)
 	 */
-	public record ErrandTypeSettings(String category, String type, String assetType, String assetTitle) {
-	}
+	public record ErrandTypeSettings(
+		String category,
+		String type,
+		String assetType,
+		String assetTitle,
+		List<String> labels,
+		Map<ServingPermitSubtype, String> subtypeLabels,
+		Map<String, String> sourceErrandTypes,
+		boolean onlyPlacesWithPermit) {
 
-	/**
-	 * The settings of the inspection errands.
-	 *
-	 * @param onlyPlacesWithPermit true to migrate only the inspection errands of places with a current permit
-	 * @param alktErrandTypes      the errand types in AlkT that are inspection errands, with the resource path of the
-	 *                             label each gets; a blank path means the label is not decided
-	 * @param alkolErrandTypes     the same for AlkOL
-	 */
-	public record Inspection(
-		boolean onlyPlacesWithPermit,
-		Map<String, String> alktErrandTypes,
-		Map<String, String> alkolErrandTypes) {
-
-		public Inspection {
-			alktErrandTypes = lowerCaseKeys(alktErrandTypes);
-			alkolErrandTypes = lowerCaseKeys(alkolErrandTypes);
+		public ErrandTypeSettings {
+			labels = labels == null ? List.of() : labels.stream().filter(Objects::nonNull).map(String::strip).filter(not(String::isEmpty)).toList();
+			subtypeLabels = strippedValues(subtypeLabels, identity());
+			sourceErrandTypes = strippedValues(sourceErrandTypes, key -> key.strip().toLowerCase(Locale.ROOT));
 		}
 
 		/**
-		 * @return the errand types of the source that are inspection errands, in lower case, with their label paths
+		 * @return the resource path of the label of the subtype, empty when it is not configured
 		 */
-		public Map<String, String> errandTypes(final Source source) {
-			return source == Source.ALKT ? alktErrandTypes : alkolErrandTypes;
+		public Optional<String> subtypeLabel(final ServingPermitSubtype subtype) {
+			return Optional.ofNullable(subtypeLabels.get(subtype)).filter(not(String::isEmpty));
 		}
 
-		private static Map<String, String> lowerCaseKeys(final Map<String, String> map) {
-			final var result = new LinkedHashMap<String, String>();
-			Optional.ofNullable(map).orElse(emptyMap()).forEach((key, value) -> result.put(key.strip().toLowerCase(Locale.ROOT), value == null ? "" : value.strip()));
+		/**
+		 * @param  code the errand type in the source, in any case
+		 * @return      the resource path of the label of the errand type, blank when it is not decided; empty when the
+		 *              errand type is not an inspection errand of the settings
+		 */
+		public Optional<String> sourceErrandType(final String code) {
+			return Optional.ofNullable(code).map(value -> sourceErrandTypes.get(value.strip().toLowerCase(Locale.ROOT)));
+		}
+
+		/**
+		 * @return every resource path of a label in the settings
+		 */
+		public Set<String> allLabels() {
+			final var paths = new LinkedHashSet<>(labels);
+			Stream.concat(subtypeLabels.values().stream(), sourceErrandTypes.values().stream())
+				.filter(not(String::isEmpty))
+				.forEach(paths::add);
+			return paths;
+		}
+
+		private static <K> Map<K, String> strippedValues(final Map<K, String> map, final Function<K, K> keyMapper) {
+			final var result = new LinkedHashMap<K, String>();
+			Optional.ofNullable(map).orElse(emptyMap()).forEach((key, value) -> result.put(keyMapper.apply(key), value == null ? "" : value.strip()));
 			return unmodifiableMap(result);
 		}
 	}

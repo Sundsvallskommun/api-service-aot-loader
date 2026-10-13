@@ -188,7 +188,7 @@ class MigrationRunnerTest {
 	void aRunStopsWhenAskedTo() {
 		final var run = run(false, null);
 		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("1"), TestData.permit("2")), List.of()));
-		when(migrator.process(any(), any())).thenAnswer(invocation -> {
+		when(migrator.process(any(), any())).thenAnswer(_ -> {
 			assertThat(runner.requestStop(run.getId())).isTrue();
 			return new ItemResult(Outcome.MIGRERAD, List.of(), null, null);
 		});
@@ -258,7 +258,7 @@ class MigrationRunnerTest {
 		final var run = run(true, null);
 		when(alktReader.read(Set.of(TILLSTAND))).thenThrow(new MigrationException("Källdatabasen för AlkT är inte konfigurerad"));
 		when(alkolReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("9")), List.of()));
-		when(preflight.check(any(), anyMap())).thenAnswer(invocation -> {
+		when(preflight.check(any(), anyMap())).thenAnswer(_ -> {
 			runner.requestStop(run.getId());
 			return new Preflight.Result(List.of(), Map.of());
 		});

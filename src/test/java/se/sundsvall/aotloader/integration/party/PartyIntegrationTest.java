@@ -25,7 +25,7 @@ class PartyIntegrationTest {
 	@Test
 	void getPartyId() {
 		final var integration = new PartyIntegration(client);
-		when(client.getPartyId(MUNICIPALITY_ID, "ENTERPRISE", "5566778899")).thenReturn(Optional.of("party-id"), Optional.of(" "), Optional.empty());
+		when(client.getPartyId(MUNICIPALITY_ID, "ENTERPRISE", "5566778899")).thenReturn(Optional.of("party-id")).thenReturn(Optional.of(" ")).thenReturn(Optional.empty());
 
 		assertThat(integration.getPartyId(MUNICIPALITY_ID, TestData.HOLDER_ID)).contains("party-id");
 		assertThat(integration.getPartyId(MUNICIPALITY_ID, TestData.HOLDER_ID)).isEmpty();

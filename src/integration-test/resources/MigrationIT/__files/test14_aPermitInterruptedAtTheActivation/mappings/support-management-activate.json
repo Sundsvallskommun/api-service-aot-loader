@@ -1,0 +1,40 @@
+{
+	"name": "support-management-activate",
+	"request": {
+		"method": "PATCH",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"equalToJson": {
+					"lifecycle": "ACTIVE"
+				}
+			}
+		]
+	},
+	"response": {
+		"fault": "CONNECTION_RESET_BY_PEER"
+	}
+}

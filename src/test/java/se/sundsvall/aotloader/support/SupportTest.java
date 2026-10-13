@@ -44,7 +44,7 @@ class SupportTest {
 
 	@Test
 	void locations() {
-		assertThat(Locations.idOf(ResponseEntity.created(URI.create("/2281/ALKT/errands/abc-123")).build(), "ärendet")).isEqualTo("abc-123");
+		assertThat(Locations.idOf(ResponseEntity.created(URI.create("/2281/AOT/errands/abc-123")).build(), "ärendet")).isEqualTo("abc-123");
 		assertThat(Locations.idOf(ResponseEntity.created(URI.create("http://host/2281/assets/xyz/")).build(), "tillståndet")).isEqualTo("xyz");
 		assertThatThrownBy(() -> Locations.idOf(ResponseEntity.ok().build(), "ärendet"))
 			.isInstanceOf(MigrationException.class)

@@ -1,0 +1,96 @@
+[
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "1",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G14",
+		"detail": "G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg)"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "2",
+		"placeNumber": "12345679",
+		"placeName": "Krogen Två",
+		"outcome": "GRANSKAS",
+		"rules": "G2,G13",
+		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "3",
+		"placeNumber": "12345680",
+		"placeName": "Krogen Tre",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "4",
+		"placeNumber": "12345681",
+		"placeName": "Timråkrogen",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G13",
+		"detail": "Kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "700",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "701",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "702",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "TILLSTAND",
+		"sourceId": "1",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
+	},
+	{
+		"source": "ALKOL",
+		"kind": "ANMALAN",
+		"sourceId": "1-FOLKOL",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
+	},
+	{
+		"source": "ALKOL",
+		"kind": "ANMALAN",
+		"sourceId": "2-FOLKOL",
+		"placeName": "Timråkiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Kommun 2262 (område Timrå)"
+	}
+]

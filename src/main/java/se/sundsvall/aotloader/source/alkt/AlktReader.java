@@ -40,7 +40,7 @@ public class AlktReader implements SourceReader {
 
 	@Override
 	public ReaderResult read(final Set<Kind> kinds) {
-		final var factory = new AlktCandidateFactory(repository.readSnapshot(), LocalDate.now(clock), properties.inspection());
+		final var factory = new AlktCandidateFactory(repository.readSnapshot(), LocalDate.now(clock), properties);
 		final var results = new ArrayList<ReaderResult>();
 		if (kinds.contains(TILLSTAND)) {
 			results.add(factory.permits());

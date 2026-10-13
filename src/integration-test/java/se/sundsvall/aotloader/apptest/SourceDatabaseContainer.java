@@ -19,6 +19,8 @@ final class SourceDatabaseContainer {
 	static final String ALKT_DATABASE = "AlkTSundsvall";
 	static final String ALKOL_DATABASE = "AlkOL2Sundsvall";
 
+	// Runs for all the tests and is removed by the Ryuk container of Testcontainers when the JVM ends
+	@SuppressWarnings("resource")
 	private static final MSSQLServerContainer CONTAINER = new MSSQLServerContainer(DockerImageName.parse("mcr.microsoft.com/mssql/server:2019-CU28-ubuntu-20.04")).acceptLicense();
 
 	private static boolean created;

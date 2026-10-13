@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Label;
@@ -39,6 +40,13 @@ public class SupportManagementIntegration {
 	 */
 	public List<Label> getLabelTree(final String municipalityId) {
 		return Optional.ofNullable(client.getLabels(municipalityId, namespace).getLabelStructure()).orElse(emptyList());
+	}
+
+	/**
+	 * @return the action configurations of the namespace, active or not
+	 */
+	public List<Config> getActionConfigs(final String municipalityId) {
+		return Optional.ofNullable(client.getActionConfigs(municipalityId, namespace)).orElse(emptyList());
 	}
 
 	/**

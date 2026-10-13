@@ -1,0 +1,167 @@
+{
+	"name": "party-assets-create",
+	"request": {
+		"method": "POST",
+		"urlPath": "/party-assets/2281/assets",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"sourceReference": {
+				"equalTo": "LINK|11111111-aaaa-bbbb-cccc-000000000001;case;supportmanagement;AOT|"
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.assetId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.partyId",
+					"equalTo": "22222222-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "AlcoholServingPermit"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "ACTIVE"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.origin",
+					"equalTo": "SUPPORTMANAGEMENT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.issued",
+					"equalTo": "2019-05-01"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Beslut om serveringstillstånd"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.errandId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.premisesRestaurantNumber",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.premisesName",
+					"equalTo": "Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.premisesPostalAddress",
+					"equalTo": "85230 Sundsvall"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.permitHolderName",
+					"equalTo": "Testbolaget AB"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.permitHolderOrgNumber",
+					"equalTo": "556677-8899"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.servingToPublic",
+					"equalTo": "true"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.servingToClosedCompany",
+					"equalTo": "false"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.scopeAllYear",
+					"equalTo": "true"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.beverageBeer",
+					"equalTo": "true"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.beverageSpirits",
+					"equalTo": "false"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.servingHours",
+					"equalTo": "11:00–01:00"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.conditions",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.caseNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.decisionDateAndCaseNumber",
+					"equalTo": "2019-05-01, IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.migreradFran",
+					"equalTo": "AlkT"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-1"
+		}
+	}
+}

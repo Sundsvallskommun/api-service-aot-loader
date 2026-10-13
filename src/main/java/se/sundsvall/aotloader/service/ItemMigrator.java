@@ -25,10 +25,7 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.MigrationException;
-import se.sundsvall.aotloader.support.PiiScrubber;
-import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.REPORT_TEXT_MAX_LENGTH;
 import static se.sundsvall.aotloader.service.model.ItemStatus.ARENDE_SKAPAT;
 import static se.sundsvall.aotloader.service.model.ItemStatus.BILAGOR_KLARA;
 import static se.sundsvall.aotloader.service.model.ItemStatus.GRANSKAS;
@@ -146,10 +143,6 @@ public class ItemMigrator {
 		return entity;
 	}
 
-	private static String toReason(final String text) {
-		return Texts.truncate(PiiScrubber.scrub(text), REPORT_TEXT_MAX_LENGTH, null);
-	}
-
 	/**
 	 * The migration of one item that is not migrated yet. It keeps the row of the status table and the step the item is
 	 * in, so that an error is saved with the step it stopped in.
@@ -208,7 +201,7 @@ public class ItemMigrator {
 		 * The steps that write to the target systems, each saved in the status table when it is done.
 		 */
 		private void write(final String municipalityId, final PartyIds parties, final boolean expired, final RelationPlan relationPlan) {
-			entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
+			ensureEntity();
 			// Kept from the first write on, so that a later run never looks for the item in another municipality
 			entity.setMunicipalityId(municipalityId);
 			saveAs(TILLSTANDSHAVARE_KLAR);
@@ -231,10 +224,8 @@ public class ItemMigrator {
 
 			step = Step.TILLSTAND;
 			if (candidate.asset() != null) {
-				if (entity.getPartyAssetsId() == null) {
-					entity.setPartyAssetsId(targets.ensureAsset(candidate, municipalityId, errand.getId(), parties, expired));
-					entity.setAssetId(errand.getId());
-				}
+				entity.setPartyAssetsId(targets.ensureAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes));
+				entity.setAssetId(errand.getId());
 				saveAs(TILLSTAND_SKAPAT);
 			}
 
@@ -305,8 +296,8 @@ public class ItemMigrator {
 			earlierWrites().ifPresent(reasons::add);
 			reasons.reversed().forEach(notes::lineFirst);
 			if (!context.dryRun()) {
-				entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
-				entity.setReason(toReason(String.join("; ", reasons)));
+				ensureEntity();
+				entity.setReason(ReportNotes.reportText(String.join("; ", reasons)));
 				saveAs(status);
 			}
 			return notes.result(outcome, errandNumber());
@@ -335,12 +326,21 @@ public class ItemMigrator {
 
 		private void saveFailure(final String message) {
 			try {
-				entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
+				ensureEntity();
 				entity.setFailedStep(step);
-				entity.setReason(toReason(message));
+				entity.setReason(ReportNotes.reportText(message));
 				saveAs(ItemStatus.FEL);
 			} catch (final RuntimeException e) {
 				LOG.error("The failure of item {} could not be saved in the status table: {}", candidate.key(), e.getClass().getSimpleName());
+			}
+		}
+
+		/**
+		 * Gives the item a row of the status table, unless an earlier run did.
+		 */
+		private void ensureEntity() {
+			if (entity == null) {
+				entity = newEntity(candidate);
 			}
 		}
 

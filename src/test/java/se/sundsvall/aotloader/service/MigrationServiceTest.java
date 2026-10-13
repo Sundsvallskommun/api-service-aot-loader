@@ -104,6 +104,23 @@ class MigrationServiceTest {
 	}
 
 	@Test
+	void theAnswerIsTheRunAsItStartedEvenWhenItFinishesFirst() {
+		doAnswer(invocation -> {
+			invocation.<Runnable>getArgument(0).run();
+			return null;
+		}).when(executor).execute(any());
+		doAnswer(invocation -> {
+			invocation.<MigrationRunEntity>getArgument(0).setStatus(RunStatus.COMPLETED);
+			return null;
+		}).when(runner).execute(any(), any(), any());
+
+		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(null, null, null, null));
+
+		assertThat(run.status()).isEqualTo(RunStatus.RUNNING);
+		assertThat(lock.holder()).isEmpty();
+	}
+
+	@Test
 	void onlyOneRunAtATime() {
 		service.startRun(MUNICIPALITY_ID, new RunRequest(false, List.of(Source.ALKT), List.of(TILLSTAND), 10));
 
@@ -197,7 +214,7 @@ class MigrationServiceTest {
 
 	@Test
 	void stopRun() {
-		when(runRepository.findById("run-id")).thenReturn(Optional.of(runEntity(RunStatus.RUNNING)), Optional.of(runEntity(RunStatus.COMPLETED)));
+		when(runRepository.findById("run-id")).thenReturn(Optional.of(runEntity(RunStatus.RUNNING))).thenReturn(Optional.of(runEntity(RunStatus.COMPLETED)));
 		when(runner.requestStop("run-id")).thenReturn(true);
 
 		assertThat(service.stopRun(MUNICIPALITY_ID, "run-id").status()).isEqualTo(RunStatus.RUNNING);

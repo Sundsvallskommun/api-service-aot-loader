@@ -64,6 +64,6 @@ class PartyResolver {
 	}
 
 	private Optional<String> lookup(final LegalId legalId, final String municipalityId, final RunContext context) {
-		return legalId == null ? Optional.empty() : context.partyId(legalId, id -> party.getPartyId(municipalityId, id));
+		return legalId == null ? Optional.empty() : context.partyId(municipalityId, legalId, id -> party.getPartyId(municipalityId, id));
 	}
 }

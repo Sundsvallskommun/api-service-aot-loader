@@ -9,7 +9,6 @@ import java.util.Set;
  */
 public enum ItemStatus {
 
-	NY,
 	GRANSKAS,
 	MIGRERAS_INTE,
 	VANTAR,

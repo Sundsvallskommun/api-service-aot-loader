@@ -8,7 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
-import se.sundsvall.aotloader.configuration.AotLoaderProperties.Inspection;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -53,7 +54,7 @@ import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 class AlkolCandidateFactoryTest {
 
 	private static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
-	private static final Inspection INSPECTION = new Inspection(true, Map.of(), Map.of("tills", "", "it", "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION"));
+	private static final AotLoaderProperties PROPERTIES = TestData.properties(ErrandType.TOBACCO_INSPECTION, true, Map.of("tills", "", "it", TestData.INTERNAL_INSPECTION));
 
 	@Test
 	void tobaccoPermit() {
@@ -64,10 +65,10 @@ class AlkolCandidateFactoryTest {
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), 50))
 			.errand(new ErrandRow(101, 1, "WADE", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
 			.errand(new ErrandRow(102, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, "11111111.rtf", "bilaga.pdf"))
-			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2015, 2, 1, 10, 0), null, null, null, null))
-			.decision(new DecisionRow(202, 102, "AÄDE", LocalDateTime.of(2021, 2, 1, 10, 0), null, null, null, null))
-			.decision(new DecisionRow(203, 101, "GTDEU", LocalDateTime.of(2016, 1, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), "11111111.rtf", "bilaga.pdf"))
+			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2015, 2, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(202, 102, "AÄDE", LocalDateTime.of(2021, 2, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(203, 101, "GTDEU", LocalDateTime.of(2016, 1, 1, 10, 0), null, null, null))
 			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), "IAN-2019-100", "22222222.rtf", "ansokan.pdf"))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null))
 			.person(new PersonRow(10, "Person", "8001011234", List.of("VD"), false));
@@ -123,14 +124,42 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
+	void aFileNameThatAnotherPlaceAlsoRefersToIsMarked() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, true, false, true))
+			.owner(owner(10, "556677-8899"))
+			.view(new PermitViewRow(1, true, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(101, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, "bilaga.pdf"))
+			.decision(new DecisionRow(201, null, "GTDE", null, null, null, "Bilaga.pdf"))
+			.decision(new DecisionRow(202, 100, "BESOVR", LocalDateTime.of(2019, 7, 3, 10, 0), null, null, "protokoll.pdf"))
+			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), null, "22222222.rtf", "ansokan.pdf"))
+			.event(new EventRow(301, null, 100, "001", LocalDateTime.of(2019, 6, 2, 9, 0), null, null, "intyg.pdf"))
+			.event(new EventRow(302, 1, 101, "001", LocalDateTime.of(2021, 1, 2, 9, 0), null, null, "intyg.pdf"))
+			// Registered on another place than its errand's, whose files it goes to
+			.event(new EventRow(303, 2, 100, "001", LocalDateTime.of(2019, 7, 3, 9, 0), null, null, "protokoll.pdf"))
+			.event(new EventRow(400, 2, null, "001", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "ANSOKAN.PDF"));
+
+		final var candidate = data.factory().permits().candidates().getFirst();
+
+		assertThat(candidate.files()).containsExactlyInAnyOrder(
+			new FileReference("22222222.rtf", DOCUMENTS, false),
+			new FileReference("ansokan.pdf", ATTACHMENTS, true),
+			new FileReference("intyg.pdf", ATTACHMENTS, false),
+			new FileReference("protokoll.pdf", ATTACHMENTS, false),
+			new FileReference("bilaga.pdf", ATTACHMENTS, true));
+	}
+
+	@Test
 	void tobaccoPermitThatHasEnded() {
 		final var data = new Data()
 			.place(place(1, 10).ceased())
 			.owner(owner(10, "556677-8899"))
 			.view(new PermitViewRow(1, false, false, false))
 			.errand(new ErrandRow(100, 1, "WAPH", null, null, null, 50))
-			.decision(new DecisionRow(200, 100, "GTPH", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
-			.decision(new DecisionRow(201, 100, "GTDEÅ", LocalDateTime.of(2022, 1, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(200, 100, "GTPH", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(201, 100, "GTDEÅ", LocalDateTime.of(2022, 1, 1, 10, 0), null, null, null))
 			.applicant(new ContactRow(50, "5599887766", "Annan", null, null, null, null, null, null, null));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
@@ -176,8 +205,8 @@ class AlkolCandidateFactoryTest {
 			.view(new PermitViewRow(4, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, null, null))
 			.errand(new ErrandRow(101, 2, "WADE", "ian 1", null, null, null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
-			.decision(new DecisionRow(201, 101, "GTDE", null, null, null, null, null));
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(201, 101, "GTDE", null, null, null, null));
 
 		final var candidates = data.factory().permits().candidates();
 
@@ -212,7 +241,7 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "121212+1212"))
 			.view(new PermitViewRow(1, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, null, 50))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null, null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null))
 			.applicant(new ContactRow(50, "191212121212", "Tolvan", null, null, null, null, null, null, null));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
@@ -321,7 +350,7 @@ class AlkolCandidateFactoryTest {
 			.errand(new ErrandRow(400, 1, "Tills", "TIL-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), 50))
 			.errand(new ErrandRow(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
 			.errand(new ErrandRow(402, 2, "IT", null, LocalDate.of(2020, 1, 1), null, null))
-			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, null, "varning.pdf", null))
+			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, "varning.pdf", null))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null));
 
 		final var candidates = data.factory().inspections().candidates();
@@ -347,11 +376,13 @@ class AlkolCandidateFactoryTest {
 	@Test
 	void inspectionErrandsOfAllPlaces() {
 		final var data = new Data()
-			.errand(new ErrandRow(402, 2, "IT", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null));
+			.errand(new ErrandRow(402, 2, "IT", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			// An errand without a sales place has no permit to look for
+			.errand(new ErrandRow(403, null, "it", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null));
 
-		final var candidates = new AlkolCandidateFactory(data.build(), TODAY, new Inspection(false, Map.of(), Map.of("it", "X"))).inspections().candidates();
+		final var candidates = new AlkolCandidateFactory(data.build(), TODAY, TestData.properties(ErrandType.TOBACCO_INSPECTION, false, Map.of("it", "X"))).inspections().candidates();
 
-		assertThat(candidates).singleElement().satisfies(candidate -> {
+		assertThat(candidates).hasSize(2).allSatisfy(candidate -> {
 			assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactly(PLACE_MISSING);
 			assertThat(candidate.permitLink().permitKey()).isNull();
 		});
@@ -461,7 +492,7 @@ class AlkolCandidateFactoryTest {
 		}
 
 		Data person(final PersonRow row) {
-			persons.computeIfAbsent(row.agarId(), key -> new ArrayList<>()).add(row);
+			persons.computeIfAbsent(row.agarId(), _ -> new ArrayList<>()).add(row);
 			return this;
 		}
 
@@ -475,7 +506,7 @@ class AlkolCandidateFactoryTest {
 		}
 
 		AlkolCandidateFactory factory() {
-			return new AlkolCandidateFactory(build(), TODAY, INSPECTION);
+			return new AlkolCandidateFactory(build(), TODAY, PROPERTIES);
 		}
 	}
 }

@@ -14,14 +14,6 @@ public final class Constants {
 
 	/** The label that marks a migrated errand and keeps every process away from it (decision 17). */
 	public static final String LABEL_MIGRATED = "TAGROOT/MIGRATED_ERRAND";
-	public static final String LABEL_SERVING_PERMIT = "CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION";
-	public static final String LABEL_TOBACCO_PERMIT = "CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION";
-	public static final String LABEL_FOLKOL_SALES = "CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION";
-	public static final String LABEL_FOLKOL_SERVING = "CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION";
-	public static final String LABEL_ECIGARETTE = "CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION";
-	public static final String LABEL_TOBACCO_FREE_NICOTINE = "CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION";
-	public static final String LABEL_ALCOHOL_INSPECTION = "TAGROOT/ALCOHOL_INSPECTION";
-	public static final String LABEL_TOBACCO_INSPECTION = "TAGROOT/TOBACCO_INSPECTION";
 	/** The attribute of a label that keeps every process away from an errand that carries it. */
 	public static final String LABEL_ATTRIBUTE_PROCESS_BLOCKED = "processBlocked";
 
@@ -45,8 +37,6 @@ public final class Constants {
 	public static final String PARAMETER_POSITION = "befattning";
 	/** The display name of {@link #PARAMETER_POSITION}. */
 	public static final String PARAMETER_POSITION_DISPLAY_NAME = "Befattning";
-	/** The parameter of the permit holder with its contact person. */
-	public static final String PARAMETER_CONTACT_PERSON = "kontaktperson";
 	/** The parameter of the permit that links it to its errand, as pw-alkt writes it. */
 	public static final String ASSET_PARAMETER_ERRAND_ID = "errandId";
 	/** The parameter of the permit with its conditions, as pw-alkt writes it. */

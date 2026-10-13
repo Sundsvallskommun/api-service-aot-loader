@@ -1,0 +1,9 @@
+{
+	"source": "ALKOL",
+	"kind": "ANMALAN",
+	"sourceId": "1-FOLKOL",
+	"placeName": "Kiosken",
+	"outcome": "FEL",
+	"rules": "",
+	"detail": "${json-unit.regex}Steg Ärende: RetryableException: Connection reset executing POST http://localhost:\\d+/support-management/2281/AOT/errands"
+}

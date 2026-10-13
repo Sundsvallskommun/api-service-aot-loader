@@ -70,8 +70,7 @@ public class NoResendCapability implements Capability {
 		}
 
 		@Override
-		@SuppressWarnings("java:S2975")
-		public Retryer clone() {
+		public Retryer clone() { // NOSONAR java:S2975, the Retryer of Feign requires clone
 			return new NoResendRetryer(delegate.clone());
 		}
 	}

@@ -678,7 +678,6 @@ paths:
         schema:
           type: string
           enum:
-          - NY
           - GRANSKAS
           - MIGRERAS_INTE
           - VANTAR
@@ -906,6 +905,8 @@ components:
             enum:
             - ALKT
             - ALKOL
+          maxItems: 2147483647
+          minItems: 1
         kinds:
           type: array
           description: "The kinds of item to migrate, all when left out. AlkT has\
@@ -916,6 +917,8 @@ components:
             - TILLSTAND
             - ANMALAN
             - TILLSYN
+          maxItems: 2147483647
+          minItems: 1
         limit:
           type: integer
           format: int32
@@ -1035,7 +1038,6 @@ components:
         status:
           type: string
           enum:
-          - NY
           - GRANSKAS
           - MIGRERAS_INTE
           - VANTAR

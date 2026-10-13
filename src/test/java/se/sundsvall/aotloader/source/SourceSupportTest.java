@@ -6,13 +6,16 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Database;
-import se.sundsvall.aotloader.configuration.AotLoaderProperties.Inspection;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -23,17 +26,22 @@ import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
+import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.MigrationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
 class SourceSupportTest {
+
+	private static final FileAreaDirectories TWO_DIRECTORIES = new FileAreaDirectories("//server/alkt/Dokument", "//server/alkt/Bilder");
 
 	@Test
 	void readerResultsAreOrderedByKindAndId() {
@@ -51,8 +59,49 @@ class SourceSupportTest {
 	void parameterAndFileLists() {
 		assertThat(new ParameterList().add("a", "A", (String) null).add("b", "B", " x ").add("c", "C", java.util.Arrays.asList(" ", null, "y")).build())
 			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]", "c=[y]");
-		assertThat(new FileList().add(" a.pdf ", ATTACHMENTS).add("A.PDF", ATTACHMENTS).add("a.pdf", DOCUMENTS).add(" ", DOCUMENTS).add(null, DOCUMENTS).build())
+		assertThat(new FileList(SharedFileNames.builder(TWO_DIRECTORIES).build()).add(" a.pdf ", ATTACHMENTS).add("A.PDF", ATTACHMENTS).add("a.pdf", DOCUMENTS).add(" ", DOCUMENTS).add(null, DOCUMENTS).build())
 			.containsExactly(new FileReference("a.pdf", ATTACHMENTS), new FileReference("a.pdf", DOCUMENTS));
+	}
+
+	@Test
+	void aFileNameThatAnotherPlaceAlsoRefersToIsShared() {
+		final var shared = SharedFileNames.builder(TWO_DIRECTORIES)
+			.add("objekt:1", "Ansökan.pdf", ATTACHMENTS)
+			.add("objekt:2", "C:\\Bilder\\ansökan.pdf ", ATTACHMENTS)
+			.add("objekt:1", "ritning.pdf", ATTACHMENTS)
+			.add("objekt:1", "Ritning.pdf", ATTACHMENTS)
+			.add("objekt:1", "11111111.rtf", DOCUMENTS)
+			.add("objekt:2", "11111111.rtf", ATTACHMENTS)
+			.add("objekt:2", " ", ATTACHMENTS)
+			.add("objekt:3", null, ATTACHMENTS)
+			.build();
+
+		assertThat(shared.isShared("ANSÖKAN.PDF", ATTACHMENTS)).as("another place, other case and a path").isTrue();
+		assertThat(shared.isShared("ritning.pdf", ATTACHMENTS)).as("the same place twice").isFalse();
+		assertThat(shared.isShared("11111111.rtf", DOCUMENTS)).as("another directory").isFalse();
+		assertThat(shared.isShared("okänd.pdf", ATTACHMENTS)).isFalse();
+		assertThat(shared.isShared(" ", ATTACHMENTS)).isFalse();
+		assertThat(shared.isShared(null, ATTACHMENTS)).isFalse();
+		assertThat(new FileList(shared).add("ansökan.pdf", ATTACHMENTS).add("ritning.pdf", ATTACHMENTS).build())
+			.containsExactly(new FileReference("ansökan.pdf", ATTACHMENTS, true), new FileReference("ritning.pdf", ATTACHMENTS, false));
+		assertThatThrownBy(() -> SharedFileNames.builder(TWO_DIRECTORIES).add(null, "a.pdf", ATTACHMENTS)).isInstanceOf(NullPointerException.class);
+	}
+
+	@Test
+	void aSourceWithOneDirectoryForDocumentsAndAttachmentsSharesANameAcrossThem() {
+		final var oneDirectory = SharedFileNames.builder(new FileAreaDirectories("//server/alkol/Dok", "//server/alkol/Dok/"))
+			.add("fs:1", "11111111.rtf", DOCUMENTS)
+			.add("fs:2", "11111111.RTF", ATTACHMENTS)
+			.build();
+		final var notConfigured = SharedFileNames.builder(new FileAreaDirectories(null, null))
+			.add("fs:1", "11111111.rtf", DOCUMENTS)
+			.add("fs:2", "11111111.rtf", ATTACHMENTS)
+			.build();
+
+		assertThat(oneDirectory.isShared("11111111.rtf", DOCUMENTS)).isTrue();
+		assertThat(oneDirectory.isShared("11111111.rtf", ATTACHMENTS)).isTrue();
+		assertThat(notConfigured.isShared("11111111.rtf", DOCUMENTS)).isFalse();
+		assertThat(SharedFileNames.builder(null).add("fs:1", "a.pdf", DOCUMENTS).add("fs:2", "a.pdf", ATTACHMENTS).build().isShared("a.pdf", DOCUMENTS)).isFalse();
 	}
 
 	@Test
@@ -90,7 +139,7 @@ class SourceSupportTest {
 
 	@Test
 	void sourceDatabasesOpenOnFirstUseAndOnlyWhenConfigured() {
-		final var properties = new AotLoaderProperties("ALKT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null), Map.of(), new Inspection(true, Map.of(), Map.of()),
+		final var properties = new AotLoaderProperties("AOT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null), Map.of(),
 			Map.of(Source.ALKT, new Database("jdbc:h2:mem:source;DB_CLOSE_DELAY=-1", "sa", "", Duration.ofSeconds(5)), Source.ALKOL, new Database(" ", null, null, null)), Map.of(), DataSize.ofMegabytes(1), null);
 		final var databases = new SourceDatabases(properties);
 
@@ -114,16 +163,47 @@ class SourceSupportTest {
 		assertThat(properties.fileArea(Source.ALKT).documents()).isEqualTo("documents");
 		assertThat(properties.fileArea(Source.ALKT)).hasToString("FileAreaDirectories[configured=true]");
 		assertThat(properties.database(Source.ALKT).orElseThrow()).hasToString("Database[configured=true]");
-		assertThat(properties.inspection().errandTypes(Source.ALKOL)).containsOnlyKeys("it");
+		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).sourceErrandTypes()).containsOnlyKeys("it");
 
-		final var empty = new AotLoaderProperties("ALKT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null), null, new Inspection(false, Map.of(" Tills ", "x"), null), null, null,
-			DataSize.ofMegabytes(1), null);
-		assertThat(empty.errandType(ErrandType.SERVING_PERMIT).category()).isNull();
+		final var empty = new AotLoaderProperties("AOT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null), null, null, null, DataSize.ofMegabytes(1), null);
+		final var none = empty.errandType(ErrandType.SERVING_PERMIT);
+		assertThat(none.category()).isNull();
+		assertThat(none.labels()).isEmpty();
+		assertThat(none.subtypeLabels()).isEmpty();
+		assertThat(none.sourceErrandTypes()).isEmpty();
+		assertThat(none.onlyPlacesWithPermit()).isFalse();
+		assertThat(none.allLabels()).isEmpty();
 		assertThat(empty.database(Source.ALKT)).isEmpty();
 		assertThat(empty.fileArea(Source.ALKT).documents()).isNull();
-		assertThat(empty.inspection().errandTypes(Source.ALKT)).containsEntry("tills", "x");
-		assertThat(empty.inspection().errandTypes(Source.ALKOL)).isEmpty();
 		assertThat(new Database("x", null, null, null).queryTimeout()).isEqualTo(Duration.ofMinutes(2));
+	}
+
+	@Test
+	void errandTypeSettingsAreTrimmed() {
+		final var subtypeLabels = new EnumMap<ServingPermitSubtype, String>(ServingPermitSubtype.class);
+		subtypeLabels.put(ServingPermitSubtype.PERMANENT_SERVING, " B ");
+		subtypeLabels.put(ServingPermitSubtype.TASTING, null);
+		final var settings = new ErrandTypeSettings(null, null, null, null, Arrays.asList(" A ", null, " "), subtypeLabels, Map.of(" Tills ", " C ", "IT", " "), true);
+
+		assertThat(settings.labels()).containsExactly("A");
+		assertThat(settings.subtypeLabel(ServingPermitSubtype.PERMANENT_SERVING)).contains("B");
+		assertThat(settings.subtypeLabel(ServingPermitSubtype.TASTING)).isEmpty();
+		assertThat(settings.subtypeLabel(ServingPermitSubtype.FARM_SALES)).isEmpty();
+		assertThat(settings.sourceErrandTypes()).containsOnly(entry("tills", "C"), entry("it", ""));
+		assertThat(settings.allLabels()).containsExactlyInAnyOrder("A", "B", "C");
+		// The errand types of the source are looked up whatever their case and blanks
+		assertThat(settings.sourceErrandType(" TILLS")).contains("C");
+		assertThat(settings.sourceErrandType("it")).contains("");
+		assertThat(settings.sourceErrandType("07")).isEmpty();
+		assertThat(settings.sourceErrandType(null)).isEmpty();
+	}
+
+	@Test
+	void issuedLine() {
+		assertThat(CandidateTexts.issuedLine(LocalDate.of(2019, 5, 1), "IAN-2019-1")).isEqualTo("Utfärdat: 2019-05-01 (IAN-2019-1)");
+		assertThat(CandidateTexts.issuedLine(LocalDate.of(2019, 5, 1), null)).isEqualTo("Utfärdat: 2019-05-01");
+		assertThat(CandidateTexts.issuedLine(null, "IAN-2019-1")).isEqualTo("Utfärdat: (IAN-2019-1)");
+		assertThat(CandidateTexts.issuedLine(null, null)).isNull();
 	}
 
 	private static Candidate candidate(final Kind kind, final String sourceId) {

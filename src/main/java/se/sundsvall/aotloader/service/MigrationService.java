@@ -86,6 +86,8 @@ public class MigrationService {
 		acquire(run.getId());
 		try {
 			runRepository.save(run);
+			// Taken before the run starts, since the runner changes the entity in its own thread
+			final var started = toRun(run, Map.of());
 			executor.execute(() -> {
 				try {
 					runner.execute(run, scope, Optional.empty());
@@ -93,11 +95,11 @@ public class MigrationService {
 					lock.release(run.getId());
 				}
 			});
+			return started;
 		} catch (final RuntimeException e) {
 			lock.release(run.getId());
 			throw e;
 		}
-		return toRun(run, Map.of());
 	}
 
 	/**
@@ -123,7 +125,7 @@ public class MigrationService {
 			}
 			return runItemRepository.findByRunIdOrderById(run.getId()).stream()
 				.filter(line -> key.equals(new ItemKey(line.getSource(), line.getKind(), line.getSourceId())))
-				.reduce((first, second) -> second)
+				.reduce((_, second) -> second)
 				.map(MigrationService::toReportLine)
 				.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s hittades inte".formatted(key)));
 		} finally {
