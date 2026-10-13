@@ -1,0 +1,359 @@
+package se.sundsvall.aotloader.service;
+
+import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
+import se.sundsvall.aotloader.integration.db.ReviewExceptionRepository;
+import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
+import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
+import se.sundsvall.aotloader.service.Assessment.Decision;
+import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
+import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.ItemStatus;
+import se.sundsvall.aotloader.service.model.Outcome;
+import se.sundsvall.aotloader.service.model.PartyIds;
+import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.RuleHit;
+import se.sundsvall.aotloader.service.model.Step;
+import se.sundsvall.aotloader.support.ErrorTexts;
+import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.PiiScrubber;
+import se.sundsvall.aotloader.support.Texts;
+
+import static se.sundsvall.aotloader.Constants.REPORT_TEXT_MAX_LENGTH;
+import static se.sundsvall.aotloader.service.model.ItemStatus.ARENDE_SKAPAT;
+import static se.sundsvall.aotloader.service.model.ItemStatus.BILAGOR_KLARA;
+import static se.sundsvall.aotloader.service.model.ItemStatus.GRANSKAS;
+import static se.sundsvall.aotloader.service.model.ItemStatus.KLAR;
+import static se.sundsvall.aotloader.service.model.ItemStatus.MIGRERAS_INTE;
+import static se.sundsvall.aotloader.service.model.ItemStatus.RELATION_KLAR;
+import static se.sundsvall.aotloader.service.model.ItemStatus.TILLSTANDSHAVARE_KLAR;
+import static se.sundsvall.aotloader.service.model.ItemStatus.TILLSTAND_SKAPAT;
+import static se.sundsvall.aotloader.service.model.ItemStatus.VANTAR;
+import static se.sundsvall.aotloader.service.model.Severity.INFO;
+
+/**
+ * Takes one item through the flow of section 6. Every step can be run again: an item continues from what the status
+ * table and the target systems already have, so a rerun never creates a second errand, permit or relation (K3). An
+ * error stops the item, never the run: it is saved with its step in the status table and listed in the report.
+ */
+@Component
+public class ItemMigrator {
+
+	private static final Logger LOG = LoggerFactory.getLogger(ItemMigrator.class);
+
+	private final MigrationItemRepository itemRepository;
+	private final ReviewExceptionRepository exceptionRepository;
+	private final PartyResolver partyResolver;
+	private final RelationPlanner relationPlanner;
+	private final FileUploader fileUploader;
+	private final TargetWriter targets;
+	private final AotLoaderProperties properties;
+	private final Clock clock;
+
+	ItemMigrator(final MigrationItemRepository itemRepository, final ReviewExceptionRepository exceptionRepository, final PartyResolver partyResolver, final RelationPlanner relationPlanner,
+		final FileUploader fileUploader, final TargetWriter targets, final AotLoaderProperties properties, final Clock clock) {
+		this.itemRepository = itemRepository;
+		this.exceptionRepository = exceptionRepository;
+		this.partyResolver = partyResolver;
+		this.relationPlanner = relationPlanner;
+		this.fileUploader = fileUploader;
+		this.targets = targets;
+		this.properties = properties;
+		this.clock = clock;
+	}
+
+	/**
+	 * Takes the item as far as it can go. Never throws: whatever goes wrong is in the result.
+	 *
+	 * @param  candidate the item
+	 * @param  context   the run
+	 * @return           what was done, for the report
+	 */
+	public ItemResult process(final Candidate candidate, final RunContext context) {
+		final var key = candidate.key();
+		final var existing = itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId());
+		if (existing.isPresent() && existing.get().getStatus() == KLAR) {
+			return alreadyMigrated(candidate, context, existing.get());
+		}
+		return new Migration(candidate, context, existing.orElse(null)).run();
+	}
+
+	/**
+	 * Leaves an item already migrated as it is: changes in the source after the migration are not carried over (decision
+	 * 11). The one thing added afterwards is the relation of an inspection errand whose permit was migrated after it, for
+	 * instance once the exception list let the permit through.
+	 */
+	private ItemResult alreadyMigrated(final Candidate candidate, final RunContext context, final MigrationItemEntity entity) {
+		final var unchanged = new ItemResult(Outcome.REDAN_MIGRERAD, List.of(), null, entity.getErrandNumber());
+		if (context.dryRun() || candidate.permitLink() == null || entity.getRelationId() != null || entity.getErrandId() == null) {
+			return unchanged;
+		}
+		final var notes = new ReportNotes();
+		try {
+			final var plan = relationPlanner.plan(candidate, context, new ReportNotes());
+			if (!plan.relates()) {
+				return unchanged;
+			}
+			final var municipalityId = Optional.ofNullable(entity.getMunicipalityId()).orElse(context.municipalityId());
+			targets.ensureRelation(municipalityId, plan.permitErrandId(), entity.getErrandId(), notes).ifPresent(relationId -> {
+				entity.setRelationId(relationId);
+				saveItem(entity, candidate, KLAR, context);
+				notes.line("Relation till tillståndsärendet %s, tillagd i efterhand".formatted(candidate.permitLink().permitKey()));
+			});
+			return notes.result(Outcome.REDAN_MIGRERAD, entity.getErrandNumber());
+		} catch (final RuntimeException e) {
+			final var message = ErrorTexts.describe(e);
+			LOG.warn("The relation of item {} could not be added: {}", candidate.key(), message);
+			notes.lineFirst("Steg " + Step.RELATION.getDisplayName() + ": " + message);
+			return notes.result(Outcome.FEL, entity.getErrandNumber());
+		}
+	}
+
+	private MigrationItemEntity saveItem(final MigrationItemEntity entity, final Candidate candidate, final ItemStatus status, final RunContext context) {
+		final var now = OffsetDateTime.now(clock);
+		if (entity.getCreated() == null) {
+			entity.setCreated(now);
+		}
+		entity.setErrandType(candidate.type());
+		entity.setPlaceName(candidate.placeName());
+		entity.setPlaceNumber(candidate.placeNumber());
+		entity.setStatus(status);
+		if (status != ItemStatus.FEL) {
+			entity.setFailedStep(null);
+		}
+		if (status.isProgress()) {
+			entity.setReason(null);
+		}
+		entity.setLastRunId(context.runId());
+		entity.setModified(now);
+		return itemRepository.save(entity);
+	}
+
+	private static MigrationItemEntity newEntity(final Candidate candidate) {
+		final var entity = new MigrationItemEntity();
+		entity.setSource(candidate.key().source());
+		entity.setKind(candidate.key().kind());
+		entity.setSourceId(candidate.key().sourceId());
+		return entity;
+	}
+
+	private static String toReason(final String text) {
+		return Texts.truncate(PiiScrubber.scrub(text), REPORT_TEXT_MAX_LENGTH, null);
+	}
+
+	/**
+	 * The migration of one item that is not migrated yet. It keeps the row of the status table and the step the item is
+	 * in, so that an error is saved with the step it stopped in.
+	 */
+	private final class Migration {
+
+		private final Candidate candidate;
+		private final RunContext context;
+		private final ReportNotes notes = new ReportNotes();
+		private MigrationItemEntity entity;
+		private Step step = Step.LAS_OCH_BEDOM;
+
+		private Migration(final Candidate candidate, final RunContext context, final MigrationItemEntity entity) {
+			this.candidate = candidate;
+			this.context = context;
+			this.entity = entity;
+		}
+
+		private ItemResult run() {
+			try {
+				return migrate();
+			} catch (final RuntimeException e) {
+				return fail(e);
+			}
+		}
+
+		private ItemResult migrate() {
+			final var municipalityId = municipalityOf();
+			final var hits = new ArrayList<>(candidate.ruleHits());
+			step = Step.TILLSTANDSHAVARE;
+			final var parties = partyResolver.resolve(candidate, municipalityId, context, hits, notes);
+			step = Step.LAS_OCH_BEDOM;
+			final var assessment = assess(hits);
+			if (assessment.decision() == Decision.REVIEW) {
+				return stop(GRANSKAS, Outcome.GRANSKAS, reportTexts(assessment.reasons()));
+			}
+			if (assessment.decision() == Decision.NOT_MIGRATED) {
+				return stop(MIGRERAS_INTE, Outcome.MIGRERAS_INTE, reportTexts(assessment.reasons()));
+			}
+			final var relationPlan = relationPlanner.plan(candidate, context, notes);
+			if (relationPlan.waits()) {
+				return stop(VANTAR, Outcome.VANTAR, List.of(relationPlan.waitReason()));
+			}
+			if (context.dryRun()) {
+				fileUploader.check(candidate, context, notes);
+				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
+			}
+			if (!context.tryCountWrite()) {
+				return new ItemResult(Outcome.EJ_KORD, List.of(), "Körningens gräns för antal ärenden nåddes", null);
+			}
+			write(municipalityId, parties, assessment.decision() == Decision.MIGRATE_AS_EXPIRED, relationPlan);
+			return notes.result(Outcome.MIGRERAD, entity.getErrandNumber());
+		}
+
+		/**
+		 * The steps that write to the target systems, each saved in the status table when it is done.
+		 */
+		private void write(final String municipalityId, final PartyIds parties, final boolean expired, final RelationPlan relationPlan) {
+			entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
+			// Kept from the first write on, so that a later run never looks for the item in another municipality
+			entity.setMunicipalityId(municipalityId);
+			saveAs(TILLSTANDSHAVARE_KLAR);
+
+			step = Step.ARENDE;
+			final var errand = targets.ensureErrand(candidate, municipalityId, entity.getErrandId(), parties, context.labelIds(municipalityId));
+			if (entity.getErrandId() != null && !entity.getErrandId().equals(errand.getId())) {
+				forgetGoneErrand();
+			}
+			entity.setErrandId(errand.getId());
+			entity.setErrandNumber(errand.getErrandNumber());
+			saveAs(ARENDE_SKAPAT);
+			final var active = errand.getLifecycle() == LifecycleEnum.ACTIVE;
+
+			step = Step.BILAGOR;
+			if (!active) {
+				fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
+			}
+			saveAs(BILAGOR_KLARA);
+
+			step = Step.TILLSTAND;
+			if (candidate.asset() != null) {
+				if (entity.getPartyAssetsId() == null) {
+					entity.setPartyAssetsId(targets.ensureAsset(candidate, municipalityId, errand.getId(), parties, expired));
+					entity.setAssetId(errand.getId());
+				}
+				saveAs(TILLSTAND_SKAPAT);
+			}
+
+			step = Step.RELATION;
+			if (relationPlan.relates()) {
+				if (entity.getRelationId() == null) {
+					targets.ensureRelation(municipalityId, relationPlan.permitErrandId(), errand.getId(), notes).ifPresent(entity::setRelationId);
+				}
+				saveAs(RELATION_KLAR);
+			}
+
+			step = Step.AKTIVERA;
+			if (!active) {
+				targets.activate(municipalityId, errand.getId());
+			}
+			saveAs(KLAR);
+		}
+
+		/**
+		 * The municipality of the item: the one of its area when the area belongs to another municipality than the run
+		 * (decision 19). An item already written to a municipality stays there; were it moved, a second errand would be
+		 * created in the other municipality.
+		 */
+		private String municipalityOf() {
+			final var area = Optional.ofNullable(candidate.place()).map(Place::area).orElse(null);
+			final var municipalityId = properties.municipalityOf(area).orElse(context.municipalityId());
+			if (entity != null && entity.getMunicipalityId() != null && !entity.getMunicipalityId().equals(municipalityId)) {
+				throw new MigrationException("Ärendet migrerades till kommun %s, men området ger nu kommun %s. Det flyttas inte, eftersom det då skulle skapas på nytt."
+					.formatted(entity.getMunicipalityId(), municipalityId));
+			}
+			if (!municipalityId.equals(context.municipalityId())) {
+				notes.line("Kommun %s (område %s)".formatted(municipalityId, area));
+			}
+			return municipalityId;
+		}
+
+		/**
+		 * Assesses the hits against the exception list, and notes the hits and what the exception list said.
+		 */
+		private Assessment assess(final List<RuleHit> hits) {
+			final var key = candidate.key();
+			final var exception = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId()).map(ReviewExceptionEntity::getOutcome);
+			final var assessment = Assessment.of(hits, exception);
+			hits.forEach(hit -> notes.rule(hit.rule().getCode()));
+			hits.stream().filter(hit -> hit.rule().getSeverity() == INFO).forEach(hit -> notes.line(hit.toReportText()));
+			Optional.ofNullable(assessment.note()).ifPresent(notes::line);
+			return assessment;
+		}
+
+		/**
+		 * The errand in the status table is gone and another took its place. The permit and the relation pointed to the old
+		 * errand, so they are made again for the new one; the old ones are listed for the reset (section 10.3) to remove.
+		 */
+		private void forgetGoneErrand() {
+			notes.line("Ärendet %s fanns inte längre i SupportManagement och ersattes".formatted(entity.getErrandId()));
+			Optional.ofNullable(entity.getPartyAssetsId()).ifPresent(id -> notes.line("Tillståndet %s i PartyAssets hör till det gamla ärendet och ska tas bort".formatted(id)));
+			Optional.ofNullable(entity.getRelationId()).ifPresent(id -> notes.line("Relationen %s hör till det gamla ärendet och ska tas bort".formatted(id)));
+			entity.setAssetId(null);
+			entity.setPartyAssetsId(null);
+			entity.setRelationId(null);
+		}
+
+		/**
+		 * Stops the item before it is written, with the reasons first in the report.
+		 */
+		private ItemResult stop(final ItemStatus status, final Outcome outcome, final List<String> stopReasons) {
+			final var reasons = new ArrayList<>(stopReasons);
+			earlierWrites().ifPresent(reasons::add);
+			reasons.reversed().forEach(notes::lineFirst);
+			if (!context.dryRun()) {
+				entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
+				entity.setReason(toReason(String.join("; ", reasons)));
+				saveAs(status);
+			}
+			return notes.result(outcome, errandNumber());
+		}
+
+		/**
+		 * @return what an earlier run of the item wrote to the target systems, which stays there while the item is stopped
+		 */
+		private Optional<String> earlierWrites() {
+			if (entity == null || entity.getErrandId() == null) {
+				return Optional.empty();
+			}
+			return Optional.of("Ärendet %s från en tidigare körning finns kvar i SupportManagement%s. Det slutförs om ärendet får migreras, annars hanteras det enligt avsnitt 10.3"
+				.formatted(Optional.ofNullable(entity.getErrandNumber()).orElse(entity.getErrandId()), entity.getPartyAssetsId() == null ? "" : ", och tillståndet i PartyAssets"));
+		}
+
+		private ItemResult fail(final RuntimeException e) {
+			final var message = ErrorTexts.describe(e);
+			LOG.warn("Item {} failed in step {}: {}", candidate.key(), step, message);
+			if (!context.dryRun()) {
+				saveFailure(message);
+			}
+			notes.lineFirst("Steg " + step.getDisplayName() + ": " + message);
+			return notes.result(Outcome.FEL, errandNumber());
+		}
+
+		private void saveFailure(final String message) {
+			try {
+				entity = Optional.ofNullable(entity).orElseGet(() -> newEntity(candidate));
+				entity.setFailedStep(step);
+				entity.setReason(toReason(message));
+				saveAs(ItemStatus.FEL);
+			} catch (final RuntimeException e) {
+				LOG.error("The failure of item {} could not be saved in the status table: {}", candidate.key(), e.getClass().getSimpleName());
+			}
+		}
+
+		private void saveAs(final ItemStatus status) {
+			entity = saveItem(entity, candidate, status, context);
+		}
+
+		private String errandNumber() {
+			return entity == null ? null : entity.getErrandNumber();
+		}
+
+		private static List<String> reportTexts(final List<RuleHit> hits) {
+			return hits.stream().map(RuleHit::toReportText).toList();
+		}
+	}
+}

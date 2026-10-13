@@ -4,10 +4,153 @@
 logging:
   level:
     root: INFO
+    # Request and response bodies hold names and personal identity numbers, which must never reach the log (K6)
+    se.sundsvall.dept44.payload: 'OFF'
 openapi:
   name: ${spring.application.name}
   title: ${spring.application.name}
   version: '@project.version@'
+server:
+  # The migration runs on a developer computer (decision 10) and must not be reachable from the network
+  address: ${SERVER_ADDRESS:127.0.0.1}
 spring:
   application:
     name: api-aot-loader
+  datasource:
+    # The status table, the exception list and the reports, kept on the computer that runs the migration
+    url: ${AOT_LOADER_DB_URL:jdbc:h2:file:./data/aot-loader}
+    username: ${AOT_LOADER_DB_USERNAME:sa}
+    password: ${AOT_LOADER_DB_PASSWORD:}
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      jakarta:
+        persistence:
+          schema-generation:
+            database:
+              action: none
+  security:
+    oauth2:
+      client:
+        provider:
+          party:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          party-assets:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          relation:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          support-management:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+        registration:
+          party:
+            authorization-grant-type: client_credentials
+            provider: party
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          party-assets:
+            authorization-grant-type: client_credentials
+            provider: party-assets
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          relation:
+            authorization-grant-type: client_credentials
+            provider: relation
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          support-management:
+            authorization-grant-type: client_credentials
+            provider: support-management
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+integration:
+  party:
+    url: ${PARTY_URL}
+    connect-timeout: 10
+    read-timeout: 30
+  party-assets:
+    url: ${PARTY_ASSETS_URL}
+    connect-timeout: 10
+    read-timeout: 60
+  relation:
+    url: ${RELATION_URL}
+    connect-timeout: 10
+    read-timeout: 30
+  support-management:
+    url: ${SUPPORT_MANAGEMENT_URL}
+    connect-timeout: 10
+    # An upload of a file of up to 50 MB must have time to finish
+    read-timeout: 180
+#========================================
+# The migration
+#========================================
+# A setting left blank waits for a decision: a dry run lists it, and a real run refuses to start without it.
+aot-loader:
+  namespace: ALKT
+  sent-by: 'alkt-migration; type=migration'
+  reporter-user-id: alkt-migration
+  channel: MIGRATION
+  # The closed status of the migrated errands (decision 5)
+  errand-status: ${AOT_LOADER_ERRAND_STATUS:}
+  max-file-size: 50MB
+  # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
+  # in the code lists of AlkT and AlkOL (decision 19)
+  municipalities:
+    '[Timrå]': '2262'
+  roles:
+    permit-holder: PRIMARY
+    # The persons with significant influence (decision 15), with the parameter PBI = true on each
+    contact: CONTACT
+    # With PRIMARY the inspection errand shows on Mina sidor (section 7.7, item 5)
+    inspection-holder: ${AOT_LOADER_ROLE_INSPECTION_HOLDER:}
+  # The classification (category and type) of each errand type is decided by decision 5, the type in PartyAssets by
+  # decision 20. The asset types are those pw-alkt gives the permits it creates; pw-alkt has none for tobacco-free
+  # nicotine products.
+  errand-types:
+    serving-permit:
+      asset-type: AlcoholServingPermit
+      asset-title: Beslut om serveringstillstånd
+    tobacco-permit:
+      asset-type: TobaccoSalesPermit
+      # Followed by the kind of permit, e.g. " – detaljhandel"
+      asset-title: Tillstånd för tobaksförsäljning
+    folkol-sales-notification:
+      asset-type: LowAlcoholBeerSalesPermit
+      asset-title: Anmälan om försäljning av folköl
+    folkol-serving-notification:
+      asset-type: LowAlcoholBeerServingPermit
+      asset-title: Anmälan om servering av folköl
+    ecigarette-notification:
+      asset-type: ECigaretteSalesPermit
+      asset-title: Anmälan om försäljning av e-cigaretter och påfyllningsbehållare
+    tobacco-free-nicotine-notification:
+      asset-type: TobaccoFreeNicotineSalesNotification
+      asset-title: Anmälan om försäljning av tobaksfria nikotinprodukter
+  inspection:
+    # Until the scope is decided (section 7.7, item 2), only the inspection errands of places with a current permit
+    only-places-with-permit: true
+    # The errand types that are inspection errands, with the label of each (section 7.7). Blank: not decided.
+    alkt-errand-types:
+      '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+      '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+      '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    alkol-errand-types:
+      it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+      tills: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+  # Windows authentication: the URL has integratedSecurity=true and no user, see README
+  databases:
+    alkt:
+      url: ${ALKT_DB_URL:}
+    alkol:
+      url: ${ALKOL_DB_URL:}
+  file-area:
+    alkt:
+      documents: ${ALKT_DOCUMENTS_DIR:}
+      attachments: ${ALKT_ATTACHMENTS_DIR:}
+    alkol:
+      documents: ${ALKOL_DOCUMENTS_DIR:}
+      attachments: ${ALKOL_ATTACHMENTS_DIR:}

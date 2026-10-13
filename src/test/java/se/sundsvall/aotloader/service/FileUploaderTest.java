@@ -1,0 +1,191 @@
+package se.sundsvall.aotloader.service;
+
+import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.FileUploader.AttachedFile;
+import se.sundsvall.aotloader.service.FileUploader.FileProblem;
+import se.sundsvall.aotloader.service.FileUploader.FileProblems;
+import se.sundsvall.aotloader.service.model.Outcome;
+import se.sundsvall.aotloader.source.files.FileArea;
+import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class FileUploaderTest {
+
+	private static final String MUNICIPALITY_ID = "2281";
+	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
+
+	@Mock
+	private SupportManagementIntegration supportManagement;
+
+	@TempDir
+	private Path documents;
+
+	@TempDir
+	private Path attachments;
+
+	private AotLoaderProperties properties;
+	private FileUploader uploader;
+
+	@BeforeEach
+	void setUp() throws IOException {
+		properties = TestData.properties(documents.toString(), attachments.toString());
+		uploader = new FileUploader(supportManagement, properties);
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
+	}
+
+	@Test
+	void aFileOnTheErrandWithoutHashIsRecognizedByItsSize() {
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new ErrandAttachment().fileName("beslut.rtf").fileSize("dokument".length()),
+			new ErrandAttachment().fileName("ansokan.pdf").fileSize(1)));
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
+		final var notes = new ReportNotes();
+
+		uploader.upload(TestData.permit("1"), context(), MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any());
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8));
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
+	}
+
+	@Test
+	void aFileThatSupportManagementRefusesIsListed() {
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(false);
+		final var notes = new ReportNotes();
+
+		uploader.upload(TestData.permit("1"), context(), MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		final var result = notes.result(Outcome.MIGRERAD, null);
+		assertThat(result.rules()).containsExactly("G14");
+		assertThat(result.detail()).isEqualTo("G14 2 filer togs inte emot av SupportManagement (beslut.rtf, ansokan.pdf)");
+	}
+
+	@Test
+	void aDryRunChecksTheFilesWithoutUploading() throws IOException {
+		Files.delete(attachments.resolve("ansokan.pdf"));
+		final var notes = new ReportNotes();
+
+		uploader.check(TestData.permit("1"), context(), notes);
+
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("G14 1 fil saknas på filarean (ansokan.pdf)");
+		verifyNoInteractions(supportManagement);
+	}
+
+	@Test
+	void attachedFiles() {
+		final var file = new AttachedFile("Beslut.rtf", "ABC", 3);
+
+		assertThat(file.isSameAs(new AttachedFile("beslut.RTF", "abc", 99))).isTrue();
+		assertThat(file.isSameAs(new AttachedFile("beslut.rtf", "abd", 3))).isFalse();
+		assertThat(file.isSameAs(new AttachedFile("annan.rtf", "abc", 3))).isFalse();
+		assertThat(new AttachedFile("beslut.rtf", null, 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isTrue();
+		assertThat(new AttachedFile("beslut.rtf", null, 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 4))).isFalse();
+		assertThat(new AttachedFile("beslut.rtf", null, null).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
+		assertThat(new AttachedFile(null, "abc", 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
+		assertThat(AttachedFile.of(new ErrandAttachment().fileName("a.pdf").hash("h").fileSize(1))).isEqualTo(new AttachedFile("a.pdf", "h", 1));
+	}
+
+	@Test
+	void sha256() {
+		assertThat(FileUploader.sha256("abc".getBytes(StandardCharsets.UTF_8))).isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+	}
+
+	@Test
+	void everyLookupResultButFoundIsAProblem() {
+		Arrays.stream(LookupResult.values())
+			.filter(result -> result != LookupResult.FOUND)
+			.forEach(result -> assertThat(FileProblem.of(result).name()).isEqualTo(result.name()));
+		assertThatThrownBy(() -> FileProblem.of(LookupResult.FOUND)).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void fileProblems() {
+		final var single = new FileProblems();
+		final var several = new FileProblems();
+		Arrays.stream(FileProblem.values()).forEach(problem -> {
+			single.add(problem, "en.pdf");
+			several.add(problem, "ett.pdf");
+			several.add(problem, "två.pdf");
+		});
+		final var singleNotes = new ReportNotes();
+		final var severalNotes = new ReportNotes();
+
+		single.report(singleNotes, "50 MB");
+		several.report(severalNotes, "50 MB");
+
+		assertThat(singleNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
+			"G14 1 fil saknas på filarean (en.pdf)",
+			"G14 1 fil är större än 50 MB och laddas inte upp (en.pdf)",
+			"1 länk hoppas över (en.pdf)",
+			"G14 1 filreferens har ett ogiltigt namn (en.pdf)",
+			"G14 1 fil gick inte att läsa (en.pdf)",
+			"G14 1 fil kunde inte kontrolleras, filarean gick inte att läsa (en.pdf)",
+			"G14 1 fil togs inte emot av SupportManagement (en.pdf)"));
+		assertThat(severalNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
+			"G14 2 filer saknas på filarean (ett.pdf, två.pdf)",
+			"G14 2 filer är större än 50 MB och laddas inte upp (ett.pdf, två.pdf)",
+			"2 länkar hoppas över (ett.pdf, två.pdf)",
+			"G14 2 filreferenser har ett ogiltigt namn (ett.pdf, två.pdf)",
+			"G14 2 filer gick inte att läsa (ett.pdf, två.pdf)",
+			"G14 2 filer kunde inte kontrolleras, filarean gick inte att läsa (ett.pdf, två.pdf)",
+			"G14 2 filer togs inte emot av SupportManagement (ett.pdf, två.pdf)"));
+	}
+
+	@Test
+	void fileProblemsListAtMostTwentyNamesWithNumbersMaskedAndLinksAloneAreNoRuleHit() {
+		final var many = new FileProblems();
+		for (var i = 1; i <= 22; i++) {
+			many.add(FileProblem.MISSING, "fil" + i + ".pdf");
+		}
+		final var masked = new FileProblems();
+		masked.add(FileProblem.MISSING, "Intyg 198001011234.pdf");
+		final var links = new FileProblems();
+		links.add(FileProblem.LINK, "a.url");
+		final var manyNotes = new ReportNotes();
+		final var maskedNotes = new ReportNotes();
+		final var linkNotes = new ReportNotes();
+		final var noNotes = new ReportNotes();
+
+		many.report(manyNotes, "50 MB");
+		masked.report(maskedNotes, "50 MB");
+		links.report(linkNotes, "50 MB");
+		new FileProblems().report(noNotes, "50 MB");
+
+		assertThat(manyNotes.result(Outcome.MIGRERAD, null).detail()).startsWith("G14 22 filer saknas på filarean (fil1.pdf, ").endsWith("fil20.pdf och 2 till)");
+		assertThat(maskedNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("G14 1 fil saknas på filarean (Intyg [nummer].pdf)");
+		assertThat(linkNotes.result(Outcome.MIGRERAD, null).rules()).isEmpty();
+		assertThat(linkNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("1 länk hoppas över (a.url)");
+		assertThat(noNotes.result(Outcome.MIGRERAD, null)).isEqualTo(new ItemResult(Outcome.MIGRERAD, List.of(), null, null));
+	}
+
+	private RunContext context() {
+		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), null, new AtomicBoolean(), source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
+	}
+}
