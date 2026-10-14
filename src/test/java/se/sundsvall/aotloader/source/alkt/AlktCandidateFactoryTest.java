@@ -50,6 +50,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.alkt.AlktTestData.owner;
@@ -287,6 +288,23 @@ class AlktCandidateFactoryTest {
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL));
+	}
+
+	@Test
+	void anOpenErrandThatIssuedThePermitIsHeldForReview() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "556677-8899"))
+			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, null, null))
+			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(new ErrandRow(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), null, null))
+			.errand(new ErrandRow(502, 2, "01", "IAN-2019-1", null, null, null))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 501, diarienummer ian 2019 1"));
 	}
 
 	@Test

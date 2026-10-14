@@ -27,7 +27,7 @@ public enum ReviewRule {
 	NO_ISSUING_ERRAND("G13", "Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt", INFO, true),
 	FILE_NOT_UPLOADED("G14", "En fil som ska följa med finns inte på filarean, eller är för stor, och laddas inte upp", INFO, true),
 	DIARY_NUMBER_MISSING("G15", "Tillståndet saknar diarienummer", BLOCKING, false),
-	DIARY_NUMBER_ON_SEVERAL("G16", "Diarienumret finns på mer än ett tillstånd", BLOCKING, false),
+	DIARY_NUMBER_ON_SEVERAL("G16", "Diarienumret finns på mer än ett tillstånd", BLOCKING, true),
 	SUBTYPE_MISSING("G17", "Tillståndet går inte att ge någon undertyp (avsnitt 7.3.4)", BLOCKING, false),
 	PERMIT_ENDED("G18", "Ett beslut om upphörande eller återkallelse är senare än det senaste beviljande beslutet", NOT_MIGRATED, true),
 	APPLICANT_NOT_OWNER("G19", "Sökanden i det beviljande ärendet är inte nuvarande ägare", BLOCKING, true),
@@ -40,7 +40,8 @@ public enum ReviewRule {
 	PERMIT_ROWS_ON_PLACE("G26", "Serveringsstället har flera rader i Gällande_Tillstånd, och bara en kan migreras", BLOCKING, false),
 	DECISION_MISSING("G27", "Tillståndet pekar på ett beslut som saknas i AlkT", INFO, true),
 	VISIT_DATE_INVALID("G28", "Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört", BLOCKING, true),
-	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false);
+	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false),
+	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true);
 
 	private final String code;
 	private final String description;

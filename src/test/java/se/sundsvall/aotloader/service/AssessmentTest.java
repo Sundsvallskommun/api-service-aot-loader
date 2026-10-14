@@ -8,12 +8,15 @@ import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.RuleHit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
+import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FILE_NOT_UPLOADED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.HOLDER_NOT_IN_PARTY;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 
 class AssessmentTest {
 
@@ -61,6 +64,22 @@ class AssessmentTest {
 		assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
 		assertThat(assessment.reasons()).containsExactly(RuleHit.of(HOLDER_NOT_IN_PARTY));
 		assertThat(assessment.note()).isEqualTo("Undantaget i undantagslistan kan inte tillämpas förrän uppgiften är rättad i källan");
+	}
+
+	@Test
+	void theExceptionListLiftsASharedDiaryNumberAndAnOpenErrandThePermitBuildsOn() {
+		final var hits = List.of(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, "IAN-2019-1"), RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 1"));
+
+		assertThat(Assessment.of(hits, Optional.empty()).decision()).isEqualTo(Decision.REVIEW);
+		assertThat(Assessment.of(hits, Optional.of(ExceptionOutcome.MIGRERA)).decision()).isEqualTo(Decision.MIGRATE);
+	}
+
+	@Test
+	void theExceptionListCannotLiftAnOpenInspectionErrand() {
+		final var assessment = Assessment.of(List.of(RuleHit.of(ERRAND_OPEN)), Optional.of(ExceptionOutcome.MIGRERA));
+
+		assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
+		assertThat(assessment.reasons()).containsExactly(RuleHit.of(ERRAND_OPEN));
 	}
 
 	@Test

@@ -139,6 +139,32 @@ The protection against duplicates does not rest on the local database alone: bef
 systems are searched, the errand on the external tag `migreringsid`, drafts included, the post in PartyAssets on its
 asset id and partyId, and the relation on its source and target.
 
+#### Moving the exception list to production
+
+The file for production starts without the exception list. What the business decided is about the items of the sources,
+which are the same for every environment, so the list is moved with the API: saved while the service runs on the file
+for test, and put back once it runs on the file for production.
+
+```powershell
+$url = 'http://localhost:8080/2281/migrations/exceptions'
+# With the service running on the file for test. The response is saved as it is, since Windows PowerShell 5.1 would
+# read å, ä and ö in it as ISO-8859-1. Git ignores the folder data.
+New-Item -ItemType Directory -Force data | Out-Null
+Invoke-WebRequest $url -UseBasicParsing -OutFile data/exceptions.json
+# With the service running on the file for production
+foreach ($e in (Get-Content data/exceptions.json -Raw -Encoding UTF8 | ConvertFrom-Json)) {
+    # Kept as a date, whether PowerShell reads it as text or as a DateTime
+    $decidedAt = if ($e.decidedAt -is [datetime]) { $e.decidedAt.ToString('yyyy-MM-dd') } else { $e.decidedAt }
+    $body = @{ outcome = $e.outcome; decidedBy = $e.decidedBy; decidedAt = $decidedAt; comment = $e.comment } | ConvertTo-Json
+    Invoke-RestMethod -Method Put "$url/$($e.source)/$($e.kind)/$($e.sourceId)" -ContentType 'application/json; charset=utf-8' `
+        -Body ([Text.Encoding]::UTF8.GetBytes($body)) | Out-Null
+}
+[Text.Encoding]::UTF8.GetString((Invoke-WebRequest $url -UseBasicParsing).RawContentStream.ToArray()) -eq (Get-Content data/exceptions.json -Raw -Encoding UTF8)
+```
+
+The last line prints `True` when the list for production is the same as the one saved. Moving it again changes
+nothing: an item already on the list gets what the saved list says.
+
 ## API
 
 Swagger UI: [http://localhost:8080/api-docs](http://localhost:8080/api-docs)

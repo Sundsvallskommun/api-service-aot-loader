@@ -9,8 +9,8 @@ import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
 /**
- * The texts both sources write the same way into the candidates: the name of an unknown place, labelled lines, and the
- * parameter that marks an errand as migrated.
+ * The texts both sources write the same way into the candidates: the name of an unknown place, labelled lines, an
+ * errand in a rule hit, and the parameter that marks an errand as migrated.
  */
 public final class CandidateTexts {
 
@@ -31,6 +31,13 @@ public final class CandidateTexts {
 	 */
 	public static String issuedLine(final LocalDate issued, final String diaryNumber) {
 		return line("Utfärdat", Texts.joinWords(SourceValues.format(issued), Optional.ofNullable(diaryNumber).map(number -> "(" + number + ")").orElse(null)));
+	}
+
+	/**
+	 * @return an errand of the source as the detail of a rule hit, e.g. "ArendeID 12, diarienummer 2024-1"
+	 */
+	public static String errand(final Integer arendeId, final String diaryNumber) {
+		return Texts.isBlank(diaryNumber) ? "ArendeID " + arendeId : "ArendeID " + arendeId + ", diarienummer " + diaryNumber;
 	}
 
 	/**

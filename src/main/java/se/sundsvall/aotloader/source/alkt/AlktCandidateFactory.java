@@ -69,6 +69,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SERVING_PLACE;
@@ -173,6 +174,7 @@ public final class AlktCandidateFactory {
 		if (issuingErrands.isEmpty()) {
 			hits.add(RuleHit.of(NO_ISSUING_ERRAND));
 		}
+		openErrandHits(issuingErrands, hits);
 		diaryNumberHits(permit, hits);
 		if (permit.utfardandeDatum() == null) {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
@@ -315,6 +317,17 @@ public final class AlktCandidateFactory {
 		if (permit.aretRunt() && periods.hasDatePeriod()) {
 			hits.add(RuleHit.of(PERIOD_ON_ALL_YEAR, periods.periodText()));
 		}
+	}
+
+	/**
+	 * Ä1 for every errand that issued the permit and is not closed in AlkT (decision 16).
+	 */
+	private void openErrandHits(final Set<Integer> issuingErrands, final List<RuleHit> hits) {
+		issuingErrands.stream()
+			.map(snapshot.errands()::get)
+			.filter(Objects::nonNull)
+			.filter(errand -> errand.avslutad() == null)
+			.forEach(errand -> hits.add(RuleHit.of(UNDERLYING_ERRAND_OPEN, CandidateTexts.errand(errand.arendeId(), errand.diarieNr()))));
 	}
 
 	/**

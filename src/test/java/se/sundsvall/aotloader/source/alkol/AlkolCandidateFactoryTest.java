@@ -53,6 +53,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 
 class AlkolCandidateFactoryTest {
@@ -172,7 +173,8 @@ class AlkolCandidateFactoryTest {
 			tuple(SALES_PLACE_CEASED, null),
 			tuple(PERMIT_ENDED, "GTDEÅ 2022-01-01"),
 			tuple(DIARY_NUMBER_MISSING, "det beviljande ärendet saknar diarienummer"),
-			tuple(APPLICANT_NOT_OWNER, null));
+			tuple(APPLICANT_NOT_OWNER, null),
+			tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100"));
 		assertThat(parameters(candidate)).containsEntry("tillstandstyp", List.of("Partihandel")).containsEntry("utfardat", List.of("2019-07-01"));
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("partihandel");
 	}
@@ -207,8 +209,8 @@ class AlkolCandidateFactoryTest {
 			.view(new PermitViewRow(2, true, false, false))
 			.view(new PermitViewRow(3, true, false, false))
 			.view(new PermitViewRow(4, true, false, false))
-			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, null, null))
-			.errand(new ErrandRow(101, 2, "WADE", "ian 1", null, null, null))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(101, 2, "WADE", "ian 1", null, LocalDate.of(2019, 7, 1), null))
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null))
 			.decision(new DecisionRow(201, 101, "GTDE", null, null, null, null));
 
@@ -244,7 +246,7 @@ class AlkolCandidateFactoryTest {
 			.place(place(1, 10).withOwnerCopy("19121212-1212"))
 			.owner(owner(10, "121212+1212"))
 			.view(new PermitViewRow(1, true, false, false))
-			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, null, 50))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), 50))
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null))
 			.applicant(new ContactRow(50, "191212121212", "Tolvan", null, null, null, null, null, null, null));
 
@@ -335,7 +337,7 @@ class AlkolCandidateFactoryTest {
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-ECIGARETTER"), ErrandType.ECIGARETTE_NOTIFICATION),
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-TOBAKSFRI_NIKOTIN"), ErrandType.TOBACCO_FREE_NICOTINE_NOTIFICATION));
 		assertThat(result.candidates().get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
-			.containsExactly(tuple(NOTIFICATION_DATE_MISSING, "E-cigaretter och påfyllningsbehållare, anmälan saknar datum"));
+			.containsExactly(tuple(NOTIFICATION_DATE_MISSING, "E-cigaretter och påfyllningsbehållare, anmälan saknar datum"), tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-1"));
 		assertThat(result.candidates().get(0).labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).title()).isEqualTo("Anmälan om försäljning av tobaksfria nikotinprodukter – Butik 1");
@@ -343,6 +345,24 @@ class AlkolCandidateFactoryTest {
 			assertThat(notice.key()).isEqualTo(new ItemKey(ALKOL, ANMALAN, "2-INGEN"));
 			assertThat(notice.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);
 		});
+	}
+
+	@Test
+	void anOpenErrandThatAPermitOrNotificationBuildsOnIsHeldForReview() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, true, false, false))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), null, null))
+			.errand(new ErrandRow(101, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null))
+			.errand(new ErrandRow(102, 1, "SÖL", null, LocalDate.of(2015, 1, 1), null, null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null));
+
+		final var permit = data.factory().permits().candidates().get(0);
+		final var notification = data.factory().notifications().candidates().get(0);
+
+		assertThat(permit.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-2019-100"));
+		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 102"));
 	}
 
 	@Test

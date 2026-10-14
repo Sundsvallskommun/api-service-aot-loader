@@ -68,6 +68,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SALES_PLACE;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
@@ -194,6 +195,7 @@ public final class AlkolCandidateFactory {
 		final var grant = latestGrant(fsId).orElse(null);
 		final var grantErrand = grant == null ? null : errandsById.get(grant.arendeId());
 		grantHits(fsId, grant, grantErrand, owner, hits);
+		openErrandHits(grantErrand == null ? List.of() : List.of(grantErrand), hits);
 		final var issued = grant == null ? null : Optional.ofNullable(grant.giltigtFrom()).orElse(grant.beslutsDatum());
 		if (grant != null && issued == null) {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
@@ -249,6 +251,7 @@ public final class AlkolCandidateFactory {
 			.filter(event -> product.isEventType(event.handelseTyp()))
 			.toList();
 		final var notified = notifiedDate(place, product, errands, events, hits);
+		openErrandHits(errands, hits);
 
 		final var type = product.errandType(isServing(place, errands, events));
 		final var diaryNumber = latestDiaryNumber(errands, events);
@@ -365,6 +368,15 @@ public final class AlkolCandidateFactory {
 		if (applicantNumber.isPresent() && ownerNumber.isPresent() && !applicantNumber.equals(ownerNumber)) {
 			hits.add(RuleHit.of(APPLICANT_NOT_OWNER));
 		}
+	}
+
+	/**
+	 * Ä1 for every errand the permit or notification builds on that is not closed in AlkOL (decision 23).
+	 */
+	private static void openErrandHits(final List<ErrandRow> errands, final List<RuleHit> hits) {
+		errands.stream()
+			.filter(errand -> errand.avslutad() == null)
+			.forEach(errand -> hits.add(RuleHit.of(UNDERLYING_ERRAND_OPEN, CandidateTexts.errand(errand.arendeId(), errand.diarieNr()))));
 	}
 
 	/**
