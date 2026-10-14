@@ -620,7 +620,7 @@ public final class AlkolCandidateFactory {
 		return switch (type) {
 			case FOLKOL_SALES_NOTIFICATION -> "försäljning av folköl";
 			case FOLKOL_SERVING_NOTIFICATION -> "servering av folköl";
-			case ECIGARETTE_NOTIFICATION -> "försäljning av e-cigaretter och påfyllningsbehållare";
+			case ECIGARETTE_NOTIFICATION -> "försäljning av elektroniska cigaretter och påfyllningsbehållare";
 			case TOBACCO_FREE_NICOTINE_NOTIFICATION -> "försäljning av tobaksfria nikotinprodukter";
 			default -> throw new IllegalArgumentException("Inte en anmälan: " + type);
 		};

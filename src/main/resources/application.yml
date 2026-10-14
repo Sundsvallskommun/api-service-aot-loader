@@ -153,7 +153,7 @@ aot-loader:
       labels:
         - CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION
       asset-type: ECigaretteSalesNotification
-      asset-title: Anmälan om försäljning av e-cigaretter och påfyllningsbehållare
+      asset-title: Anmälan om försäljning av elektroniska cigaretter och påfyllningsbehållare
     tobacco-free-nicotine-notification:
       category: TOBACCO
       type: TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION

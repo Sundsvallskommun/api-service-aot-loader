@@ -392,7 +392,7 @@ Parametrarna följer samma regler som ärendets övriga: nyckeln högst 255 teck
 | `stakeholders`    | Tillståndshavaren, dess kontaktperson med rollen `CONTACT` och personerna med betydande inflytande med rollen `CONTACT` och parametern `PBI` (avsnitt 7.2). Serveringsstället är parametrar på ärendet (avsnitt 7.2.1).                                                                                                                                                 |
 | `parameters`      | Enligt tabellen nedan                                                                                                                                                                                                                                                                                                                                                   |
 
-**Kategori och typ (beslut 5, bestämt 13 oktober 2026).** Kategorin är huvudområdet och typen ärendesorten i etikettträdet, som för nya ärenden av samma sort. pw-alkt ger sina åtgärdsärenden på samma sätt `INSPECTION` och `ACTION_ERRAND`. Värdena stäms av mot kategorierna och typerna i AOT före den första skarpa körningen.
+**Kategori och typ (beslut 5, bestämt 13 oktober 2026).** Kategorin är huvudområdet och typen ärendesorten i etikettträdet, där etiketterna är klassade som kategori och typ, som för nya ärenden av samma sort. pw-alkt ger ett åtgärdsärende samma kategori och typ som tillsynsärendet det skapas ur. Kategori och typ är inte obligatoriska i AOT, eftersom namespacet inte kontrollerar dem. Värdena stäms av mot nya ärenden från e-tjänsterna före den första skarpa körningen.
 
 |                       Ärendetyp                       |   Kategori   |                    Typ                     |
 |-------------------------------------------------------|--------------|--------------------------------------------|
@@ -586,7 +586,7 @@ Samma längdgräns gäller pw-alkt. Där kan `conditions` bli längre än 255 te
 **Läget i dag.**
 - licensed-business är registret över serveringsställenummer. Ett nummer tilldelas en tillståndshavare (organisationsnummer och namn), ett serveringsställe och en adress under en period. Registret har ingen koppling till ärenden i SupportManagement eller tillstånd i PartyAssets.
 - Registret fylls en gång från Excel-registret, konverterat till CSV, via licensed-business importtjänst.
-- pw-alkt har kod som tilldelar ett nummer i beslutsfasen: den slår upp eller skapar adressen, tar ett ledigt nummer eller skapar ett nytt, och skapar tilldelningen (`LicensedBusinessIntegration.assignRestaurantNumber`). Koden anropas inte någonstans på `origin/main`, så nya tillstånd får i dag inget nummer lagrat i SupportManagement eller PartyAssets.
+- pw-alkt tilldelar sedan 6 oktober 2026 ett nummer i beslutsfasen för serveringstillstånd (`AssignRestaurantNumberWorker` i `alcohol-serving.bpmn`). Den tar numret från ärendets parameter, eller ett ledigt eller nytt nummer, slår upp eller skapar adressen och skapar tilldelningen i licensed-business. Numret sparas på tillståndet i PartyAssets som `premisesRestaurantNumber`, samma nyckel som migreringen använder.
 - SupportManagement har inget eget fält för serveringsställenummer.
 
 **Vad migreringen gör.**
