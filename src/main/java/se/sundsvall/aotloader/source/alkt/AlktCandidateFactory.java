@@ -32,6 +32,8 @@ import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
+import se.sundsvall.aotloader.source.InspectionVisitCandidates;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
@@ -79,8 +81,8 @@ import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GR
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_POSITION;
 
 /**
- * Turns what was read from AlkT into candidates: the current serving permits (sections 7.2–7.6) and the inspection
- * errands (section 7.7), with the review rules that AlkT itself shows.
+ * Turns what was read from AlkT into candidates: the current serving permits (sections 7.2–7.6), the inspection
+ * errands (section 7.7) and the inspection visits (section 7.7.2), with the review rules that AlkT itself shows.
  */
 public final class AlktCandidateFactory {
 
@@ -141,6 +143,18 @@ public final class AlktCandidateFactory {
 		final var candidates = snapshot.errands().values().stream()
 			.filter(errand -> inspections.selects(errand.arendeTyp(), permitRowsByPlace.containsKey(errand.objektId())))
 			.map(errand -> inspectionErrand(errand, inspections))
+			.toList();
+		return new ReaderResult(candidates, List.of());
+	}
+
+	/**
+	 * @return the inspection visits, only of places with a current permit when the settings say so
+	 */
+	public ReaderResult visits() {
+		final var visits = new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, properties, UNKNOWN_SERVING_PLACE, "tillsynsbesöket saknar serveringsställe", today);
+		final var candidates = snapshot.visits().visits().stream()
+			.filter(visit -> visits.selects(permitRowsByPlace.containsKey(visit.objektId())))
+			.map(visit -> visit(visit, visits))
 			.toList();
 		return new ReaderResult(candidates, List.of());
 	}
@@ -227,6 +241,16 @@ public final class AlktCandidateFactory {
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions)
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
 			.files(errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames)).build())
+			.build();
+	}
+
+	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
+		final var place = placeOf(visit.objektId());
+		final var files = new FileList(sharedFileNames);
+		snapshot.visits().forEachFile(visit, files::add);
+		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
+			.placeNumber(place == null ? null : place.restaurangBeteckning())
+			.files(files.build())
 			.build();
 	}
 
@@ -415,8 +439,8 @@ public final class AlktCandidateFactory {
 	}
 
 	/**
-	 * Every file reference of AlkT with the place it belongs to: the place of its errand, or the errand itself when it
-	 * has no place, and the place's own files.
+	 * Every file reference of AlkT with the place it belongs to: the place of its errand or visit, or the errand or visit
+	 * itself when it has no place, and the place's own files.
 	 */
 	private static SharedFileNames sharedFileNames(final AlktSnapshot snapshot, final AotLoaderProperties properties) {
 		final var names = SharedFileNames.builder(properties.fileArea(ALKT));
@@ -431,6 +455,10 @@ public final class AlktCandidateFactory {
 		snapshot.places().forEach((objektId, place) -> names
 			.add("objekt:" + objektId, place.bifogadfil(), ATTACHMENTS)
 			.add("objekt:" + objektId, place.bifogadfil2(), ATTACHMENTS));
+		snapshot.visits().visits().forEach(visit -> {
+			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : "objekt:" + visit.objektId();
+			snapshot.visits().forEachFile(visit, (name, folder) -> names.add(place, name, folder));
+		});
 		return names.build();
 	}
 

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
 
 import static java.util.Collections.emptyList;
@@ -24,6 +25,7 @@ import static java.util.Collections.emptyMap;
  * @param persons     the active persons with significant influence, by AgarID
  * @param applicants  the applicants of the inspection errands, by SokandeID
  * @param codeTexts   the texts of the code lists, by code type and code
+ * @param visits      the inspection visits, with the code lists of kinds and remarks (code types L and V)
  */
 public record AlktSnapshot(
 	List<PermitRow> permits,
@@ -35,14 +37,17 @@ public record AlktSnapshot(
 	Map<Integer, List<FileRow>> errandFiles,
 	Map<Integer, List<PersonRow>> persons,
 	Map<Integer, ContactRow> applicants,
-	Map<String, Map<String, String>> codeTexts) {
+	Map<String, Map<String, String>> codeTexts,
+	InspectionVisitRows visits) {
 
 	public static final String CODE_TYPE_ERRAND = "A";
 	public static final String CODE_TYPE_DECISION = "B";
 	public static final String CODE_TYPE_AREA = "G";
+	public static final String CODE_TYPE_INSPECTION_KIND = "L";
 	public static final String CODE_TYPE_CONDITION = "O";
 	public static final String CODE_TYPE_POSITION = "P";
 	public static final String CODE_TYPE_PLACE_GROUP = "Q";
+	public static final String CODE_TYPE_REMARK = "V";
 
 	@Override
 	public String toString() {

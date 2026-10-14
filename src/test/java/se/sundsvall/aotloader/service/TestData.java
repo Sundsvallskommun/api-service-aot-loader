@@ -40,6 +40,7 @@ public final class TestData {
 	public static final LegalId HOLDER_ID = new LegalId("5566778899", ENTERPRISE);
 	public static final LegalId PERSON_ID = new LegalId("198001011234", PRIVATE);
 	public static final String INTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION";
+	public static final String EXTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION";
 
 	private static final Map<ErrandType, List<String>> LABELS = Map.of(
 		ErrandType.TOBACCO_PERMIT, List.of("CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION"),
@@ -48,7 +49,9 @@ public final class TestData {
 		ErrandType.ECIGARETTE_NOTIFICATION, List.of("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION"),
 		ErrandType.TOBACCO_FREE_NICOTINE_NOTIFICATION, List.of("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION"),
 		ErrandType.ALCOHOL_INSPECTION, List.of("TAGROOT/ALCOHOL_INSPECTION"),
-		ErrandType.TOBACCO_INSPECTION, List.of("TAGROOT/TOBACCO_INSPECTION"));
+		ErrandType.TOBACCO_INSPECTION, List.of("TAGROOT/TOBACCO_INSPECTION"),
+		ErrandType.ALCOHOL_INSPECTION_VISIT, List.of(EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION"),
+		ErrandType.TOBACCO_INSPECTION_VISIT, List.of(EXTERNAL_INSPECTION, "TAGROOT/TOBACCO_INSPECTION"));
 	private static final Map<ServingPermitSubtype, String> SUBTYPE_LABELS = Arrays.stream(ServingPermitSubtype.values())
 		.collect(Collectors.toMap(identity(), subtype -> "CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/" + subtype.name()));
 	private static final Map<ErrandType, Map<String, String>> SOURCE_ERRAND_TYPES = Map.of(

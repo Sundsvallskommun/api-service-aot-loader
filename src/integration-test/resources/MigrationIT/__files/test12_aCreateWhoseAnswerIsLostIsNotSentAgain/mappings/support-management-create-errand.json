@@ -36,13 +36,13 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.category",
-					"equalTo": "NOTIFICATION"
+					"equalTo": "ALCOHOL"
 				}
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.type",
-					"equalTo": "FOLKOL_SALES"
+					"equalTo": "FOLKOL_SALES_NOTIFICATION"
 				}
 			},
 			{

@@ -27,7 +27,6 @@ import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
-import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Person;
@@ -205,10 +204,10 @@ public class TargetMapper {
 	}
 
 	/**
-	 * @return the role of the holder: the permit holder, or for an inspection errand the holder it concerned
+	 * @return the role of the holder: the permit holder, or for an inspection errand or visit the holder it concerned
 	 */
 	public String holderRole(final ErrandType type) {
-		return type.getKind() == Kind.TILLSYN ? properties.roles().inspectionHolder() : properties.roles().permitHolder();
+		return type.getKind().isInspection() ? properties.roles().inspectionHolder() : properties.roles().permitHolder();
 	}
 
 	private ResourceIdentifier toResourceIdentifier(final String errandId) {

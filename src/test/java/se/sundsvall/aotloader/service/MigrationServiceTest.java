@@ -92,7 +92,7 @@ class MigrationServiceTest {
 		assertThat(run.dryRun()).isTrue();
 		assertThat(run.status()).isEqualTo(RunStatus.RUNNING);
 		assertThat(run.sources()).containsExactly("ALKT", "ALKOL");
-		assertThat(run.kinds()).containsExactly("TILLSTAND", "ANMALAN", "TILLSYN");
+		assertThat(run.kinds()).containsExactly("TILLSTAND", "ANMALAN", "TILLSYN", "TILLSYNSBESOK");
 		assertThat(lock.holder()).contains(run.id());
 		final var task = ArgumentCaptor.forClass(Runnable.class);
 		verify(executor).execute(task.capture());

@@ -42,13 +42,13 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.category",
-					"equalTo": "PERMIT"
+					"equalTo": "ALCOHOL"
 				}
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.type",
-					"equalTo": "SERVING_PERMIT"
+					"equalTo": "SERVING_PERMIT_APPLICATION"
 				}
 			},
 			{

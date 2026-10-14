@@ -35,6 +35,8 @@ import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
+import se.sundsvall.aotloader.source.InspectionVisitCandidates;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
@@ -73,7 +75,7 @@ import static se.sundsvall.aotloader.source.CandidateTexts.line;
 /**
  * Turns what was read from AlkOL, the database of tobacco, folköl, e-cigarettes and tobacco-free nicotine products,
  * into candidates: the tobacco permits of the view FS_GT_Tobak, one notification per active sales place and product,
- * and the inspection errands.
+ * and the inspection errands and visits.
  */
 public final class AlkolCandidateFactory {
 
@@ -155,13 +157,27 @@ public final class AlkolCandidateFactory {
 
 	/**
 	 * @return the inspection errands of the errand types in the settings, only of places with a current permit when the
-	 *         settings say so
+	 *         settings say so, and never of a sales place that has ceased (section 7.7)
 	 */
 	public ReaderResult inspections() {
 		final var inspections = new InspectionCandidates(ErrandType.TOBACCO_INSPECTION, properties, UNKNOWN_SALES_PLACE, "tillsynsärendet saknar försäljningsställe", today);
 		return new ReaderResult(snapshot.errands().stream()
+			.filter(errand -> !hasCeased(errand.fsId()))
 			.filter(errand -> inspections.selects(errand.arendetyp(), hasPermit(errand.fsId())))
 			.map(errand -> inspectionErrand(errand, inspections))
+			.toList(), List.of());
+	}
+
+	/**
+	 * @return the inspection visits, only of places with a current permit when the settings say so, and never of a sales
+	 *         place that has ceased (section 7.7.2)
+	 */
+	public ReaderResult visits() {
+		final var visits = new InspectionVisitCandidates(ErrandType.TOBACCO_INSPECTION_VISIT, properties, UNKNOWN_SALES_PLACE, "tillsynsbesöket saknar försäljningsställe", today);
+		return new ReaderResult(snapshot.visits().visits().stream()
+			.filter(visit -> !hasCeased(visit.objektId()))
+			.filter(visit -> visits.selects(hasPermit(visit.objektId())))
+			.map(visit -> visit(visit, visits))
 			.toList(), List.of());
 	}
 
@@ -288,6 +304,15 @@ public final class AlkolCandidateFactory {
 
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions)
 			.files(errandFiles(List.of(errand.arendeId())))
+			.build();
+	}
+
+	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
+		final var place = visit.objektId() == null ? null : placesById.get(visit.objektId());
+		final var files = new FileList(sharedFileNames);
+		snapshot.visits().forEachFile(visit, files::add);
+		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
+			.files(files.build())
 			.build();
 	}
 
@@ -418,6 +443,10 @@ public final class AlkolCandidateFactory {
 		return fsId != null && snapshot.permitView().containsKey(fsId);
 	}
 
+	private boolean hasCeased(final Integer fsId) {
+		return fsId != null && Optional.ofNullable(placesById.get(fsId)).map(SalesPlaceRow::upphort).orElse(false);
+	}
+
 	private ContactRow ownerOf(final SalesPlaceRow place) {
 		return place == null || place.agarId() == null ? null : snapshot.owners().get(place.agarId());
 	}
@@ -538,6 +567,10 @@ public final class AlkolCandidateFactory {
 		snapshot.decisions().forEach(decision -> {
 			final var place = placeKeyOfErrand(decision.arendeId(), "beslut:" + decision.beslutsId());
 			names.add(place, decision.worddokument(), DOCUMENTS).add(place, decision.bifogadfil(), ATTACHMENTS);
+		});
+		snapshot.visits().visits().forEach(visit -> {
+			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : "fs:" + visit.objektId();
+			snapshot.visits().forEachFile(visit, (name, folder) -> names.add(place, name, folder));
 		});
 		return names.build();
 	}

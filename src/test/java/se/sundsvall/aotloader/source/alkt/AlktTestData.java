@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
@@ -42,6 +45,8 @@ final class AlktTestData {
 		texts.put("O", Map.of("0100", "Krav på bordsservering"));
 		texts.put("P", Map.of("VD", "Verkställande direktör"));
 		texts.put("Q", Map.of("12", "Kvartersrestaurang", "UNG", "Ungdomlig målgrupp"));
+		texts.put("L", Map.of("04", "Rutintillsyn"));
+		texts.put("V", Map.of("05", "Servering till minderårig"));
 		return texts;
 	}
 
@@ -64,6 +69,9 @@ final class AlktTestData {
 		private final Map<Integer, List<FileRow>> files = new HashMap<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
+		private final List<VisitRow> visits = new ArrayList<>();
+		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
+		private final Map<Integer, List<String>> visitFiles = new HashMap<>();
 
 		SnapshotBuilder permit(final PermitRow row) {
 			permits.add(row);
@@ -110,8 +118,25 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder visit(final VisitRow row) {
+			visits.add(row);
+			return this;
+		}
+
+		SnapshotBuilder remark(final RemarkRow row) {
+			remarks.computeIfAbsent(row.tillfalleNr(), _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		SnapshotBuilder visitFile(final int tillfalleNr, final String name) {
+			visitFiles.computeIfAbsent(tillfalleNr, _ -> new ArrayList<>()).add(name);
+			return this;
+		}
+
 		AlktSnapshot build() {
-			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, persons, applicants, codeTexts());
+			final var texts = codeTexts();
+			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, persons, applicants, texts,
+				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V")));
 		}
 	}
 

@@ -39,6 +39,7 @@ public enum ReviewRule {
 	SALES_PLACE_CEASED("G25", "Försäljningsstället är markerat som upphört men har gällande tobakstillstånd", NOT_MIGRATED, true),
 	PERMIT_ROWS_ON_PLACE("G26", "Serveringsstället har flera rader i Gällande_Tillstånd, och bara en kan migreras", BLOCKING, false),
 	DECISION_MISSING("G27", "Tillståndet pekar på ett beslut som saknas i AlkT", INFO, true),
+	VISIT_DATE_INVALID("G28", "Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört", BLOCKING, true),
 	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false);
 
 	private final String code;

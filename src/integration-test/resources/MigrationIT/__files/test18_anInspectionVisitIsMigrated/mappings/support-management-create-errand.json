@@ -1,0 +1,101 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.lifecycle",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Tillsynsbesök – Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "INSPECTION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "EXTERNAL_INSPECTION"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKT-TILLSYNSBESOK-900')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-external-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-alcohol-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsart' && @.values[0] == 'Rutintillsyn')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'besokstid' && @.values[0] == '21:30–23:00')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[0] == 'Servering till minderårig: Ungdomar i baren')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[1] == 'Servering utom tillåten serveringstid')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.values[0] == '12345678')]"
+			},
+			{
+				"matches": "(?s).*Anteckning: Mycket folk i baren[.].*"
+			},
+			{
+				"doesNotMatch": "(?s).*\"role\".*"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010"
+		}
+	}
+}

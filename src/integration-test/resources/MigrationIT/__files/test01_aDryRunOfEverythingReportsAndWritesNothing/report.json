@@ -69,6 +69,15 @@
 		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
 	},
 	{
+		"source": "ALKT",
+		"kind": "TILLSYNSBESOK",
+		"sourceId": "900",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
+	},
+	{
 		"source": "ALKOL",
 		"kind": "TILLSTAND",
 		"sourceId": "1",
@@ -92,5 +101,13 @@
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "",
 		"detail": "Kommun 2262 (område Timrå)"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "TILLSYNSBESOK",
+		"sourceId": "950",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
 	}
 ]

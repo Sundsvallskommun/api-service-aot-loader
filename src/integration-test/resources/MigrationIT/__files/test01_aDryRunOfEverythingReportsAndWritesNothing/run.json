@@ -9,13 +9,14 @@
 	"kinds": [
 		"TILLSTAND",
 		"ANMALAN",
-		"TILLSYN"
+		"TILLSYN",
+		"TILLSYNSBESOK"
 	],
 	"status": "COMPLETED",
 	"started": "${json-unit.any-string}",
 	"finished": "${json-unit.any-string}",
 	"outcomes": {
-		"SKULLE_MIGRERAS": 9,
+		"SKULLE_MIGRERAS": 11,
 		"GRANSKAS": 1
 	}
 }

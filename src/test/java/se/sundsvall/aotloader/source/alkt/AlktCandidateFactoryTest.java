@@ -15,6 +15,8 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
@@ -27,6 +29,7 @@ import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTA
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
@@ -482,6 +485,80 @@ class AlktCandidateFactoryTest {
 			assertThat(candidate.title()).isEqualTo("Tillsyn, ifrågasatt åtgärd – okänt serveringsställe");
 			assertThat(candidate.labelPaths()).containsExactly("TAGROOT/ALCOHOL_INSPECTION", "X");
 		});
+	}
+
+	@Test
+	void inspectionVisits() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.permit(permit(5).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 12, "12345679"))
+			.owner(owner(10, "556677-8899"))
+			.visit(new VisitRow(900, 1, LocalDate.of(2023, 11, 4), "21.30", "23", "04", "Mycket folk i baren.", "66666666.rtf", "protokoll.pdf"))
+			.visit(new VisitRow(901, 2, LocalDate.of(2023, 11, 4), null, null, "04", null, null, "PROTOKOLL.pdf"))
+			.visit(new VisitRow(902, 1, null, null, null, null, null, null, null))
+			.visit(new VisitRow(903, 5, LocalDate.of(2022, 3, 1), "09:15:00", "10:00:00", "99", null, null, null))
+			.remark(new RemarkRow(900, "05", "Ungdomar i baren", "bild.jpg"))
+			.remark(new RemarkRow(900, "77", null, null))
+			.visitFile(900, "anteckningar.pdf")
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).visits().candidates();
+
+		assertThat(candidates).extracting(Candidate::key)
+			.containsExactly(new ItemKey(ALKT, TILLSYNSBESOK, "900"), new ItemKey(ALKT, TILLSYNSBESOK, "902"), new ItemKey(ALKT, TILLSYNSBESOK, "903"));
+		final var visit = candidates.getFirst();
+		assertThat(visit.type()).isEqualTo(ErrandType.ALCOHOL_INSPECTION_VISIT);
+		assertThat(visit.ruleHits()).isEmpty();
+		assertThat(visit.holder()).isNull();
+		assertThat(visit.permitLink()).isNull();
+		assertThat(visit.placeName()).isEqualTo("Restaurang 1");
+		assertThat(visit.placeNumber()).isEqualTo("12345678");
+		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Restaurang 1");
+		assertThat(visit.labelPaths()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
+		assertThat(visit.externalTags()).isEmpty();
+		assertThat(visit.asset()).isNull();
+		assertThat(visit.description()).isEqualTo("""
+			Tillsynsbesök på Restaurang 1 2023-11-04, migrerat från AlkT.
+			Tillsynsart: Rutintillsyn
+			Tid: 21:30–23
+			Anmärkningar:
+			- Servering till minderårig: Ungdomar i baren
+			- 77
+			Anteckning: Mycket folk i baren.""");
+		assertThat(parameters(visit))
+			.containsEntry("alktTillsynsbesokId", List.of("900"))
+			.containsEntry("besoksdatum", List.of("2023-11-04"))
+			.containsEntry("besokstid", List.of("21:30–23"))
+			.containsEntry("tillsynsart", List.of("Rutintillsyn"))
+			.containsEntry("anmarkningar", List.of("Servering till minderårig: Ungdomar i baren", "77"))
+			.containsEntry("anteckning", List.of("Mycket folk i baren."));
+		// The attachment shares its name with the visit to another place, which is not migrated but still refers to it
+		assertThat(visit.files()).containsExactly(
+			new FileReference("66666666.rtf", DOCUMENTS),
+			new FileReference("protokoll.pdf", ATTACHMENTS, true),
+			new FileReference("anteckningar.pdf", ATTACHMENTS),
+			new FileReference("bild.jpg", ATTACHMENTS));
+
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
+			.containsExactly("G28 Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: datum saknas");
+		assertThat(candidates.get(1).description()).isEqualTo("Tillsynsbesök på Restaurang 1, migrerat från AlkT.");
+		final var withoutPlace = candidates.get(2);
+		assertThat(withoutPlace.ruleHits()).extracting(RuleHit::toReportText).containsExactly("G1 Tillståndet saknar serveringsställe: tillsynsbesöket saknar serveringsställe");
+		assertThat(withoutPlace.title()).isEqualTo("Tillsynsbesök – okänt serveringsställe");
+		assertThat(parameters(withoutPlace)).containsEntry("tillsynsart", List.of("99")).containsEntry("besokstid", List.of("09:15–10:00")).doesNotContainKeys("anmarkningar", "anteckning");
+	}
+
+	@Test
+	void inspectionVisitsOfAllPlaces() {
+		final var snapshot = snapshot()
+			.visit(new VisitRow(901, 2, LocalDate.of(2023, 11, 4), null, null, null, null, null, null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, TestData.properties(ErrandType.ALCOHOL_INSPECTION_VISIT, false, Map.of())).visits().candidates();
+
+		assertThat(candidates).singleElement().satisfies(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactly(ReviewRule.PLACE_MISSING));
 	}
 
 	private static Map<String, List<String>> parameters(final Candidate candidate) {

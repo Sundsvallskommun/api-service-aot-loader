@@ -4,7 +4,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * The identity of a source item: its source, its kind and its id in the source. The id is ObjektID in AlkT and FSID in
- * AlkOL for permits, FSID and product for notifications, and ArendeID for inspection errands.
+ * AlkOL for permits, FSID and product for notifications, ArendeID for inspection errands and TillsynsTillfalleNr for
+ * inspection visits.
  *
  * @param source   the source system
  * @param kind     the kind of item

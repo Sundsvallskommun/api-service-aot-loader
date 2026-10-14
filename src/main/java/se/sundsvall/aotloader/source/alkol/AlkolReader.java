@@ -15,6 +15,7 @@ import se.sundsvall.aotloader.source.SourceReader;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 
 @Component
 public class AlkolReader implements SourceReader {
@@ -36,7 +37,7 @@ public class AlkolReader implements SourceReader {
 
 	@Override
 	public Set<Kind> kinds() {
-		return Set.of(TILLSTAND, ANMALAN, TILLSYN);
+		return Set.of(TILLSTAND, ANMALAN, TILLSYN, TILLSYNSBESOK);
 	}
 
 	@Override
@@ -51,6 +52,9 @@ public class AlkolReader implements SourceReader {
 		}
 		if (kinds.contains(TILLSYN)) {
 			results.add(factory.inspections());
+		}
+		if (kinds.contains(TILLSYNSBESOK)) {
+			results.add(factory.visits());
 		}
 		return ReaderResults.combine(results);
 	}

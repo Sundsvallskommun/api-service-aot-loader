@@ -42,7 +42,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.type",
-					"equalTo": "ALCOHOL_INSPECTION"
+					"equalTo": "INTERNAL_INSPECTION"
 				}
 			},
 			{
@@ -58,7 +58,7 @@
 				"matchesJsonPath": "$.labels[?(@.id == 'label-internal-inspection')]"
 			},
 			{
-				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001')]"
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001')]"
 			},
 			{
 				"doesNotMatch": "(?s).*referredFrom.*"

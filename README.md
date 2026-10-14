@@ -102,7 +102,8 @@ The settings that are the same everywhere are in `application.yml` under `aot-lo
   - the labels by their resource path (section 7.3.4): `labels` for every errand of the type, `subtype-labels` for
     the subtypes of a serving permit, and `source-errand-types` for the errand types in the source that are
     inspection errands, with the label of each (section 7.7);
-  - for inspection errands, `only-places-with-permit`: only those of places with a current permit (section 7.7);
+  - for inspection errands and visits, `only-places-with-permit`: only those of places with a current permit (section 7.7,
+    decision 29). A sales place in AlkOL marked as ceased gets none, whatever the setting says (decision 31);
   - the type and title of the post in PartyAssets (decisions 4 and 20). The types are those pw-alkt gives the permits
     it creates, e.g. `AlcoholServingPermit`.
 
@@ -118,10 +119,10 @@ The settings that are the same everywhere are in `application.yml` under `aot-lo
 
 - **Roles:** the permit holder is `PRIMARY`, and the persons with significant influence are `CONTACT` with the parameter
   `PBI` = `true` (decision 15). The holder's contact person is a `CONTACT` of its own, without `PBI`.
-  `inspection-holder` is the role of the holder an inspection errand concerned (section 7.7).
+  `inspection-holder` is the role of the holder an inspection errand concerned: `CONTACT`, since with `PRIMARY` the
+  errand would show on Mina sidor (decision 27). An inspection visit has no holder (section 7.7.2).
 
-A setting left blank stops a real run, and a dry run lists it. `inspection-holder` is blank until its decision is made
-(section 16 of the solution document).
+A setting left blank stops a real run, and a dry run lists it.
 
 ### The local database
 
@@ -142,19 +143,20 @@ asset id and partyId, and the relation on its source and target.
 
 Swagger UI: [http://localhost:8080/api-docs](http://localhost:8080/api-docs)
 
-|                               Call                               |                                                                                                                          What it does                                                                                                                           |
-|------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `POST /2281/migrations/runs`                                     | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`) and `limit`. A field it does not know, or an empty list, is refused with 400 |
-| `GET /2281/migrations/runs/{runId}`                              | The status of the run, with the number of items per outcome                                                                                                                                                                                                     |
-| `POST /2281/migrations/runs/{runId}/stop`                        | Stops the run before its next item                                                                                                                                                                                                                              |
-| `GET /2281/migrations/runs/{runId}/report`                       | The report: one row per item, with the review rules and what went wrong                                                                                                                                                                                         |
-| `GET /2281/migrations/runs/{runId}/report.csv`                   | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                                                                                              |
-| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`  | Migrates a single item and waits for it                                                                                                                                                                                                                         |
-| `GET /2281/migrations/items`                                     | The status table                                                                                                                                                                                                                                                |
-| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}` | The exception list (section 7.1.1)                                                                                                                                                                                                                              |
+|                               Call                               |                                                                                                                                   What it does                                                                                                                                   |
+|------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST /2281/migrations/runs`                                     | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`, `TILLSYNSBESOK`) and `limit`. A field it does not know, or an empty list, is refused with 400 |
+| `GET /2281/migrations/runs/{runId}`                              | The status of the run, with the number of items per outcome                                                                                                                                                                                                                      |
+| `POST /2281/migrations/runs/{runId}/stop`                        | Stops the run before its next item                                                                                                                                                                                                                                               |
+| `GET /2281/migrations/runs/{runId}/report`                       | The report: one row per item, with the review rules and what went wrong                                                                                                                                                                                                          |
+| `GET /2281/migrations/runs/{runId}/report.csv`                   | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                                                                                                               |
+| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`  | Migrates a single item and waits for it                                                                                                                                                                                                                                          |
+| `GET /2281/migrations/items`                                     | The status table                                                                                                                                                                                                                                                                 |
+| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}` | The exception list (section 7.1.1)                                                                                                                                                                                                                                               |
 
 The id of an item is `ObjektID` in AlkT or `FSID` in AlkOL for a permit, `FSID` and product for a
-notification (`1234-FOLKOL`, `1234-ECIGARETTER`, `1234-TOBAKSFRI_NIKOTIN`), and `ArendeID` for an inspection errand.
+notification (`1234-FOLKOL`, `1234-ECIGARETTER`, `1234-TOBAKSFRI_NIKOTIN`), `ArendeID` for an inspection errand, and
+`TillsynsTillfalleNr` for an inspection visit.
 
 Only one run at a time: a second call while a run is running gets 409. Starting a run again never migrates an item
 twice; an item already migrated is left as it is, and an item that stopped half way continues from where it stopped.

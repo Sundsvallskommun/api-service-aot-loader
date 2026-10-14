@@ -9,7 +9,8 @@
 	"kinds": [
 		"TILLSTAND",
 		"ANMALAN",
-		"TILLSYN"
+		"TILLSYN",
+		"TILLSYNSBESOK"
 	],
 	"status": "RUNNING",
 	"started": "${json-unit.any-string}",

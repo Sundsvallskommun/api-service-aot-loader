@@ -64,6 +64,7 @@ class MigrationIT extends AbstractAppTest {
 	private static final String SENT_BY = "alkt-migration; type=migration";
 	private static final String PERMIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000001";
 	private static final String INTERRUPTED_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000006";
+	private static final String VISIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000010";
 	private static final Pattern LOG_EVENT = Pattern.compile("(?m)^(?=\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} \\[)");
 	private static final Path FILE_AREA = createFileArea();
 	private static final Map<String, String> FILE_AREA_BEFORE = snapshot(FILE_AREA);
@@ -102,6 +103,8 @@ class MigrationIT extends AbstractAppTest {
 			.filter(event -> !event.lines().findFirst().orElse("").contains(" WireMock."))
 			.collect(Collectors.joining());
 		assertThat(log).doesNotContain("191212121212", "1212121212", "121212-1212", "5566778899", "556677-8899", "Tolvan", "Testbolaget", "Förra ägaren", "Kontakt Person", "Avgången");
+		// The free text of the visits may name persons as well
+		assertThat(log).doesNotContain("Mycket folk", "Ungdomar i baren", "Köpet nekades");
 	}
 
 	/**
@@ -331,7 +334,32 @@ class MigrationIT extends AbstractAppTest {
 	}
 
 	@Test
-	void test18_theFileAreaIsUnchanged() {
+	void test18_anInspectionVisitIsMigrated() {
+		migrateItem("ALKT/TILLSYNSBESOK/900", false);
+
+		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + VISIT_ERRAND_ID + "/attachments")));
+		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName()).containsExactlyInAnyOrder("besöksrapport.pdf", "foto.jpg");
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*"))))
+			.as("A visit has no holder to look up, no permit and no relation")
+			.isEmpty();
+		verifyStubs();
+
+		itemIs("ALKT/TILLSYNSBESOK/900");
+	}
+
+	@Test
+	void test19_aVisitOfAlkolIsMigrated() {
+		// AlkOL keeps the times of a visit as datetime, and its remarks have no note
+		migrateItem("ALKOL/TILLSYNSBESOK/950", false);
+
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*")))).isEmpty();
+		verifyStubs();
+
+		itemIs("ALKOL/TILLSYNSBESOK/950");
+	}
+
+	@Test
+	void test20_theFileAreaIsUnchanged() {
 		assertThat(snapshot(FILE_AREA)).isEqualTo(FILE_AREA_BEFORE);
 	}
 
@@ -406,6 +434,8 @@ class MigrationIT extends AbstractAppTest {
 			Files.writeString(root.resolve("alkt-bilder").resolve("ritning våning 2.pdf"), "%PDF-1.4 ritning");
 			Files.writeString(root.resolve("alkt-bilder").resolve("fasad.jpg"), "fasad");
 			Files.writeString(root.resolve("alkt-bilder").resolve("Översiktskarta.pdf"), "%PDF-1.4 karta");
+			Files.writeString(root.resolve("alkt-bilder").resolve("besöksrapport.pdf"), "%PDF-1.4 besök");
+			Files.writeString(root.resolve("alkt-bilder").resolve("foto.jpg"), "foto");
 			Files.writeString(root.resolve("alkol").resolve("33333333.rtf"), "{\\rtf1 Tobak}");
 			root.toFile().deleteOnExit();
 			return root;

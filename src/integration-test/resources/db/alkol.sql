@@ -71,3 +71,22 @@ INSERT INTO dbo.Kategorier VALUES ('KIO', 'Kiosk')
 INSERT INTO dbo.[Områden] VALUES ('12', 'City')
 INSERT INTO dbo.[Områden] VALUES ('13', 'Timrå')
 GO
+-- An inspection visit of the sales place with a tobacco permit (section 7.7.2). AlkOL keeps the times as datetime.
+CREATE TABLE dbo.[Tillsyn_Tillfälle] (
+    TillsynsTillfalleNr int NOT NULL PRIMARY KEY, ObjektId int NULL, StartDatum datetime NULL, StartTid datetime NULL, SlutTid datetime NULL,
+    Tillsynsform nvarchar(8) NULL, Fritext nvarchar(MAX) NULL, WordDokument varchar(50) NULL, Bifogadfil varchar(200) NULL
+)
+GO
+CREATE TABLE dbo.[Tillsyn_Anmärkningar] (TillsynsTillfalleNr int NULL, Anmarkningskod nvarchar(8) NULL)
+GO
+CREATE TABLE dbo.[Tillsyn_Tillfälle_Filer] (ID int IDENTITY(1, 1) NOT NULL, TillsynsTillfalleNr int NULL, Bifogadfil varchar(255) NULL)
+GO
+CREATE TABLE dbo.TillsynsArt (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+GO
+CREATE TABLE dbo.Anmarkningar (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+GO
+INSERT INTO dbo.[Tillsyn_Tillfälle] VALUES (950, 1, '2024-05-03', '1899-12-30T14:00:00', '1899-12-30T14:20:00', 'Kontr', N'Köpet nekades.', NULL, NULL)
+INSERT INTO dbo.[Tillsyn_Anmärkningar] VALUES (950, 'Rekl I')
+INSERT INTO dbo.TillsynsArt VALUES ('Kontr', 'Kontrollköp')
+INSERT INTO dbo.Anmarkningar VALUES ('Rekl I', N'Påträngande reklam i butik')
+GO

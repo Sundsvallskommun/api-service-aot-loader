@@ -6,7 +6,6 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.party.PartyIntegration;
 import se.sundsvall.aotloader.service.model.Candidate;
-import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -42,7 +41,7 @@ class PartyResolver {
 		final var holder = candidate.holder();
 		final var holderPartyId = Optional.ofNullable(holder).flatMap(found -> lookup(found.legalId(), municipalityId, context));
 		if (holder != null && holderPartyId.isEmpty()) {
-			if (candidate.type().getKind() == Kind.TILLSYN) {
+			if (candidate.type().getKind().isInspection()) {
 				hits.add(RuleHit.of(INSPECTION_HOLDER_NOT_IN_PARTY, holder.legalId() == null ? "numret saknas eller har fel format" : null));
 			} else if (holder.legalId() != null) {
 				hits.add(RuleHit.of(HOLDER_NOT_IN_PARTY));

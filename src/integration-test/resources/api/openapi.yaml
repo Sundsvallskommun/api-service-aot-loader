@@ -54,6 +54,7 @@ paths:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -121,6 +122,7 @@ paths:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -333,6 +335,7 @@ paths:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -374,8 +377,9 @@ paths:
       summary: "Migrate a single item, or try it in a dry run"
       description: "Runs one item through the same flow as a full run and waits for\
         \ it. The id is ObjektID in AlkT or FSID in AlkOL for a permit, FSID and product\
-        \ for a notification, e.g. 1234-FOLKOL, and ArendeID for an inspection errand.\
-        \ An inspection errand waits until the permit of its place is migrated."
+        \ for a notification, e.g. 1234-FOLKOL, ArendeID for an inspection errand and\
+        \ TillsynsTillfalleNr for an inspection visit. An inspection errand waits until\
+        \ the permit of its place is migrated."
       operationId: migrateItem
       parameters:
       - name: municipalityId
@@ -404,6 +408,7 @@ paths:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -671,6 +676,7 @@ paths:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
       - name: status
         in: query
         description: Only items with the status
@@ -874,6 +880,7 @@ components:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
         sourceId:
           type: string
         outcome:
@@ -917,6 +924,7 @@ components:
             - TILLSTAND
             - ANMALAN
             - TILLSYN
+            - TILLSYNSBESOK
           maxItems: 2147483647
           minItems: 1
         limit:
@@ -984,6 +992,7 @@ components:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
         sourceId:
           type: string
         placeNumber:
@@ -1022,6 +1031,7 @@ components:
           - TILLSTAND
           - ANMALAN
           - TILLSYN
+          - TILLSYNSBESOK
         sourceId:
           type: string
         errandType:
@@ -1035,6 +1045,8 @@ components:
           - TOBACCO_FREE_NICOTINE_NOTIFICATION
           - ALCOHOL_INSPECTION
           - TOBACCO_INSPECTION
+          - ALCOHOL_INSPECTION_VISIT
+          - TOBACCO_INSPECTION_VISIT
         status:
           type: string
           enum:

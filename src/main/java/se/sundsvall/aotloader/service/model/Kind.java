@@ -13,5 +13,15 @@ public enum Kind {
 	ANMALAN,
 
 	/** An inspection errand, with an errand only. */
-	TILLSYN
+	TILLSYN,
+
+	/** An inspection visit to a place, with an errand only. */
+	TILLSYNSBESOK;
+
+	/**
+	 * @return true for the kinds of inspection, whose holder gets the role of the inspection holder (section 7.7)
+	 */
+	public boolean isInspection() {
+		return this == TILLSYN || this == TILLSYNSBESOK;
+	}
 }

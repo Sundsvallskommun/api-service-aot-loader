@@ -39,6 +39,7 @@ import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 
 @ExtendWith(MockitoExtension.class)
 class PreflightTest {
@@ -142,13 +143,17 @@ class PreflightTest {
 		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(true));
 		final var preflight = new Preflight(properties, supportManagement);
 
-		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN)));
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN, TILLSYNSBESOK)));
 
 		// The settings that wait for decisions are blank in application.yml; the labels and the inspection selection are not
 		assertThat(result.problems()).filteredOn(problem -> problem.contains("tikett") || problem.contains("som tillsynsärenden")).isEmpty();
 		assertThat(properties.errandType(ErrandType.SERVING_PERMIT).subtypeLabel(ServingPermitSubtype.TASTING)).contains("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).sourceErrandTypes()).containsOnlyKeys("it", "tills");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).onlyPlacesWithPermit()).isTrue();
+		assertThat(properties.errandType(ErrandType.ALCOHOL_INSPECTION_VISIT).labels()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
+		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION_VISIT).onlyPlacesWithPermit()).isTrue();
+		// The holder must not see an inspection errand on Mina sidor (decision 27)
+		assertThat(properties.roles().inspectionHolder()).isEqualTo("CONTACT").isNotEqualTo(properties.roles().permitHolder());
 	}
 
 	@Test

@@ -108,7 +108,8 @@ public record AotLoaderProperties(
 	 * @param permitHolder     the permit holder, the role pw-alkt reads as holder
 	 * @param contact          the persons with significant influence (decision 15), told apart from other contacts by the
 	 *                         parameter PBI = true
-	 * @param inspectionHolder the holder an inspection errand concerned (section 7.7, item 5)
+	 * @param inspectionHolder the role of the holder an inspection errand concerned; PRIMARY would show the errand on Mina
+	 *                         sidor (decision 27)
 	 */
 	public record Roles(
 		@NotBlank String permitHolder,
@@ -130,8 +131,9 @@ public record AotLoaderProperties(
 	 * @param sourceErrandTypes    for inspection errands, the errand types in the source that are inspection errands, in
 	 *                             lower case, with the resource path of the label each gets; a blank path means the label
 	 *                             is not decided (section 7.7)
-	 * @param onlyPlacesWithPermit for inspection errands, true to migrate only those of places with a current permit
-	 *                             (section 7.7, item 2)
+	 * @param onlyPlacesWithPermit for inspection errands and visits, true to migrate only those of places with a current
+	 *                             permit
+	 *                             (section 7.7)
 	 */
 	public record ErrandTypeSettings(
 		String category,

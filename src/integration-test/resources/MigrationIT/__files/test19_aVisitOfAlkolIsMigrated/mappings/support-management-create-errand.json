@@ -1,0 +1,83 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Tillsynsbesök – Kiosken"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "EXTERNAL_INSPECTION"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKOL-TILLSYNSBESOK-950')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-external-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-tobacco-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'alkolTillsynsbesokId' && @.values[0] == '950')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'besoksdatum' && @.values[0] == '2024-05-03')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'besokstid' && @.values[0] == '14:00–14:20')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsart' && @.values[0] == 'Kontrollköp')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[0] == 'Påträngande reklam i butik')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'anteckning' && @.values[0] == 'Köpet nekades.')]"
+			},
+			{
+				"doesNotMatch": "(?s).*\"role\".*"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000011"
+		}
+	}
+}

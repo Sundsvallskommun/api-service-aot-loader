@@ -7,6 +7,10 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot;
@@ -38,10 +42,15 @@ class PersonalDataTest {
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1));
-		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()));
+		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		final var visit = new VisitRow(1, 1, null, null, null, null, NAME + " " + NUMBER, null, null);
+		final var remark = new RemarkRow(1, "05", NAME + " " + NUMBER, null);
+		assertHidden(visit);
+		assertHidden(remark);
+		assertHidden(new InspectionVisitRows(List.of(visit), Map.of(1, List.of(remark)), Map.of(), Map.of(), Map.of()));
 	}
 
 	@Test
@@ -57,7 +66,7 @@ class PersonalDataTest {
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")));
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");
@@ -65,6 +74,14 @@ class PersonalDataTest {
 		assertThat(alkt.conditionsOf(1)).isEmpty();
 		assertThat(alkt.filesOf(1)).isEmpty();
 		assertThat(alkt.personsOf(1)).isEmpty();
+
+		final var visits = new InspectionVisitRows(List.of(), Map.of(), InspectionVisitRows.filesByVisit(List.of(new VisitFileRow(1, "a.pdf"), new VisitFileRow(null, "b.pdf"), new VisitFileRow(2, null),
+			new VisitFileRow(1, "c.pdf"))), Map.of("04", "Rutintillsyn"), Map.of());
+		assertThat(visits.filesOf(1)).containsExactly("a.pdf", "c.pdf");
+		assertThat(visits.filesOf(2)).isEmpty();
+		assertThat(visits.remarksOf(1)).isEmpty();
+		assertThat(visits.kindText("04")).isEqualTo("Rutintillsyn");
+		assertThat(visits.remarkText("05")).isEqualTo("05");
 
 		assertThat(CodeTexts.textOf(Map.of("KIO", "Kiosk"), "KIO")).isEqualTo("Kiosk");
 		assertThat(CodeTexts.textOf(Map.of(), "KIO")).isEqualTo("KIO");

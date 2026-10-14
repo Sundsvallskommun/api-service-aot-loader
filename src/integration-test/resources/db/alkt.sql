@@ -106,3 +106,24 @@ INSERT INTO dbo.[Ärende_Händelser] VALUES (9, 504, NULL, 'skylt.jpg')
 INSERT INTO dbo.Klartext VALUES ('A', '08', 'Tillsyn, besök')
 INSERT INTO dbo.Klartext VALUES ('A', '09', 'Tillsyn, inre')
 GO
+-- Inspection visits (section 7.7.2): one of the place of permit 1, with a remark and files, and one of a place without a permit, which is not migrated
+CREATE TABLE dbo.[Tillsyn_Tillfälle] (
+    TillsynsTillfalleNr int NOT NULL PRIMARY KEY, ObjektId int NULL, StartDatum datetime NULL, StartTid varchar(10) NULL, SlutTid varchar(10) NULL,
+    Tillsynsform varchar(5) NULL, Fritext varchar(2000) NULL, WordDokument varchar(50) NULL, Bifogadfil varchar(100) NULL
+)
+GO
+CREATE TABLE dbo.[Tillsyn_Anmärkningar] (
+    TillsynstillfalleNr int NOT NULL, Anmarkningskod varchar(5) NOT NULL, Notering varchar(200) NULL, Bifogadfil varchar(100) NULL
+)
+GO
+CREATE TABLE dbo.[Tillsyn_Tillfälle_Filer] (ID int IDENTITY(1, 1) NOT NULL, TillsynsTillfalleNr int NULL, Bifogadfil varchar(255) NULL)
+GO
+INSERT INTO dbo.[Tillsyn_Tillfälle] VALUES (900, 1, '2023-11-04', '21.30', '23:00', '04', 'Mycket folk i baren.', NULL, 'besöksrapport.pdf')
+INSERT INTO dbo.[Tillsyn_Tillfälle] VALUES (901, 99, '2023-11-04', NULL, NULL, '04', NULL, NULL, NULL)
+INSERT INTO dbo.[Tillsyn_Anmärkningar] VALUES (900, '05', 'Ungdomar i baren', NULL)
+INSERT INTO dbo.[Tillsyn_Anmärkningar] VALUES (900, '06', NULL, NULL)
+INSERT INTO dbo.[Tillsyn_Tillfälle_Filer] (TillsynsTillfalleNr, Bifogadfil) VALUES (900, 'foto.jpg')
+INSERT INTO dbo.Klartext VALUES ('L', '04', 'Rutintillsyn')
+INSERT INTO dbo.Klartext VALUES ('V', '05', 'Servering till minderårig')
+INSERT INTO dbo.Klartext VALUES ('V', '06', 'Servering utom tillåten serveringstid')
+GO

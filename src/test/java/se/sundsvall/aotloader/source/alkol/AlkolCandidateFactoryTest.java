@@ -19,6 +19,9 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
@@ -33,6 +36,7 @@ import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCU
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.APPLICANT_NOT_OWNER;
@@ -388,6 +392,71 @@ class AlkolCandidateFactoryTest {
 		});
 	}
 
+	@Test
+	void theInspectionErrandsOfACeasedSalesPlaceAreNotMigrated() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.place(place(3, 10).ceased())
+			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(3, true, false, false))
+			.errand(new ErrandRow(400, 1, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.errand(new ErrandRow(404, 3, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null));
+
+		assertThat(data.factory().inspections().candidates()).extracting(candidate -> candidate.key().sourceId()).containsExactly("400");
+		final var allPlaces = TestData.properties(ErrandType.TOBACCO_INSPECTION, false, Map.of("tills", "X"));
+		assertThat(new AlkolCandidateFactory(data.build(), TODAY, allPlaces).inspections().candidates()).extracting(candidate -> candidate.key().sourceId()).containsExactly("400");
+	}
+
+	@Test
+	void inspectionVisits() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.place(place(2, 10))
+			.place(place(3, 10).ceased())
+			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(3, true, false, false))
+			.visit(new VisitRow(900, 1, LocalDate.of(2024, 5, 3), "21:30", "22:15", "Kontr", "Köpet nekades.", "55555555.rtf", "protokoll.pdf"))
+			.visit(new VisitRow(901, 2, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null))
+			.visit(new VisitRow(902, 3, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null))
+			.visit(new VisitRow(903, 1, TODAY.plusDays(1), null, null, null, null, null, null))
+			.remark(new RemarkRow(900, "Rekl I", null, null))
+			.visitFile(900, "foto.jpg");
+
+		final var candidates = data.factory().visits().candidates();
+
+		assertThat(candidates).extracting(Candidate::key).containsExactly(new ItemKey(ALKOL, TILLSYNSBESOK, "900"), new ItemKey(ALKOL, TILLSYNSBESOK, "903"));
+		final var visit = candidates.getFirst();
+		assertThat(visit.type()).isEqualTo(ErrandType.TOBACCO_INSPECTION_VISIT);
+		assertThat(visit.ruleHits()).isEmpty();
+		assertThat(visit.holder()).isNull();
+		assertThat(visit.permitLink()).isNull();
+		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Butik 1");
+		assertThat(visit.description()).isEqualTo("""
+			Tillsynsbesök på Butik 1 2024-05-03, migrerat från AlkOL.
+			Tillsynsart: Kontrollköp
+			Tid: 21:30–22:15
+			Anmärkningar:
+			- Påträngande reklam i butik
+			Anteckning: Köpet nekades.""");
+		assertThat(parameters(visit))
+			.containsEntry("alkolTillsynsbesokId", List.of("900"))
+			.containsEntry("besoksdatum", List.of("2024-05-03"))
+			.containsEntry("besokstid", List.of("21:30–22:15"))
+			.containsEntry("tillsynsart", List.of("Kontrollköp"))
+			.containsEntry("anmarkningar", List.of("Påträngande reklam i butik"))
+			.containsEntry("anteckning", List.of("Köpet nekades."))
+			.containsEntry("migrerad", List.of(TODAY + " från AlkOL"));
+		assertThat(visit.place().name()).isEqualTo("Butik 1");
+		assertThat(visit.files()).containsExactly(new FileReference("55555555.rtf", DOCUMENTS), new FileReference("protokoll.pdf", ATTACHMENTS), new FileReference("foto.jpg", ATTACHMENTS));
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
+			.containsExactly("G28 Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: " + TODAY.plusDays(1));
+
+		final var allPlaces = TestData.properties(ErrandType.TOBACCO_INSPECTION_VISIT, false, Map.of());
+		assertThat(new AlkolCandidateFactory(data.build(), TODAY, allPlaces).visits().candidates()).extracting(candidate -> candidate.key().sourceId())
+			.as("A ceased sales place gets no visits, whatever the settings say")
+			.containsExactly("900", "901", "903");
+	}
+
 	private static Map<String, List<String>> parameters(final Candidate candidate) {
 		return candidate.parameters().stream().collect(Collectors.toMap(Parameter::key, Parameter::values));
 	}
@@ -455,6 +524,24 @@ class AlkolCandidateFactoryTest {
 		private final List<EventRow> events = new ArrayList<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
+		private final List<VisitRow> visits = new ArrayList<>();
+		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
+		private final Map<Integer, List<String>> visitFiles = new HashMap<>();
+
+		Data visit(final VisitRow row) {
+			visits.add(row);
+			return this;
+		}
+
+		Data remark(final RemarkRow row) {
+			remarks.computeIfAbsent(row.tillfalleNr(), _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		Data visitFile(final int tillfalleNr, final String name) {
+			visitFiles.computeIfAbsent(tillfalleNr, _ -> new ArrayList<>()).add(name);
+			return this;
+		}
 
 		Data place(final PlaceBuilder place) {
 			places.add(place.build());
@@ -502,7 +589,8 @@ class AlkolCandidateFactoryTest {
 				Map.of("Tills", "Tillsynsärende", "IT", "Inre tillsyn"),
 				Map.of("LBK", "Livsmedelsbutik, butikskedja", "SERV", "Serveringsställe grill/pizza"),
 				Map.of("12", "City"),
-				Map.of("VD", "Verkställande direktör"));
+				Map.of("VD", "Verkställande direktör"),
+				new InspectionVisitRows(visits, remarks, visitFiles, Map.of("Kontr", "Kontrollköp"), Map.of("Rekl I", "Påträngande reklam i butik")));
 		}
 
 		AlkolCandidateFactory factory() {

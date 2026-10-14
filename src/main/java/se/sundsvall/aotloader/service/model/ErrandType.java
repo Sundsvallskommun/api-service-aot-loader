@@ -13,7 +13,9 @@ public enum ErrandType {
 	ECIGARETTE_NOTIFICATION(Source.ALKOL, Kind.ANMALAN, true),
 	TOBACCO_FREE_NICOTINE_NOTIFICATION(Source.ALKOL, Kind.ANMALAN, true),
 	ALCOHOL_INSPECTION(Source.ALKT, Kind.TILLSYN, false),
-	TOBACCO_INSPECTION(Source.ALKOL, Kind.TILLSYN, false);
+	TOBACCO_INSPECTION(Source.ALKOL, Kind.TILLSYN, false),
+	ALCOHOL_INSPECTION_VISIT(Source.ALKT, Kind.TILLSYNSBESOK, false),
+	TOBACCO_INSPECTION_VISIT(Source.ALKOL, Kind.TILLSYNSBESOK, false);
 
 	private final Source source;
 	private final Kind kind;

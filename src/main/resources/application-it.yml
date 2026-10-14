@@ -45,38 +45,36 @@ integration:
     url: http://localhost:${wiremock.server.port:}/support-management
 aot-loader:
   errand-status: CLOSED
-  roles:
-    inspection-holder: PRIMARY
   errand-types:
     serving-permit:
-      category: PERMIT
-      type: SERVING_PERMIT
+      category: ALCOHOL
+      type: SERVING_PERMIT_APPLICATION
     tobacco-permit:
-      category: PERMIT
-      type: TOBACCO_PERMIT
+      category: TOBACCO
+      type: SALES_PERMIT_APPLICATION
     folkol-sales-notification:
-      category: NOTIFICATION
-      type: FOLKOL_SALES
+      category: ALCOHOL
+      type: FOLKOL_SALES_NOTIFICATION
     folkol-serving-notification:
-      category: NOTIFICATION
-      type: FOLKOL_SERVING
+      category: ALCOHOL
+      type: FOLKOL_SERVING_NOTIFICATION
     ecigarette-notification:
-      category: NOTIFICATION
-      type: ECIGARETTE
+      category: TOBACCO
+      type: ECIGARETTE_SALES_NOTIFICATION
     tobacco-free-nicotine-notification:
-      category: NOTIFICATION
-      type: TOBACCO_FREE_NICOTINE
-      asset-type: TobaccoFreeNicotineSalesNotification
+      category: TOBACCO
+      type: TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
+      asset-type: TobaccoFreeNicotineProductSalesNotification
     alcohol-inspection:
       category: INSPECTION
-      type: ALCOHOL_INSPECTION
+      type: INTERNAL_INSPECTION
       source-errand-types:
         '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
         '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
         '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
     tobacco-inspection:
       category: INSPECTION
-      type: TOBACCO_INSPECTION
+      type: INTERNAL_INSPECTION
       source-errand-types:
         it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
         tills: CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION

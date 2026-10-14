@@ -11,6 +11,10 @@ import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.SourceDatabases;
@@ -124,6 +128,27 @@ public class AlktRepository {
 		FROM dbo.Klartext k
 		""";
 
+	private static final String SELECT_VISITS = """
+		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
+		       t.WordDokument, t.Bifogadfil
+		FROM dbo.[Tillsyn_Tillfälle] t
+		""";
+
+	// Tillsyn_AnmSpec, the specifications of the remarks, is not read: every one of its texts is empty (analysis round 7b)
+	private static final String SELECT_VISIT_REMARKS = """
+		SELECT a.TillsynstillfalleNr, a.Anmarkningskod, a.Notering, a.Bifogadfil
+		FROM dbo.[Tillsyn_Anmärkningar] a
+		ORDER BY a.TillsynstillfalleNr, a.Anmarkningskod
+		""";
+
+	private static final String SELECT_VISIT_FILES = """
+		SELECT f.TillsynsTillfalleNr, f.Bifogadfil
+		FROM dbo.[Tillsyn_Tillfälle_Filer] f
+		WHERE f.TillsynsTillfalleNr IS NOT NULL
+		  AND f.Bifogadfil IS NOT NULL
+		ORDER BY f.ID
+		""";
+
 	private final SourceDatabases sourceDatabases;
 
 	AlktRepository(final SourceDatabases sourceDatabases) {
@@ -143,6 +168,7 @@ public class AlktRepository {
 			.filter(row -> row.name() != null && row.arendeId() != null)
 			.collect(groupingBy(FileRow::arendeId));
 
+		final var codeTexts = readCodeTexts(jdbc);
 		return new AlktSnapshot(
 			jdbc.query(SELECT_PERMITS, AlktRepository::toPermit),
 			byKey(jdbc.query(SELECT_PLACES, AlktRepository::toPlace), PlaceRow::objektId),
@@ -153,7 +179,17 @@ public class AlktRepository {
 			fileRows,
 			jdbc.query(SELECT_PERSONS, PartyRows::toPerson).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, PartyRows::toApplicant), ContactRow::id),
-			readCodeTexts(jdbc));
+			codeTexts,
+			readVisits(jdbc, codeTexts));
+	}
+
+	private static InspectionVisitRows readVisits(final JdbcTemplate jdbc, final Map<String, Map<String, String>> codeTexts) {
+		return new InspectionVisitRows(
+			jdbc.query(SELECT_VISITS, AlktRepository::toVisit).stream().filter(row -> row.tillfalleNr() != null).toList(),
+			jdbc.query(SELECT_VISIT_REMARKS, AlktRepository::toRemark).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
+			InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, "TillsynsTillfalleNr"), text(rs, "Bifogadfil")))),
+			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_INSPECTION_KIND, Map.of()),
+			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_REMARK, Map.of()));
 	}
 
 	private static Map<String, Map<String, String>> readCodeTexts(final JdbcTemplate jdbc) {
@@ -256,6 +292,27 @@ public class AlktRepository {
 			date(rs, "OppnandeDatum"),
 			date(rs, "AvslutsDatum"),
 			integer(rs, "SokandeID"));
+	}
+
+	static VisitRow toVisit(final ResultSet rs, final int rowNum) throws SQLException {
+		return new VisitRow(
+			integer(rs, "TillsynsTillfalleNr"),
+			integer(rs, "ObjektId"),
+			date(rs, "StartDatum"),
+			text(rs, "StartTid"),
+			text(rs, "SlutTid"),
+			text(rs, "Tillsynsform"),
+			text(rs, "Fritext"),
+			text(rs, "WordDokument"),
+			text(rs, "Bifogadfil"));
+	}
+
+	static RemarkRow toRemark(final ResultSet rs, final int rowNum) throws SQLException {
+		return new RemarkRow(
+			integer(rs, "TillsynstillfalleNr"),
+			text(rs, "Anmarkningskod"),
+			text(rs, "Notering"),
+			text(rs, "Bifogadfil"));
 	}
 
 	static List<FileRow> toEventFiles(final ResultSet rs, final int rowNum) throws SQLException {

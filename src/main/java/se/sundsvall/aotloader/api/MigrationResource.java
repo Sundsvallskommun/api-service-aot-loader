@@ -150,8 +150,8 @@ class MigrationResource {
 	@PostMapping(path = "/items/{source}/{kind}/{sourceId}", produces = APPLICATION_JSON_VALUE)
 	@Operation(summary = "Migrate a single item, or try it in a dry run", description = """
 		Runs one item through the same flow as a full run and waits for it. The id is ObjektID in AlkT or FSID in AlkOL \
-		for a permit, FSID and product for a notification, e.g. 1234-FOLKOL, and ArendeID for an inspection errand. \
-		An inspection errand waits until the permit of its place is migrated.""", responses = {
+		for a permit, FSID and product for a notification, e.g. 1234-FOLKOL, ArendeID for an inspection errand and \
+		TillsynsTillfalleNr for an inspection visit. An inspection errand waits until the permit of its place is migrated.""", responses = {
 		@ApiResponse(responseCode = "200", description = "OK - the row of the report for the item", useReturnTypeSchema = true),
 		@ApiResponse(responseCode = "404", description = "Not Found - the source has no such item", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),
 		@ApiResponse(responseCode = "409", description = "Conflict - a run is running", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),

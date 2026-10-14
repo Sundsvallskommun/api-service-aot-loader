@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
 
 /**
@@ -23,6 +24,7 @@ import se.sundsvall.aotloader.source.PersonRow;
  * @param categories    the texts of Kategorier
  * @param areas         the texts of Områden
  * @param positions     the texts of PBI_Roller, the positions of the persons
+ * @param visits        the inspection visits, with the texts of TillsynsArt and Anmarkningar
  */
 public record AlkolSnapshot(
 	List<SalesPlaceRow> places,
@@ -37,7 +39,8 @@ public record AlkolSnapshot(
 	Map<String, String> errandTypes,
 	Map<String, String> categories,
 	Map<String, String> areas,
-	Map<String, String> positions) {
+	Map<String, String> positions,
+	InspectionVisitRows visits) {
 
 	@Override
 	public String toString() {
