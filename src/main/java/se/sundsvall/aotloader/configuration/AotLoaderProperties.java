@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
 
@@ -43,7 +44,8 @@ import static java.util.function.Predicate.not;
  * @param fileArea       the directories of the file area per source
  * @param maxFileSize    the largest file uploaded (decision 24)
  * @param municipalities the municipality of the places in an area, by the name of the area, for the areas that do not
- *                       belong to the municipality a run is started for (decision 19)
+ *                       belong to the municipality a run is started for. The errands are still created in that
+ *                       municipality, with the municipality of the place as a parameter (decision 19).
  */
 @Validated
 @ConfigurationProperties("aot-loader")
@@ -75,6 +77,15 @@ public record AotLoaderProperties(
 	 */
 	public Optional<String> municipalityOf(final String area) {
 		return Optional.ofNullable(area).map(AotLoaderProperties::areaKey).map(municipalities::get);
+	}
+
+	/**
+	 * @param  place          the place of an item, null when it has none
+	 * @param  municipalityId the municipality the run is started for
+	 * @return                the municipality code of the place: that of its area, or else the municipality of the run
+	 */
+	public String premisesMunicipalityOf(final Place place, final String municipalityId) {
+		return Optional.ofNullable(place).map(Place::area).flatMap(this::municipalityOf).orElse(municipalityId);
 	}
 
 	private static String areaKey(final String area) {

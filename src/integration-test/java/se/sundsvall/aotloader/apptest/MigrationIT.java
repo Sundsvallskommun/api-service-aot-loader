@@ -2,7 +2,6 @@ package se.sundsvall.aotloader.apptest;
 
 import com.github.tomakehurst.wiremock.common.Json;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.jayway.jsonpath.JsonPath;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -314,13 +313,12 @@ class MigrationIT extends AbstractAppTest {
 	}
 
 	@Test
-	void test16_aPlaceInTimråIsMigratedToItsMunicipality() {
+	void test16_aPlaceInTimråGetsItsMunicipalityAsParameter() {
 		migrateItem("ALKOL/ANMALAN/2-FOLKOL", false);
 
-		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(support-management|party-assets|relation|party)/2281/.*"))))
-			.as("Nothing of the place in Timrå may reach the municipality of the run, except the checks before the run")
-			.extracting(LoggedRequest::getUrl)
-			.allSatisfy(url -> assertThat(url).isIn("/support-management/2281/AOT/metadata/labels", "/support-management/2281/AOT/namespace-config/action-config"));
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(support-management|party-assets|relation|party)/2262/.*"))))
+			.as("The errand of the place in Timrå is created in the municipality of the run, with 2262 as a parameter (decision 19)")
+			.isEmpty();
 		verifyStubs();
 
 		itemIs("ALKOL/ANMALAN/2-FOLKOL");

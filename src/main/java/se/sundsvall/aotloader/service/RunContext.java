@@ -31,8 +31,7 @@ public final class RunContext {
 
 	/**
 	 * @param runId           the run
-	 * @param municipalityId  the municipality the run is started for, which an item belongs to unless its area belongs to
-	 *                        another (decision 19)
+	 * @param municipalityId  the municipality the run is started for, which every item is written to (decision 19)
 	 * @param dryRun          true for a dry run, which writes nothing to the target systems or the status table
 	 * @param labelIds        the ids of the labels by normalized resource path, per municipality
 	 * @param limit           the largest number of items the run writes, null for no limit

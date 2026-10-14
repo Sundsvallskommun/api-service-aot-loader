@@ -125,6 +125,12 @@
 					"expression": "$.parameters[?(@.key == 'villkor')].values[0]",
 					"equalTo": "Krav på bordsservering: Mat ska serveras"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
+					"equalTo": "2281"
+				}
 			}
 		]
 	},

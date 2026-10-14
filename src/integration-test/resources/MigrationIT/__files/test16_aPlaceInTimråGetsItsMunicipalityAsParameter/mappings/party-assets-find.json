@@ -2,7 +2,7 @@
 	"name": "party-assets-find",
 	"request": {
 		"method": "GET",
-		"urlPath": "/party-assets/2262/assets",
+		"urlPath": "/party-assets/2281/assets",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [

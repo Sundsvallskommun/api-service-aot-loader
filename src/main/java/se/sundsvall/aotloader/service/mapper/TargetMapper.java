@@ -50,6 +50,7 @@ import static se.sundsvall.aotloader.Constants.PARAMETER_PBI;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_DISPLAY_NAME;
 import static se.sundsvall.aotloader.Constants.PARAMETER_POSITION;
 import static se.sundsvall.aotloader.Constants.PARAMETER_POSITION_DISPLAY_NAME;
+import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
@@ -76,13 +77,14 @@ public class TargetMapper {
 	/**
 	 * Maps the candidate to a new errand, created as a draft.
 	 *
-	 * @param  candidate the candidate
-	 * @param  parties   the partyIds found for the holder and the persons
-	 * @param  labelIds  the ids of the labels by resource path, as {@link LabelPaths#normalize} gives them
-	 * @return           the errand
+	 * @param  candidate      the candidate
+	 * @param  municipalityId the municipality the run is started for
+	 * @param  parties        the partyIds found for the holder and the persons
+	 * @param  labelIds       the ids of the labels by resource path, as {@link LabelPaths#normalize} gives them
+	 * @return                the errand
 	 */
-	public Errand toNewDraft(final Candidate candidate, final PartyIds parties, final Map<String, String> labelIds) {
-		return toErrand(candidate, parties, labelIds)
+	public Errand toNewDraft(final Candidate candidate, final String municipalityId, final PartyIds parties, final Map<String, String> labelIds) {
+		return toErrand(candidate, municipalityId, parties, labelIds)
 			.lifecycle(LifecycleEnum.DRAFT)
 			.reporterUserId(properties.reporterUserId());
 	}
@@ -91,16 +93,17 @@ public class TargetMapper {
 	 * Maps the candidate to the patch that updates a draft with what the source says now. The patch has no reporter and
 	 * no life cycle: SupportManagement refuses a patch with a reporter, and the draft stays a draft.
 	 *
-	 * @param  candidate the candidate
-	 * @param  parties   the partyIds found for the holder and the persons
-	 * @param  labelIds  the ids of the labels by resource path, as {@link LabelPaths#normalize} gives them
-	 * @return           the patch
+	 * @param  candidate      the candidate
+	 * @param  municipalityId the municipality the run is started for
+	 * @param  parties        the partyIds found for the holder and the persons
+	 * @param  labelIds       the ids of the labels by resource path, as {@link LabelPaths#normalize} gives them
+	 * @return                the patch
 	 */
-	public Errand toDraftUpdate(final Candidate candidate, final PartyIds parties, final Map<String, String> labelIds) {
-		return toErrand(candidate, parties, labelIds);
+	public Errand toDraftUpdate(final Candidate candidate, final String municipalityId, final PartyIds parties, final Map<String, String> labelIds) {
+		return toErrand(candidate, municipalityId, parties, labelIds);
 	}
 
-	private Errand toErrand(final Candidate candidate, final PartyIds parties, final Map<String, String> labelIds) {
+	private Errand toErrand(final Candidate candidate, final String municipalityId, final PartyIds parties, final Map<String, String> labelIds) {
 		final var settings = properties.errandType(candidate.type());
 		return new Errand()
 			.title(candidate.title())
@@ -113,7 +116,10 @@ public class TargetMapper {
 			.businessRelated(true)
 			.externalTags(externalTags(candidate))
 			.stakeholders(stakeholders(candidate, parties))
-			.parameters(Stream.concat(candidate.parameters().stream(), premisesParameters(candidate.place()).stream()).map(TargetMapper::toParameter).toList());
+			.parameters(Stream.of(candidate.parameters(), premisesParameters(candidate.place()), List.of(premisesMunicipalityParameter(candidate, municipalityId)))
+				.flatMap(List::stream)
+				.map(TargetMapper::toParameter)
+				.toList());
 	}
 
 	/**
@@ -126,19 +132,21 @@ public class TargetMapper {
 	/**
 	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4).
 	 *
-	 * @param  candidate the candidate
-	 * @param  errandId  the id of the errand
-	 * @param  partyId   the partyId of the holder
-	 * @param  expired   true to create the post as EXPIRED (the exception list said so)
-	 * @return           the request
+	 * @param  candidate      the candidate
+	 * @param  municipalityId the municipality the run is started for
+	 * @param  errandId       the id of the errand
+	 * @param  partyId        the partyId of the holder
+	 * @param  expired        true to create the post as EXPIRED (the exception list said so)
+	 * @return                the request
 	 */
-	public AssetCreateRequest toAsset(final Candidate candidate, final String errandId, final String partyId, final boolean expired) {
+	public AssetCreateRequest toAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyId, final boolean expired) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
 		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : Texts.title(settings.assetTitle(), asset.titleSuffix());
 		final var parameters = new LinkedHashMap<String, String>();
 		parameters.put(ASSET_PARAMETER_ERRAND_ID, errandId);
 		asset.parameters().forEach((key, value) -> parameters.put(key, Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, TRUNCATED_SUFFIX)));
+		parameters.put(PARAMETER_PREMISES_MUNICIPALITY_ID, properties.premisesMunicipalityOf(candidate.place(), municipalityId));
 		return new AssetCreateRequest()
 			.assetId(errandId)
 			.origin(ASSET_ORIGIN)
@@ -297,6 +305,13 @@ public class TargetMapper {
 			.add(ERRAND_PARAMETER_PREMISES_EMAIL, "Ställets e-post", place.email())
 			.build();
 		return Stream.concat(premises.stream(), place.parameters().stream()).toList();
+	}
+
+	/**
+	 * The municipality code of the place, on every errand whether it has a place or not (decision 19).
+	 */
+	private Parameter premisesMunicipalityParameter(final Candidate candidate, final String municipalityId) {
+		return new Parameter(PARAMETER_PREMISES_MUNICIPALITY_ID, "Kommun", List.of(properties.premisesMunicipalityOf(candidate.place(), municipalityId)));
 	}
 
 	private static List<ContactChannel> contactChannels(final String email, final String phone) {

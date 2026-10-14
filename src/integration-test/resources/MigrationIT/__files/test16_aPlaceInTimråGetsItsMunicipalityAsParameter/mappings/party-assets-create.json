@@ -2,7 +2,7 @@
 	"name": "party-assets-create",
 	"request": {
 		"method": "POST",
-		"urlPath": "/party-assets/2262/assets",
+		"urlPath": "/party-assets/2281/assets",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -23,13 +23,19 @@
 					"expression": "$.type",
 					"equalTo": "LowAlcoholBeerSalesNotification"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.premisesMunicipalityId",
+					"equalTo": "2262"
+				}
 			}
 		]
 	},
 	"response": {
 		"status": 201,
 		"headers": {
-			"Location": "/2262/assets/asset-internal-4"
+			"Location": "/2281/assets/asset-internal-4"
 		}
 	}
 }

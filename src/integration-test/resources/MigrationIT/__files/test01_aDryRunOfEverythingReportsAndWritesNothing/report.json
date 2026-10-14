@@ -36,7 +36,7 @@
 		"placeName": "Timråkrogen",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "G13",
-		"detail": "Kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
 	},
 	{
 		"source": "ALKT",
@@ -100,7 +100,7 @@
 		"placeName": "Timråkiosken",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "",
-		"detail": "Kommun 2262 (område Timrå)"
+		"detail": "Stället hör till kommun 2262 (område Timrå)"
 	},
 	{
 		"source": "ALKOL",

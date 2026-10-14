@@ -1,9 +1,9 @@
 {
-	"name": "support-management-action-config-2262-active",
+	"name": "support-management-action-config-2281-active",
 	"priority": 1,
 	"request": {
 		"method": "GET",
-		"url": "/support-management/2262/AOT/namespace-config/action-config",
+		"url": "/support-management/2281/AOT/namespace-config/action-config",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -21,7 +21,7 @@
 		},
 		"jsonBody": [
 			{
-				"id": "action-2262",
+				"id": "action-2281",
 				"name": "SEND_EMAIL",
 				"active": true
 			}

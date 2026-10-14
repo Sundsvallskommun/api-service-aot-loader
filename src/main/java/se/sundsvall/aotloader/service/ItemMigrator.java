@@ -20,7 +20,6 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PartyIds;
-import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.support.ErrorTexts;
@@ -245,19 +244,19 @@ public class ItemMigrator {
 		}
 
 		/**
-		 * The municipality of the item: the one of its area when the area belongs to another municipality than the run
-		 * (decision 19). An item already written to a municipality stays there; were it moved, a second errand would be
-		 * created in the other municipality.
+		 * The municipality the item is written to: the one the run is started for, also for a place in an area of another
+		 * municipality, which only gets that municipality as a parameter (decision 19). An item already written to another
+		 * municipality stays there; were it moved, a second errand would be created.
 		 */
 		private String municipalityOf() {
-			final var area = Optional.ofNullable(candidate.place()).map(Place::area).orElse(null);
-			final var municipalityId = properties.municipalityOf(area).orElse(context.municipalityId());
+			final var municipalityId = context.municipalityId();
 			if (entity != null && entity.getMunicipalityId() != null && !entity.getMunicipalityId().equals(municipalityId)) {
-				throw new MigrationException("Ärendet migrerades till kommun %s, men området ger nu kommun %s. Det flyttas inte, eftersom det då skulle skapas på nytt."
+				throw new MigrationException("Ärendet migrerades till kommun %s, men körningen gäller kommun %s. Det flyttas inte, eftersom det då skulle skapas på nytt."
 					.formatted(entity.getMunicipalityId(), municipalityId));
 			}
-			if (!municipalityId.equals(context.municipalityId())) {
-				notes.line("Kommun %s (område %s)".formatted(municipalityId, area));
+			final var premisesMunicipalityId = properties.premisesMunicipalityOf(candidate.place(), municipalityId);
+			if (!premisesMunicipalityId.equals(municipalityId)) {
+				notes.line("Stället hör till kommun %s (område %s)".formatted(premisesMunicipalityId, candidate.place().area()));
 			}
 			return municipalityId;
 		}

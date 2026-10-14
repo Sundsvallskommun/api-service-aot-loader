@@ -275,39 +275,39 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aPlaceInAnAreaOfAnotherMunicipalityIsMigratedThere() {
+	void aPlaceInAnAreaOfAnotherMunicipalityIsMigratedToTheMunicipalityOfTheRunWithItsOwnAsParameter() {
 		final var saved = ArgumentCaptor.forClass(MigrationItemEntity.class);
-		when(party.getPartyId(TIMRA, TestData.HOLDER_ID)).thenReturn(Optional.of(PARTY_ID));
-		when(party.getPartyId(TIMRA, TestData.PERSON_ID)).thenReturn(Optional.of(PERSON_PARTY_ID));
-		when(supportManagement.findErrandsByExternalTag(TIMRA, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
-		when(supportManagement.createErrand(eq(TIMRA), errandCaptor.capture())).thenReturn(ERRAND_ID);
-		when(supportManagement.getErrand(TIMRA, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
-		when(supportManagement.getAttachments(TIMRA, ERRAND_ID)).thenReturn(List.of());
-		when(partyAssets.findAsset(TIMRA, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
-		when(partyAssets.createAsset(eq(TIMRA), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), errandCaptor.capture())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
 
 		final var result = migrator.process(TestData.permit("1", "Timrå"), context(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
-		assertThat(result.detail()).startsWith("Kommun 2262 (område Timrå)");
-		assertThat(errandCaptor.getValue().getLabels()).isNotEmpty();
-		verify(supportManagement).updateErrand(TIMRA, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
+		assertThat(result.detail()).startsWith("Stället hör till kommun 2262 (område Timrå)");
+		assertThat(errandCaptor.getValue().getParameters()).filteredOn("key", "premisesMunicipalityId").extracting("values").containsExactly(List.of(TIMRA));
+		assertThat(assetCaptor.getValue().getAdditionalParameters()).containsEntry("premisesMunicipalityId", TIMRA);
+		verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
 		verify(itemRepository, times(5)).save(saved.capture());
-		assertThat(saved.getAllValues()).allSatisfy(entity -> assertThat(entity.getMunicipalityId()).isEqualTo(TIMRA));
-		verify(party, never()).getPartyId(eq(MUNICIPALITY_ID), any());
+		assertThat(saved.getAllValues()).allSatisfy(entity -> assertThat(entity.getMunicipalityId()).isEqualTo(MUNICIPALITY_ID));
+		verify(party, never()).getPartyId(eq(TIMRA), any());
+		verify(supportManagement, never()).createErrand(eq(TIMRA), any());
 	}
 
 	@Test
 	void anItemIsNeverMovedToAnotherMunicipality() {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
-		existing.setMunicipalityId(MUNICIPALITY_ID);
+		existing.setMunicipalityId(TIMRA);
 		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
 
 		final var result = migrator.process(TestData.permit("1", "Timrå"), context(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
-		assertThat(result.detail()).isEqualTo("Steg Läs och bedöm: Ärendet migrerades till kommun 2281, men området ger nu kommun 2262. Det flyttas inte, eftersom det då skulle skapas på nytt.");
-		assertThat(existing.getMunicipalityId()).isEqualTo(MUNICIPALITY_ID);
+		assertThat(result.detail()).isEqualTo("Steg Läs och bedöm: Ärendet migrerades till kommun 2262, men körningen gäller kommun 2281. Det flyttas inte, eftersom det då skulle skapas på nytt.");
+		assertThat(existing.getMunicipalityId()).isEqualTo(TIMRA);
 		assertThat(existing.getErrandId()).isEqualTo(ERRAND_ID);
 		verifyNoInteractions(party, supportManagement, partyAssets, relations);
 	}
@@ -515,7 +515,7 @@ class ItemMigratorTest {
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
 
-		final var wanted = new TargetMapper(properties).toAsset(TestData.permit("1"), ERRAND_ID, PARTY_ID, false);
+		final var wanted = new TargetMapper(properties).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
 		// The source gives the permit no last day, so the old one is removed
@@ -871,7 +871,7 @@ class ItemMigratorTest {
 	 * @return the post of permit 1 as the migration creates it
 	 */
 	private Asset assetAsCreated(final String id, final Status status) {
-		final var created = new TargetMapper(properties).toAsset(TestData.permit("1"), ERRAND_ID, PARTY_ID, false);
+		final var created = new TargetMapper(properties).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
 		return new Asset().id(id).assetId(created.getAssetId()).partyId(created.getPartyId()).type(created.getType()).title(created.getTitle()).description(created.getDescription())
 			.issued(created.getIssued()).validTo(created.getValidTo()).additionalParameters(created.getAdditionalParameters()).status(status);
 	}

@@ -35,6 +35,7 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 class TargetMapperTest {
 
 	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
+	private static final String MUNICIPALITY_ID = "2281";
 
 	private final TargetMapper mapper = new TargetMapper(TestData.properties());
 
@@ -44,7 +45,7 @@ class TargetMapperTest {
 		personIds.add("person-party-id");
 		personIds.add(null);
 
-		final var errand = mapper.toNewDraft(TestData.permit("1"), new PartyIds("party-id", personIds), TestData.labelIds());
+		final var errand = mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds("party-id", personIds), TestData.labelIds());
 
 		assertThat(errand.getTitle()).isEqualTo("Serveringstillstånd – Restaurang 1");
 		assertThat(errand.getDescription()).isEqualTo("Beskrivning");
@@ -68,7 +69,8 @@ class TargetMapperTest {
 			tuple("premisesPostalCode", "Ställets postnummer", List.of("85230")),
 			tuple("premisesPostalArea", "Ställets postort", List.of("Sundsvall")),
 			tuple("premisesPhone", "Ställets telefon", List.of("060-2")),
-			tuple("restaurantNumber", "Serveringsställenummer", List.of("12345678")));
+			tuple("restaurantNumber", "Serveringsställenummer", List.of("12345678")),
+			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
 
 		final var stakeholders = errand.getStakeholders();
 		assertThat(stakeholders).hasSize(4);
@@ -115,9 +117,11 @@ class TargetMapperTest {
 			.parameters(List.of(new Parameter("noteringar", "Noteringar", List.of("a".repeat(3000) + " " + "b".repeat(10)))))
 			.build();
 
-		final var errand = mapper.toDraftUpdate(candidate, new PartyIds(null, null), TestData.labelIds());
+		final var errand = mapper.toDraftUpdate(candidate, MUNICIPALITY_ID, new PartyIds(null, null), TestData.labelIds());
 
 		assertThat(errand.getParameters().getFirst().getValues()).containsExactly("a".repeat(3000), "b".repeat(10));
+		// An errand without a place belongs to the municipality of the run
+		assertThat(errand.getParameters().getLast()).extracting("key", "values").containsExactly("premisesMunicipalityId", List.of("2281"));
 		assertThat(errand.getLabels()).extracting(ErrandLabel::getId).containsExactly("label-migrated");
 		assertThat(errand.getLifecycle()).isNull();
 		assertThat(errand.getReporterUserId()).isNull();
@@ -131,21 +135,21 @@ class TargetMapperTest {
 			.holder(new Holder(TestData.HOLDER_ID, "Bolaget AB", null, null, null, null, null, " "))
 			.build();
 
-		final var errand = mapper.toDraftUpdate(candidate, new PartyIds("party-id", List.of()), TestData.labelIds());
+		final var errand = mapper.toDraftUpdate(candidate, MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
 
 		assertThat(errand.getStakeholders()).singleElement().extracting(Stakeholder::getRole).isEqualTo("PRIMARY");
 	}
 
 	@Test
 	void aLabelThatIsMissingInTheNamespace() {
-		assertThatThrownBy(() -> mapper.toNewDraft(TestData.permit("1"), new PartyIds(null, List.of()), Map.of()))
+		assertThatThrownBy(() -> mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds(null, List.of()), Map.of()))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Etiketten TAGROOT/MIGRATED_ERRAND finns inte i namespace");
 	}
 
 	@Test
 	void toAsset() {
-		final var asset = mapper.toAsset(TestData.permit("1"), ERRAND_ID, "party-id", false);
+		final var asset = mapper.toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, "party-id", false);
 
 		assertThat(asset.getAssetId()).isEqualTo(ERRAND_ID);
 		assertThat(asset.getOrigin()).isEqualTo("SUPPORTMANAGEMENT");
@@ -157,7 +161,18 @@ class TargetMapperTest {
 		assertThat(asset.getValidTo()).isNull();
 		assertThat(asset.getStatus()).isEqualTo(Status.ACTIVE);
 		assertThat(asset.getStatusReason()).isNull();
-		assertThat(asset.getAdditionalParameters()).containsExactly(Map.entry("errandId", ERRAND_ID), Map.entry("migreradFran", "AlkT"));
+		assertThat(asset.getAdditionalParameters()).containsExactly(Map.entry("errandId", ERRAND_ID), Map.entry("migreradFran", "AlkT"), Map.entry("premisesMunicipalityId", "2281"));
+	}
+
+	@Test
+	void aPlaceInAnAreaOfAnotherMunicipalityHasThatMunicipalityOnTheErrandAndThePost() {
+		final var candidate = TestData.permit("1", "timrå");
+
+		final var errand = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
+		final var asset = mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", false);
+
+		assertThat(errand.getParameters()).filteredOn("key", "premisesMunicipalityId").extracting("values").containsExactly(List.of("2262"));
+		assertThat(asset.getAdditionalParameters()).containsEntry("premisesMunicipalityId", "2262");
 	}
 
 	@Test
@@ -167,7 +182,7 @@ class TargetMapperTest {
 				Map.of("conditions", "v".repeat(300), "annat", "x".repeat(300))))
 			.build();
 
-		final var asset = mapper.toAsset(candidate, ERRAND_ID, "party-id", true);
+		final var asset = mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", true);
 
 		assertThat(asset.getTitle()).isEqualTo("Titel TOBACCO_PERMIT – detaljhandel");
 		assertThat(asset.getStatus()).isEqualTo(Status.EXPIRED);
@@ -181,12 +196,12 @@ class TargetMapperTest {
 	void toAssetOfAnErrandWithoutAsset() {
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION).build();
 
-		assertThatThrownBy(() -> mapper.toAsset(candidate, ERRAND_ID, "party-id", false)).isInstanceOf(MigrationException.class);
+		assertThatThrownBy(() -> mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", false)).isInstanceOf(MigrationException.class);
 	}
 
 	@Test
 	void toContentUpdate() {
-		final var wanted = mapper.toAsset(TestData.permit("1"), ERRAND_ID, "party-id", false).validTo(LocalDate.of(2027, 6, 30));
+		final var wanted = mapper.toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, "party-id", false).validTo(LocalDate.of(2027, 6, 30));
 		final var same = new Asset().title(wanted.getTitle()).validTo(wanted.getValidTo()).additionalParameters(Map.copyOf(wanted.getAdditionalParameters()));
 
 		assertThat(mapper.toContentUpdate(same, wanted)).isEmpty();

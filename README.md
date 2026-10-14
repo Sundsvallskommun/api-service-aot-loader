@@ -78,19 +78,20 @@ password.
 The client in the API gateway needs subscriptions to SupportManagement, PartyAssets, Party and the relation service.
 When the migration is approved, the production secret is changed or the client is closed (section 12).
 
-|                                 Variable                                  |                                                   Content                                                   |
-|---------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `AOT_LOADER_CLIENT_ID`                                                    | The client of the API gateway                                                                               |
-| `AOT_LOADER_CLIENT_SECRET`                                                | The secret of the client. **Typed in at start, never in `.env`.**                                           |
-| `AOT_LOADER_TOKEN_URI`                                                    | The token endpoint of the API gateway                                                                       |
-| `SUPPORT_MANAGEMENT_URL`, `PARTY_ASSETS_URL`, `PARTY_URL`, `RELATION_URL` | The APIs, through the gateway                                                                               |
-| `ALKT_DB_URL`, `ALKOL_DB_URL`                                             | The source databases, e.g. `jdbc:sqlserver://<server>:1433;databaseName=<database>;integratedSecurity=true` |
-| `ALKT_DOCUMENTS_DIR`, `ALKT_ATTACHMENTS_DIR`                              | The directories of AlkT on the file area (`Dokument` and `Bilder`)                                          |
-| `ALKOL_DOCUMENTS_DIR`, `ALKOL_ATTACHMENTS_DIR`                            | The directory of AlkOL on the file area, the same for both                                                  |
-| `AOT_LOADER_DB_URL`                                                       | The local database, see below. Default `jdbc:h2:file:./data/aot-loader`                                     |
+|                                 Variable                                  |                                                                 Content                                                                 |
+|---------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `AOT_LOADER_CLIENT_ID`                                                    | The client of the API gateway                                                                                                           |
+| `AOT_LOADER_CLIENT_SECRET`                                                | The secret of the client. **Typed in at start, never in `.env`.**                                                                       |
+| `AOT_LOADER_TOKEN_URI`                                                    | The token endpoint of the API gateway                                                                                                   |
+| `SUPPORT_MANAGEMENT_URL`, `PARTY_ASSETS_URL`, `PARTY_URL`, `RELATION_URL` | The APIs, through the gateway                                                                                                           |
+| `ALKT_DB_URL`, `ALKOL_DB_URL`                                             | The source databases, e.g. `jdbc:sqlserver://<server>:1433;databaseName=<database>;integratedSecurity=true;trustServerCertificate=true` |
+| `ALKT_DOCUMENTS_DIR`, `ALKT_ATTACHMENTS_DIR`                              | The directories of AlkT on the file area (`Dokument` and `Bilder`)                                                                      |
+| `ALKOL_DOCUMENTS_DIR`, `ALKOL_ATTACHMENTS_DIR`                            | The directory of AlkOL on the file area, the same for both                                                                              |
+| `AOT_LOADER_DB_URL`                                                       | The local database, see below. Default `jdbc:h2:file:./data/aot-loader`                                                                 |
 
-The connection to SQL Server is encrypted and the certificate of the server is verified; if Java does not trust it,
-add it to a truststore. `trustServerCertificate` is not used.
+The connection to SQL Server is encrypted. The server presents only the certificate it makes itself
+(`SSL_Self_Signed_Fallback`), which no truststore can trust, so the URLs end with `trustServerCertificate=true` and the
+certificate is not verified (decision 33). When the server gets a certificate from an issuer, that setting is removed.
 
 ### Settings in application.yml
 
@@ -110,12 +111,13 @@ The settings that are the same everywhere are in `application.yml` under `aot-lo
   The label "Migrerat ärende" is not a setting: every migrated errand gets it, since it blocks every process
   (decision 17).
 
-- **Municipalities:** an errand belongs to the municipality the run is started for, e.g. 2281 in
-  `POST /2281/migrations/runs`, unless the area of its place is listed under `municipalities` (decision 19). The places
-  in the area Timrå go to Timrå, 2262. Every call for such an errand goes to that municipality, and the status table
-  keeps it; an item is never moved to another municipality once it has been written.
+- **Municipalities:** every errand is created in the municipality the run is started for, e.g. 2281 in
+  `POST /2281/migrations/runs`. The errand and its post in PartyAssets get the parameter `premisesMunicipalityId` with
+  the municipality code of the place: that of its area when the area is listed under `municipalities`, e.g. 2262 for
+  Timrå, and otherwise the municipality of the run (decision 19). An item is never moved to another municipality once
+  it has been written.
 
-- **Status:** `errand-status`, the closed status of the migrated errands: `CLOSED` (decision 5).
+- **Status:** `errand-status`, the closed status of the migrated errands: `SOLVED`, the one AOT has (decision 5).
 
 - **Roles:** the permit holder is `PRIMARY`, and the persons with significant influence are `CONTACT` with the parameter
   `PBI` = `true` (decision 15). The holder's contact person is a `CONTACT` of its own, without `PBI`.

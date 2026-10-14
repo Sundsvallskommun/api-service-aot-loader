@@ -33,10 +33,9 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 
 /**
  * The checks before a run (section 9): what the configuration still waits for, that the file area and the source
- * databases are configured, and in the namespace of every municipality the run may write to that the labels exist, with
- * the label for migrated errands blocking processes, and that no action is active (R6). A real run does not start when
- * a
- * check fails; a dry run lists the problems and goes on.
+ * databases are configured, and in the namespace of the municipality of the run that the labels exist, with the label
+ * for migrated errands blocking processes, and that no action is active (R6). A real run does not start when a check
+ * fails; a dry run lists the problems and goes on.
  */
 @Component
 public class Preflight {
@@ -54,8 +53,7 @@ public class Preflight {
 	/**
 	 * @param  municipalityId the municipality the run is started for
 	 * @param  scope          the sources and kinds of the run
-	 * @return                the problems found and the ids of the labels of the namespace in each municipality the run
-	 *                        may write to
+	 * @return                the problems found and the ids of the labels of the namespace in the municipality of the run
 	 */
 	public Result check(final String municipalityId, final Map<Source, Set<Kind>> scope) {
 		final var problems = new ArrayList<String>();
@@ -64,15 +62,11 @@ public class Preflight {
 		checkErrandTypes(types, problems);
 		checkInspections(scope, problems);
 		scope.keySet().forEach(source -> checkSource(source, problems));
-		final var labelIds = new HashMap<String, Map<String, String>>();
-		for (final var municipality : municipalities(municipalityId, problems)) {
-			final var forMunicipality = municipality.equals(municipalityId) ? "" : " för kommun " + municipality;
-			final var labels = readLabels(municipality, forMunicipality, problems);
-			labels.ifPresent(found -> checkLabels(found, forMunicipality, types, problems));
-			checkActions(municipality, forMunicipality, problems);
-			labelIds.put(municipality, labels.map(Preflight::labelIds).orElse(Map.of()));
-		}
-		return new Result(problems, labelIds);
+		checkAreaMunicipalities(problems);
+		final var labels = readLabels(municipalityId, problems);
+		labels.ifPresent(found -> checkLabels(found, types, problems));
+		checkActions(municipalityId, problems);
+		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())));
 	}
 
 	/**
@@ -146,34 +140,27 @@ public class Preflight {
 	}
 
 	/**
-	 * @return the municipality the run is started for, and those of the areas that belong to another one (decision 19)
+	 * The municipality codes of the areas that belong to another municipality, which the errands get as a parameter
+	 * (decision 19).
 	 */
-	private Set<String> municipalities(final String municipalityId, final List<String> problems) {
-		final var municipalities = new LinkedHashSet<String>();
-		municipalities.add(municipalityId);
+	private void checkAreaMunicipalities(final List<String> problems) {
 		properties.municipalities().forEach((area, municipality) -> {
 			if (!MUNICIPALITY_ID.matcher(municipality).matches()) {
 				problems.add("Kommunkoden '%s' för området '%s' är inte fyra siffror (aot-loader.municipalities, beslut 19)".formatted(municipality, area));
-			} else if (municipality.equals(municipalityId)) {
-				// Every item outside the areas would then go to the municipality of the area, and stay there
-				problems.add("Körningen är startad för kommun %s, som bara ska ha ställena i området '%s' (beslut 19)".formatted(municipality, area));
-			} else {
-				municipalities.add(municipality);
 			}
 		});
-		return municipalities;
 	}
 
 	/**
 	 * @return the labels of the namespace by normalized resource path; empty when they cannot be read, which is a problem
 	 */
-	private Optional<Map<String, Label>> readLabels(final String municipalityId, final String forMunicipality, final List<String> problems) {
+	private Optional<Map<String, Label>> readLabels(final String municipalityId, final List<String> problems) {
 		try {
 			final Map<String, Label> labels = new HashMap<>();
 			flatten(supportManagement.getLabelTree(municipalityId), labels);
 			return Optional.of(labels);
 		} catch (final RuntimeException e) {
-			problems.add("Etiketterna i SupportManagement%s gick inte att hämta: %s".formatted(forMunicipality, ErrorTexts.describe(e)));
+			problems.add("Etiketterna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
 			return Optional.empty();
 		}
 	}
@@ -181,7 +168,7 @@ public class Preflight {
 	/**
 	 * Adds a problem when an action is active in the namespace of the municipality (R6).
 	 */
-	private void checkActions(final String municipalityId, final String forMunicipality, final List<String> problems) {
+	private void checkActions(final String municipalityId, final List<String> problems) {
 		// Activating an errand runs the active actions whatever its headers and labels say, and an action may mail the customer
 		try {
 			final var active = supportManagement.getActionConfigs(municipalityId).stream()
@@ -189,21 +176,21 @@ public class Preflight {
 				.map(config -> Optional.ofNullable(config.getName()).orElse("utan namn"))
 				.toList();
 			if (!active.isEmpty()) {
-				problems.add("Åtgärder är aktiva i namespace %s%s och körs när ett migrerat ärende aktiveras: %s. De stängs av under körningen (R6, avsnitt 10.2)"
-					.formatted(properties.namespace(), forMunicipality, String.join(", ", active)));
+				problems.add("Åtgärder är aktiva i namespace %s och körs när ett migrerat ärende aktiveras: %s. De stängs av under körningen (R6, avsnitt 10.2)"
+					.formatted(properties.namespace(), String.join(", ", active)));
 			}
 		} catch (final RuntimeException e) {
-			problems.add("Åtgärderna i SupportManagement%s gick inte att hämta: %s".formatted(forMunicipality, ErrorTexts.describe(e)));
+			problems.add("Åtgärderna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
 		}
 	}
 
-	private void checkLabels(final Map<String, Label> labels, final String forMunicipality, final Set<ErrandType> types, final List<String> problems) {
+	private void checkLabels(final Map<String, Label> labels, final Set<ErrandType> types, final List<String> problems) {
 		requiredLabels(types).stream()
 			.filter(path -> !labels.containsKey(LabelPaths.normalize(path)))
-			.forEach(path -> problems.add("Etiketten %s finns inte i namespace %s%s".formatted(path, properties.namespace(), forMunicipality)));
+			.forEach(path -> problems.add("Etiketten %s finns inte i namespace %s".formatted(path, properties.namespace())));
 		Optional.ofNullable(labels.get(LabelPaths.normalize(LABEL_MIGRATED)))
 			.filter(label -> !blocksProcesses(label))
-			.ifPresent(_ -> problems.add("Etiketten %s%s saknar attributet %s=true, som spärrar processer (beslut 17)".formatted(LABEL_MIGRATED, forMunicipality, LABEL_ATTRIBUTE_PROCESS_BLOCKED)));
+			.ifPresent(_ -> problems.add("Etiketten %s saknar attributet %s=true, som spärrar processer (beslut 17)".formatted(LABEL_MIGRATED, LABEL_ATTRIBUTE_PROCESS_BLOCKED)));
 	}
 
 	private Set<String> requiredLabels(final Set<ErrandType> types) {

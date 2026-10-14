@@ -1,8 +1,8 @@
 {
-	"name": "support-management-action-config-2262",
+	"name": "support-management-activate",
 	"request": {
-		"method": "GET",
-		"url": "/support-management/2262/AOT/namespace-config/action-config",
+		"method": "PATCH",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000004",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -25,19 +25,24 @@
 					}
 				]
 			}
-		}
+		},
+		"bodyPatterns": [
+			{
+				"equalToJson": {
+					"lifecycle": "ACTIVE"
+				}
+			}
+		]
 	},
 	"response": {
 		"status": 200,
 		"headers": {
 			"Content-Type": "application/json"
 		},
-		"jsonBody": [
-			{
-				"id": "action-2262",
-				"name": "SEND_EMAIL",
-				"active": false
-			}
-		]
+		"jsonBody": {
+			"id": "11111111-aaaa-bbbb-cccc-000000000004",
+			"errandNumber": "ALKT-2026-4",
+			"lifecycle": "ACTIVE"
+		}
 	}
 }

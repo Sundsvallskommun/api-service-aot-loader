@@ -29,6 +29,11 @@ public final class Constants {
 	 */
 	public static final String ERRAND_PARAMETER_PREMISES_PHONE = "premisesPhone";
 	public static final String ERRAND_PARAMETER_PREMISES_EMAIL = "premisesEmail";
+	/**
+	 * The parameter of the errand and of the permit with the municipality code of the place, e.g. 2262 for Timrå, which
+	 * picks e.g. the document templates (decision 19).
+	 */
+	public static final String PARAMETER_PREMISES_MUNICIPALITY_ID = "premisesMunicipalityId";
 	/** The parameter that tells a person with significant influence apart from other stakeholders with the same role. */
 	public static final String PARAMETER_PBI = "PBI";
 	/** The display name of {@link #PARAMETER_PBI}. */

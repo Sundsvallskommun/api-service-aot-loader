@@ -92,11 +92,12 @@ aot-loader:
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
   channel: MIGRATION
-  # The closed status of the migrated errands (decision 5)
-  errand-status: CLOSED
+  # The closed status of the migrated errands, the one AOT has (decision 5)
+  errand-status: SOLVED
   max-file-size: 50MB
   # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
-  # in the code lists of AlkT and AlkOL (decision 19)
+  # in the code lists of AlkT and AlkOL. Their errands are created in the municipality of the run like the others, with
+  # this municipality in the parameter premisesMunicipalityId (decision 19).
   municipalities:
     '[Timrå]': '2262'
   roles:

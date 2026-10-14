@@ -2,7 +2,7 @@
 	"name": "support-management-create-errand",
 	"request": {
 		"method": "POST",
-		"url": "/support-management/2262/AOT/errands",
+		"url": "/support-management/2281/AOT/errands",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -62,13 +62,19 @@
 					"expression": "$.parameters[?(@.key == 'omrade')].values[0]",
 					"equalTo": "Timrå"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
+					"equalTo": "2262"
+				}
 			}
 		]
 	},
 	"response": {
 		"status": 201,
 		"headers": {
-			"Location": "/2262/AOT/errands/11111111-aaaa-bbbb-cccc-000000000004"
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000004"
 		}
 	}
 }

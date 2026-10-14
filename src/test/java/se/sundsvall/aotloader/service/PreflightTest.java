@@ -34,6 +34,8 @@ import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
@@ -55,46 +57,39 @@ class PreflightTest {
 	@Test
 	void everythingInPlace() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(true));
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN)));
 
 		assertThat(result.problems()).isEmpty();
-		assertThat(result.labelIds()).containsOnlyKeys(MUNICIPALITY_ID, "2262");
+		assertThat(result.labelIds()).containsOnlyKeys(MUNICIPALITY_ID);
 		assertThat(result.labelIds().get(MUNICIPALITY_ID)).containsEntry("TAGROOT/MIGRATED_ERRAND", "id-TAGROOT/MIGRATED_ERRAND")
 			.containsEntry("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING", "id-CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING");
 	}
 
 	@Test
-	void theLabelsOfAnotherMunicipalityAreCheckedToo() {
-		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(false)).thenReturn(List.of());
+	void onlyTheMunicipalityOfTheRunIsChecked() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(false)).thenReturn(List.of());
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
 
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems())
-			.containsExactly("Etiketten TAGROOT/MIGRATED_ERRAND för kommun 2262 saknar attributet processBlocked=true, som spärrar processer (beslut 17)");
+			.containsExactly("Etiketten TAGROOT/MIGRATED_ERRAND saknar attributet processBlocked=true, som spärrar processer (beslut 17)");
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems())
-			.contains("Etiketten TAGROOT/MIGRATED_ERRAND finns inte i namespace AOT för kommun 2262");
-
-		when(supportManagement.getLabelTree("2262")).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-
-		final var failed = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
-
-		assertThat(failed.problems()).containsExactly("Etiketterna i SupportManagement för kommun 2262 gick inte att hämta: 502 BAD_GATEWAY Fel");
-		assertThat(failed.labelIds().get("2262")).isEmpty();
+			.contains("Etiketten TAGROOT/MIGRATED_ERRAND finns inte i namespace AOT");
+		// The places in Timrå get 2262 as a parameter, but their errands are created in 2281 (decision 19)
+		verify(supportManagement, never()).getLabelTree("2262");
+		verify(supportManagement, never()).getActionConfigs("2262");
 	}
 
 	@Test
-	void activeActionsInAnyMunicipalityStopARealRun() {
+	void activeActionsStopARealRun() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(true));
-		when(supportManagement.getActionConfigs(MUNICIPALITY_ID)).thenReturn(List.of(new Config().name("ADD_LABEL").active(false), new Config().name("SEND_EMAIL")));
-		when(supportManagement.getActionConfigs("2262")).thenReturn(List.of(new Config().name("SEND_EMAIL").active(true), new Config().active(true)));
+		when(supportManagement.getActionConfigs(MUNICIPALITY_ID)).thenReturn(List.of(new Config().name("ADD_LABEL").active(false), new Config().name("SEND_EMAIL").active(true),
+			new Config().active(true)));
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
 
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems())
-			.containsExactly("Åtgärder är aktiva i namespace AOT för kommun 2262 och körs när ett migrerat ärende aktiveras: SEND_EMAIL, utan namn. De stängs av under körningen (R6, avsnitt 10.2)");
+			.containsExactly("Åtgärder är aktiva i namespace AOT och körs när ett migrerat ärende aktiveras: SEND_EMAIL, utan namn. De stängs av under körningen (R6, avsnitt 10.2)");
 
 		when(supportManagement.getActionConfigs(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 
@@ -140,7 +135,6 @@ class PreflightTest {
 		final var properties = new Binder(ConfigurationPropertySources.from(sources), new PropertySourcesPlaceholdersResolver(sources))
 			.bind("aot-loader", AotLoaderProperties.class).get();
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(true));
 		final var preflight = new Preflight(properties, supportManagement);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN, TILLSYNSBESOK)));
@@ -159,7 +153,6 @@ class PreflightTest {
 	@Test
 	void labelsThatCannotBeRead() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-		when(supportManagement.getLabelTree("2262")).thenReturn(labelTree(true));
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));

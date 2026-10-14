@@ -60,11 +60,11 @@ class TargetWriter {
 			.or(() -> findByMigrationId(municipalityId, candidate.key()));
 		final Errand errand;
 		if (found.isEmpty()) {
-			final var createdId = supportManagement.createErrand(municipalityId, mapper.toNewDraft(candidate, parties, labelIds));
+			final var createdId = supportManagement.createErrand(municipalityId, mapper.toNewDraft(candidate, municipalityId, parties, labelIds));
 			errand = supportManagement.getErrand(municipalityId, createdId)
 				.orElseThrow(() -> new MigrationException("Ärendet %s som just skapades gick inte att läsa".formatted(createdId)));
 		} else if (found.get().getLifecycle() == LifecycleEnum.DRAFT) {
-			errand = supportManagement.updateErrand(municipalityId, found.get().getId(), mapper.toDraftUpdate(candidate, parties, labelIds));
+			errand = supportManagement.updateErrand(municipalityId, found.get().getId(), mapper.toDraftUpdate(candidate, municipalityId, parties, labelIds));
 		} else {
 			errand = found.get();
 		}
@@ -103,10 +103,10 @@ class TargetWriter {
 			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId));
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
-			final var wanted = mapper.toAsset(candidate, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
+			final var wanted = mapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
 			return bringUpToDate(municipalityId, found.get(), wanted, notes);
 		}
-		final var wanted = mapper.toAsset(candidate, errandId, holderPartyId(parties), expired);
+		final var wanted = mapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), expired);
 		return partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId)
 				.orElseThrow(() -> new MigrationException("PartyAssets svarade att tillståndet redan finns, men det gick inte att hitta")), wanted, notes));

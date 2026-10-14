@@ -1,8 +1,8 @@
 {
-	"name": "support-management-get-errand",
+	"name": "support-management-find-ALKOL-ANMALAN-2-FOLKOL",
 	"request": {
 		"method": "GET",
-		"url": "/support-management/2262/AOT/errands/11111111-aaaa-bbbb-cccc-000000000004",
+		"urlPath": "/support-management/2281/AOT/errands",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -25,6 +25,17 @@
 					}
 				]
 			}
+		},
+		"queryParameters": {
+			"filter": {
+				"equalTo": "externalTags.key:'migreringsid' and externalTags.value:'ALKOL-ANMALAN-2-FOLKOL' and (lifecycle:'DRAFT' or lifecycle:'ACTIVE')"
+			},
+			"page": {
+				"equalTo": "0"
+			},
+			"size": {
+				"equalTo": "100"
+			}
 		}
 	},
 	"response": {
@@ -33,9 +44,8 @@
 			"Content-Type": "application/json"
 		},
 		"jsonBody": {
-			"id": "11111111-aaaa-bbbb-cccc-000000000004",
-			"errandNumber": "ALKT-2026-4",
-			"lifecycle": "DRAFT"
+			"content": [],
+			"last": true
 		}
 	}
 }

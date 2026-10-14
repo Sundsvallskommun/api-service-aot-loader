@@ -28096,6 +28096,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Phase"
+    # Without sort and pageable: SupportManagement sends sort as an array, not the SortObject its specification
+    # describes, and the page then cannot be read. The migration uses only content and last.
     PageErrand:
       type: object
       properties:
@@ -28115,10 +28117,6 @@ components:
         number:
           type: integer
           format: int32
-        sort:
-          $ref: "#/components/schemas/SortObject"
-        pageable:
-          $ref: "#/components/schemas/PageableObject"
         numberOfElements:
           type: integer
           format: int32
