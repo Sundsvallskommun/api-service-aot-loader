@@ -30,21 +30,21 @@ public final class PartyRows {
 	/**
 	 * Reads a row of Ägare.
 	 */
-	public static ContactRow toOwner(final ResultSet rs, final int rowNum) throws SQLException {
+	public static ContactRow toOwner(final ResultSet rs) throws SQLException {
 		return toContact(rs, "AgarID");
 	}
 
 	/**
 	 * Reads a row of Sökande.
 	 */
-	public static ContactRow toApplicant(final ResultSet rs, final int rowNum) throws SQLException {
+	public static ContactRow toApplicant(final ResultSet rs) throws SQLException {
 		return toContact(rs, "SokandeID");
 	}
 
 	/**
 	 * Reads a row of PBI_ägare.
 	 */
-	public static PersonRow toPerson(final ResultSet rs, final int rowNum) throws SQLException {
+	public static PersonRow toPerson(final ResultSet rs) throws SQLException {
 		return new PersonRow(
 			integer(rs, "AgarID"),
 			text(rs, "Namn"),

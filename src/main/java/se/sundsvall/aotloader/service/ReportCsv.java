@@ -9,7 +9,7 @@ import se.sundsvall.aotloader.api.model.ReportLine;
  */
 public final class ReportCsv {
 
-	static final String BYTE_ORDER_MARK = "﻿";
+	static final String BYTE_ORDER_MARK = "\uFEFF";
 	static final String HEADER = "Källa;Sort;Käll-id;Serveringsställenummer;Ställe;Utfall;Regler;Detalj;Ärendenummer";
 	private static final String NEW_LINE = "\r\n";
 

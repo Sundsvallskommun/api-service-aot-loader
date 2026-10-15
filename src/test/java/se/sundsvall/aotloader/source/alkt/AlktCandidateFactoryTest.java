@@ -14,6 +14,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
@@ -69,25 +70,7 @@ class AlktCandidateFactoryTest {
 
 	@Test
 	void permitWithoutAnyRuleHit() {
-		final var snapshot = snapshot()
-			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
-			.place(place(1, 10, "12345678"))
-			.owner(owner(10, "556677-8899"))
-			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, null, "11111111.rtf", "bilaga.pdf"))
-			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
-			.errand(new ErrandRow(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
-			.errand(new ErrandRow(502, 2, "01", "IAN-2019-1", null, null, null))
-			.file(new FileRow(500, "22222222.rtf", true))
-			.file(new FileRow(501, "ansokan.pdf", false))
-			.file(new FileRow(502, "annat-stalle.pdf", false))
-			.document(new DocumentRow(1, 500, null, "TDBV2", LocalDate.of(2019, 5, 2), "33333333.rtf"))
-			.person(new PersonRow(10, "Person Ett", "800101-1234", List.of("VD"), false))
-			.person(new PersonRow(10, "Person Två", null, List.of(), true))
-			.condition(new ConditionRow(1, "0100", "Bord", null, null))
-			.condition(new ConditionRow(1, null, "Utgånget villkor", null, "2020-01-01"))
-			.build();
-
-		final var result = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits();
+		final var result = permitsWithoutAnyRuleHit();
 
 		assertThat(result.notices()).isEmpty();
 		assertThat(result.candidates()).hasSize(1);
@@ -100,6 +83,13 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.title()).isEqualTo("Serveringstillstånd – Restaurang 1");
 		assertThat(candidate.labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING");
 		assertThat(candidate.externalTags()).containsExactly(Map.entry("diarienummer", "IAN-2019-1"));
+		assertThat(candidate.description()).contains("Serveringstillstånd för Restaurang 1, migrerat från AlkT.", "Drycker: Starköl, Vin", "Villkor:", "- Krav på bordsservering: Bord");
+	}
+
+	@Test
+	void holderPlaceAndPersonsOfAPermit() {
+		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
+
 		assertThat(candidate.holder().legalId()).isEqualTo(new LegalId("5566778899", ENTERPRISE));
 		assertThat(candidate.holder().name()).isEqualTo("Bolaget 10 AB");
 		assertThat(candidate.holder().address()).isEqualTo("Box 1 Våning 2");
@@ -112,6 +102,12 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.persons().getFirst().legalId()).isEqualTo(new LegalId("198001011234", PRIVATE));
 		assertThat(candidate.persons().getFirst().positions()).containsExactly("Verkställande direktör");
 		assertThat(candidate.persons().get(1).legalId()).isNull();
+	}
+
+	@Test
+	void parametersOfAPermit() {
+		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
+
 		assertThat(parameters(candidate)).containsAllEntriesOf(Map.of(
 			"alktObjektId", List.of("1"),
 			"utfardat", List.of("2019-05-01"),
@@ -127,6 +123,12 @@ class AlktCandidateFactoryTest {
 			.containsEntry("noteringar", List.of("En notering"))
 			.containsEntry("migrerad", List.of("2026-10-12 från AlkT"))
 			.doesNotContainKeys("sasong", "period");
+	}
+
+	@Test
+	void postOfAPermit() {
+		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
+
 		assertThat(candidate.asset().issued()).isEqualTo(LocalDate.of(2019, 5, 1));
 		assertThat(candidate.asset().validTo()).isNull();
 		assertThat(candidate.asset().titleSuffix()).isNull();
@@ -160,6 +162,12 @@ class AlktCandidateFactoryTest {
 			Map.entry("decisionDateAndCaseNumber", "2019-05-01, IAN-2019-1"),
 			Map.entry("diarienummer", "IAN-2019-1"),
 			Map.entry("migreradFran", "AlkT"));
+	}
+
+	@Test
+	void filesOfAPermit() {
+		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
+
 		assertThat(candidate.files()).containsExactly(
 			new FileReference("22222222.rtf", DOCUMENTS),
 			new FileReference("11111111.rtf", DOCUMENTS),
@@ -172,7 +180,31 @@ class AlktCandidateFactoryTest {
 			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
 			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Beslut"),
 			new AssetFile(new FileReference("bilaga.pdf", ATTACHMENTS), "Beslut"));
-		assertThat(candidate.description()).contains("Serveringstillstånd för Restaurang 1, migrerat från AlkT.", "Drycker: Starköl, Vin", "Villkor:", "- Krav på bordsservering: Bord");
+	}
+
+	/**
+	 * A permit with its place, owner, decision, errands, files, persons and conditions, that hits no review rule.
+	 */
+	private static ReaderResult permitsWithoutAnyRuleHit() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "556677-8899"))
+			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, null, "11111111.rtf", "bilaga.pdf"))
+			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(new ErrandRow(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(new ErrandRow(502, 2, "01", "IAN-2019-1", null, null, null))
+			.file(new FileRow(500, "22222222.rtf", true))
+			.file(new FileRow(501, "ansokan.pdf", false))
+			.file(new FileRow(502, "annat-stalle.pdf", false))
+			.document(new DocumentRow(1, 500, null, "TDBV2", LocalDate.of(2019, 5, 2), "33333333.rtf"))
+			.person(new PersonRow(10, "Person Ett", "800101-1234", List.of("VD"), false))
+			.person(new PersonRow(10, "Person Två", null, List.of(), true))
+			.condition(new ConditionRow(1, "0100", "Bord", null, null))
+			.condition(new ConditionRow(1, null, "Utgånget villkor", null, "2020-01-01"))
+			.build();
+
+		return new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits();
 	}
 
 	@Test

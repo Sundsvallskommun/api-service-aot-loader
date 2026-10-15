@@ -61,10 +61,7 @@ class FileUploader {
 		final var attached = new ArrayList<>(supportManagement.getAttachments(municipalityId, errandId).stream().map(AttachedFile::of).toList());
 		final var problems = new FileProblems();
 		for (final var reference : candidate.files()) {
-			final var lookup = fileArea.find(reference);
-			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
-				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
-			}
+			final var lookup = readableLookup(fileArea, reference, candidate);
 			problemOf(reference, lookup).ifPresentOrElse(
 				problem -> problems.add(problem, lookup.name()),
 				() -> uploadFile(municipalityId, errandId, lookup, attached, problems));
@@ -110,10 +107,7 @@ class FileUploader {
 		final var problems = new FileProblems();
 		var onPost = 0;
 		for (final var file : candidate.assetFiles()) {
-			final var lookup = fileArea.find(file.reference());
-			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
-				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
-			}
+			final var lookup = readableLookup(fileArea, file.reference(), candidate);
 			if (problemOf(file.reference(), lookup).isPresent()) {
 				continue;
 			}
@@ -168,16 +162,26 @@ class FileUploader {
 		final var attached = partyAssets.getAttachments(municipalityId, partyAssetsId).stream().map(AttachedFile::of).toList();
 		var missing = 0;
 		for (final var file : candidate.assetFiles()) {
-			final var lookup = fileArea.find(file.reference());
-			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
-				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
-			}
+			final var lookup = readableLookup(fileArea, file.reference(), candidate);
 			final var onFileArea = new AttachedFile(lookup.name(), null, (int) lookup.size());
 			if (problemOf(file.reference(), lookup).isEmpty() && attached.stream().noneMatch(onFileArea::isSameAs)) {
 				missing++;
 			}
 		}
 		return missing;
+	}
+
+	/**
+	 * Looks a file up in the file area of the candidate's source.
+	 *
+	 * @throws MigrationException when the file area cannot be read
+	 */
+	private static FileArea.Lookup readableLookup(final FileArea fileArea, final FileReference reference, final Candidate candidate) {
+		final var lookup = fileArea.find(reference);
+		if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
+			throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
+		}
+		return lookup;
 	}
 
 	/**

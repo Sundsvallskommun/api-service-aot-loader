@@ -29,7 +29,8 @@ class SourceValuesTest {
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = {
-		" ", "2026-13-01", "2026-02-30", "2025-02-29", "1 maj", "05-01", "2026/05/01", "2026-5-1", "x2026-05-01"
+		" ", "2026-13-01", "2026-02-30", "2025-02-29", "1 maj", "05-01", "2026/05/01", "2026-5-1", "x2026-05-01",
+		"2026-05-01 13", "2026-05-01 xx", "2026-05-01T13:45:1", "2026-05-01 13:45:10.", "2026-05-01  13:45", "2026-05-01T"
 	})
 	void parseDateRejects(final String value) {
 		assertThat(SourceValues.parseDate(value)).isEmpty();

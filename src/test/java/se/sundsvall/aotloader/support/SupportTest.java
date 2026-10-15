@@ -33,6 +33,8 @@ class SupportTest {
 		assertThat(PiiScrubber.scrub("Tidpunkt 20261012083000 och telefon 060-123456")).isEqualTo("Tidpunkt 20261012083000 och telefon 060-123456");
 		assertThat(PiiScrubber.scrub(null)).isNull();
 		assertThat(PiiScrubber.scrub("x".repeat(5000))).hasSize(5000);
+		assertThat(PiiScrubber.scrub("Mejla a.b@sub.example.se. Eller c@d.se")).isEqualTo("Mejla [e-post]. Eller [e-post]");
+		assertThat(PiiScrubber.scrub("Domän a@" + "b.".repeat(50_000) + "se")).isEqualTo("Domän [e-post]");
 	}
 
 	@Test
@@ -67,6 +69,7 @@ class SupportTest {
 		assertThat(new String(file.getInputStream().readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("innehåll");
 		assertThat(new ByteArrayMultipartFile("p", "mejl.msg", new byte[0]).getContentType()).isEqualTo("application/octet-stream");
 		assertThat(new ByteArrayMultipartFile("p", "tom.txt", new byte[0]).isEmpty()).isTrue();
-		assertThatThrownBy(() -> file.transferTo(new java.io.File("x"))).isInstanceOf(UnsupportedOperationException.class);
+		final var target = new java.io.File("x");
+		assertThatThrownBy(() -> file.transferTo(target)).isInstanceOf(UnsupportedOperationException.class);
 	}
 }

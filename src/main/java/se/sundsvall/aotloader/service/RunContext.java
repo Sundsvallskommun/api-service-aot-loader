@@ -86,14 +86,7 @@ public final class RunContext {
 	 * @return                the partyId, empty when Party does not know the number
 	 */
 	public Optional<String> partyId(final String municipalityId, final LegalId legalId, final Function<LegalId, Optional<String>> lookup) {
-		final var key = cacheKey(municipalityId, legalId);
-		final var cached = partyIds.get(key);
-		if (cached != null) {
-			return cached;
-		}
-		final var found = lookup.apply(legalId);
-		partyIds.put(key, found);
-		return found;
+		return partyIds.computeIfAbsent(cacheKey(municipalityId, legalId), _ -> lookup.apply(legalId));
 	}
 
 	/**

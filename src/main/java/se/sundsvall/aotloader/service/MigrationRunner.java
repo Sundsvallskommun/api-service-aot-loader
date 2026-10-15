@@ -142,18 +142,7 @@ public class MigrationRunner {
 
 	private void migrate(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
 		for (final var source : Source.values()) {
-			final var kinds = scope.getOrDefault(source, Set.of());
-			if (kinds.isEmpty()) {
-				continue;
-			}
-			final var result = read(source, kinds, progress);
-			if (result.isEmpty()) {
-				continue;
-			}
-			if (single.isEmpty()) {
-				result.get().notices().forEach(notice -> saveLine(run, notice));
-			}
-			if (!migrateItems(run, result.get().candidates(), single, context, progress)) {
+			if (!migrateSource(run, source, scope.getOrDefault(source, Set.of()), single, context, progress)) {
 				break;
 			}
 		}
@@ -166,15 +155,32 @@ public class MigrationRunner {
 	}
 
 	/**
+	 * Reads the kinds of a source and migrates their items. A source that cannot be read is reported and skipped.
+	 *
+	 * @return false when the run was asked to stop
+	 */
+	private boolean migrateSource(final MigrationRunEntity run, final Source source, final Set<Kind> kinds, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
+		if (kinds.isEmpty()) {
+			return true;
+		}
+		final var result = read(source, kinds, progress);
+		if (result.isEmpty()) {
+			return true;
+		}
+		if (single.isEmpty()) {
+			result.get().notices().forEach(notice -> saveLine(run, notice));
+		}
+		return migrateItems(run, result.get().candidates(), single, context, progress);
+	}
+
+	/**
 	 * Migrates the items of a source, or only the single item when one is given.
 	 *
 	 * @return false when the run was asked to stop
 	 */
 	private boolean migrateItems(final MigrationRunEntity run, final List<Candidate> candidates, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
-		for (final var candidate : candidates) {
-			if (single.isPresent() && !single.get().equals(candidate.key())) {
-				continue;
-			}
+		final var selected = single.map(key -> candidates.stream().filter(candidate -> key.equals(candidate.key())).toList()).orElse(candidates);
+		for (final var candidate : selected) {
 			if (context.stopRequested()) {
 				progress.stop();
 				return false;
@@ -183,11 +189,11 @@ public class MigrationRunner {
 			context.recordOutcome(candidate.key(), result.outcome());
 			if (result.outcome() == Outcome.EJ_KORD) {
 				progress.limitReached = true;
-				continue;
-			}
-			saveLine(run, candidate, result);
-			if (single.isPresent()) {
-				progress.singleResult = result;
+			} else {
+				saveLine(run, candidate, result);
+				if (single.isPresent()) {
+					progress.singleResult = result;
+				}
 			}
 		}
 		return true;

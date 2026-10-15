@@ -244,8 +244,10 @@ class MigrationRunnerTest {
 		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("1")), List.of()));
 		when(migrator.process(any(), any())).thenThrow(new StackOverflowError());
 		final var run = run(false, null);
+		final var scope = Map.of(Source.ALKT, Set.of(TILLSTAND));
+		final Optional<ItemKey> single = Optional.empty();
 
-		assertThatThrownBy(() -> runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND)), Optional.empty())).isInstanceOf(StackOverflowError.class);
+		assertThatThrownBy(() -> runner.execute(run, scope, single)).isInstanceOf(StackOverflowError.class);
 
 		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
 		assertThat(run.getMessage()).isEqualTo("Körningen avbröts av ett oväntat fel: StackOverflowError");

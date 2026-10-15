@@ -45,6 +45,9 @@ import static se.sundsvall.aotloader.source.Rows.text;
 public class AlktRepository {
 
 	private static final int SERVING_TIME_INTERVALS = 8;
+	private static final String ARENDE_ID = "ArendeID";
+	private static final String OBJEKT_ID = "ObjektID";
+	private static final String BIFOGADFIL = "Bifogadfil";
 
 	private static final String SELECT_PERMITS = """
 		SELECT g.ObjektID, g.GTAgarID, g.Starkol, g.Vin, g.Spritdrycker, g.AJADrycker, g.ALP, g.AretRunt,
@@ -163,37 +166,37 @@ public class AlktRepository {
 	 */
 	public AlktSnapshot readSnapshot() {
 		final var jdbc = sourceDatabases.jdbcTemplate(ALKT);
-		final var errands = byKey(jdbc.query(SELECT_ERRANDS, AlktRepository::toErrand), ErrandRow::arendeId);
+		final var errands = byKey(jdbc.query(SELECT_ERRANDS, (rs, _) -> toErrand(rs)), ErrandRow::arendeId);
 		final var eventFiles = EventFiles.of(
 			Stream.concat(
-				jdbc.query(SELECT_EVENT_FILES, AlktRepository::toEventFile).stream(),
-				jdbc.query(SELECT_EVENT_EXTRA_FILES, AlktRepository::toEventExtraFile).stream()).toList(),
-			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bildfilnamn"), false)),
+				jdbc.query(SELECT_EVENT_FILES, (rs, _) -> toEventFile(rs)).stream(),
+				jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> toEventExtraFile(rs)).stream()).toList(),
+			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, ARENDE_ID), text(rs, "Bildfilnamn"), false)),
 			errands.keySet());
 
 		final var codeTexts = readCodeTexts(jdbc);
 		return new AlktSnapshot(
-			jdbc.query(SELECT_PERMITS, AlktRepository::toPermit),
-			byKey(jdbc.query(SELECT_PLACES, AlktRepository::toPlace), PlaceRow::objektId),
-			byKey(jdbc.query(SELECT_OWNERS, PartyRows::toOwner), ContactRow::id),
-			jdbc.query(SELECT_CONDITIONS, AlktRepository::toCondition).stream().filter(row -> row.objektId() != null).collect(groupingBy(ConditionRow::objektId)),
-			byKey(jdbc.query(SELECT_DECISIONS, AlktRepository::toDecision), DecisionRow::beslutsId),
+			jdbc.query(SELECT_PERMITS, (rs, _) -> toPermit(rs)),
+			byKey(jdbc.query(SELECT_PLACES, (rs, _) -> toPlace(rs)), PlaceRow::objektId),
+			byKey(jdbc.query(SELECT_OWNERS, (rs, _) -> PartyRows.toOwner(rs)), ContactRow::id),
+			jdbc.query(SELECT_CONDITIONS, (rs, _) -> toCondition(rs)).stream().filter(row -> row.objektId() != null).collect(groupingBy(ConditionRow::objektId)),
+			byKey(jdbc.query(SELECT_DECISIONS, (rs, _) -> toDecision(rs)), DecisionRow::beslutsId),
 			errands,
 			eventFiles.errandFiles(),
 			eventFiles.placeFiles(),
 			eventFiles.unplacedFiles(),
 			eventFiles.documents(),
-			jdbc.query(SELECT_PERSONS, PartyRows::toPerson).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
-			byKey(jdbc.query(SELECT_APPLICANTS, PartyRows::toApplicant), ContactRow::id),
+			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
+			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
 			readVisits(jdbc, codeTexts));
 	}
 
 	private static InspectionVisitRows readVisits(final JdbcTemplate jdbc, final Map<String, Map<String, String>> codeTexts) {
 		return new InspectionVisitRows(
-			jdbc.query(SELECT_VISITS, AlktRepository::toVisit).stream().filter(row -> row.tillfalleNr() != null).toList(),
-			jdbc.query(SELECT_VISIT_REMARKS, AlktRepository::toRemark).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
-			InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, "TillsynsTillfalleNr"), text(rs, "Bifogadfil")))),
+			jdbc.query(SELECT_VISITS, (rs, _) -> toVisit(rs)).stream().filter(row -> row.tillfalleNr() != null).toList(),
+			jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
+			InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, "TillsynsTillfalleNr"), text(rs, BIFOGADFIL)))),
 			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_INSPECTION_KIND, Map.of()),
 			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_REMARK, Map.of()));
 	}
@@ -211,7 +214,7 @@ public class AlktRepository {
 		return texts;
 	}
 
-	static PermitRow toPermit(final ResultSet rs, final int rowNum) throws SQLException {
+	static PermitRow toPermit(final ResultSet rs) throws SQLException {
 		final var servingTimes = new ArrayList<ServingTime>();
 		for (var i = 1; i <= SERVING_TIME_INTERVALS; i++) {
 			servingTimes.add(new ServingTime(text(rs, "ServeringStartTid" + i), text(rs, "ServeringSlutTid" + i)));
@@ -221,7 +224,7 @@ public class AlktRepository {
 			notes.add(text(rs, column));
 		}
 		return new PermitRow(
-			integer(rs, "ObjektID"),
+			integer(rs, OBJEKT_ID),
 			integer(rs, "GTAgarID"),
 			flag(rs, "Starkol"),
 			flag(rs, "Vin"),
@@ -257,9 +260,9 @@ public class AlktRepository {
 			integer(rs, "BeslutsID"));
 	}
 
-	static PlaceRow toPlace(final ResultSet rs, final int rowNum) throws SQLException {
+	static PlaceRow toPlace(final ResultSet rs) throws SQLException {
 		return new PlaceRow(
-			integer(rs, "ObjektID"),
+			integer(rs, OBJEKT_ID),
 			integer(rs, "AgarID"),
 			text(rs, "RestaurangBeteckning"),
 			text(rs, "ObjektGrupp1"),
@@ -274,14 +277,14 @@ public class AlktRepository {
 			text(rs, "ObjBifogadfil2"));
 	}
 
-	static ConditionRow toCondition(final ResultSet rs, final int rowNum) throws SQLException {
+	static ConditionRow toCondition(final ResultSet rs) throws SQLException {
 		return new ConditionRow(integer(rs, "ObjID"), text(rs, "Villkor"), text(rs, "Notering"), text(rs, "FR_OM"), text(rs, "T_OM"));
 	}
 
-	static DecisionRow toDecision(final ResultSet rs, final int rowNum) throws SQLException {
+	static DecisionRow toDecision(final ResultSet rs) throws SQLException {
 		return new DecisionRow(
 			integer(rs, "BeslutsID"),
-			integer(rs, "ArendeID"),
+			integer(rs, ARENDE_ID),
 			text(rs, "BeslutsTyp"),
 			date(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtTOM_Datum"),
@@ -290,10 +293,10 @@ public class AlktRepository {
 			text(rs, "BifogadFil"));
 	}
 
-	static ErrandRow toErrand(final ResultSet rs, final int rowNum) throws SQLException {
+	static ErrandRow toErrand(final ResultSet rs) throws SQLException {
 		return new ErrandRow(
-			integer(rs, "ArendeID"),
-			integer(rs, "ObjektID"),
+			integer(rs, ARENDE_ID),
+			integer(rs, OBJEKT_ID),
 			text(rs, "ArendeTyp"),
 			text(rs, "DiarieNr"),
 			date(rs, "OppnandeDatum"),
@@ -301,7 +304,7 @@ public class AlktRepository {
 			integer(rs, "SokandeID"));
 	}
 
-	static VisitRow toVisit(final ResultSet rs, final int rowNum) throws SQLException {
+	static VisitRow toVisit(final ResultSet rs) throws SQLException {
 		return new VisitRow(
 			integer(rs, "TillsynsTillfalleNr"),
 			integer(rs, "ObjektId"),
@@ -311,30 +314,30 @@ public class AlktRepository {
 			text(rs, "Tillsynsform"),
 			text(rs, "Fritext"),
 			text(rs, "WordDokument"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 
-	static RemarkRow toRemark(final ResultSet rs, final int rowNum) throws SQLException {
+	static RemarkRow toRemark(final ResultSet rs) throws SQLException {
 		return new RemarkRow(
 			integer(rs, "TillsynstillfalleNr"),
 			text(rs, "Anmarkningskod"),
 			text(rs, "Notering"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 
-	static EventFile toEventFile(final ResultSet rs, final int rowNum) throws SQLException {
+	static EventFile toEventFile(final ResultSet rs) throws SQLException {
 		return new EventFile(
 			integer(rs, "HandelseID"),
-			integer(rs, "ArendeID"),
-			integer(rs, "ObjektID"),
+			integer(rs, ARENDE_ID),
+			integer(rs, OBJEKT_ID),
 			text(rs, "Dokument"),
 			date(rs, "HandelseDatumTid"),
 			text(rs, "Worddokument"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 
-	static EventFile toEventExtraFile(final ResultSet rs, final int rowNum) throws SQLException {
-		return new EventFile(integer(rs, "HandelseID"), integer(rs, "ArendeID"), integer(rs, "ObjektID"), null, null, null, text(rs, "Bifogadfil"));
+	static EventFile toEventExtraFile(final ResultSet rs) throws SQLException {
+		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), null, null, null, text(rs, BIFOGADFIL));
 	}
 
 	/**

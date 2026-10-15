@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cloud.openfeign.FeignBuilderCustomizer;
@@ -28,6 +27,9 @@ import se.sundsvall.dept44.security.Truststore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -88,25 +90,25 @@ class ClientConfigurationTest {
 	 * Builds the customizer of a client and applies the request interceptors it adds to a request.
 	 */
 	private RequestTemplate customize(final String registrationId, final Function<ClientRegistrationRepository, FeignBuilderCustomizer> configuration, final int interceptors, final boolean noResendAdded) {
-		final var spy = Mockito.spy(FeignMultiCustomizer.create());
+		final var spiedCustomizer = spy(FeignMultiCustomizer.create());
 		final var added = new ArrayList<RequestInterceptor>();
 		when(clientRegistrationRepository.findByRegistrationId(registrationId)).thenReturn(clientRegistration);
-		Mockito.lenient().doAnswer(invocation -> {
+		lenient().doAnswer(invocation -> {
 			added.add(invocation.getArgument(0));
-			return spy;
-		}).when(spy).withRequestInterceptor(any());
-		when(spy.composeCustomizersToOne()).thenReturn(customizer);
+			return spiedCustomizer;
+		}).when(spiedCustomizer).withRequestInterceptor(any());
+		when(spiedCustomizer.composeCustomizersToOne()).thenReturn(customizer);
 
-		try (final MockedStatic<FeignMultiCustomizer> multiCustomizer = Mockito.mockStatic(FeignMultiCustomizer.class)) {
-			multiCustomizer.when(FeignMultiCustomizer::create).thenReturn(spy);
+		try (final MockedStatic<FeignMultiCustomizer> multiCustomizer = mockStatic(FeignMultiCustomizer.class)) {
+			multiCustomizer.when(FeignMultiCustomizer::create).thenReturn(spiedCustomizer);
 
 			assertThat(configuration.apply(clientRegistrationRepository)).isSameAs(customizer);
 		}
 
-		verify(spy).withErrorDecoder(any(ProblemErrorDecoder.class));
-		verify(spy).withRetryableOAuth2InterceptorForClientRegistration(same(clientRegistration));
+		verify(spiedCustomizer).withErrorDecoder(any(ProblemErrorDecoder.class));
+		verify(spiedCustomizer).withRetryableOAuth2InterceptorForClientRegistration(same(clientRegistration));
 		assertThat(added).hasSize(interceptors);
-		verify(spy, times(noResendAdded ? 1 : 0)).withCustomizer(noResend.customizer());
+		verify(spiedCustomizer, times(noResendAdded ? 1 : 0)).withCustomizer(noResend.customizer());
 		final var template = new RequestTemplate();
 		added.forEach(interceptor -> interceptor.apply(template));
 		return template;

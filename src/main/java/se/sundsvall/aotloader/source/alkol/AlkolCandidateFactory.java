@@ -344,8 +344,7 @@ public final class AlkolCandidateFactory {
 		final var type = product.errandType(isServing(place, errands, events));
 		final var diaryNumber = latestDiaryNumber(errands, events);
 		final var name = Optional.ofNullable(place.namn()).orElse(UNKNOWN_SALES_PLACE);
-		final var productText = productText(type);
-		final var notifiedText = notified.date() == null ? null : SourceValues.format(notified.date()) + (notified.estimated() ? " (uppskattat)" : "");
+		final var subject = "Anmälan om " + productText(type);
 		final var premises = place(place);
 		final var assetParameters = new AssetParameters()
 			.premises(premises, null)
@@ -360,10 +359,10 @@ public final class AlkolCandidateFactory {
 			.ruleHits(hits)
 			.holder(PartyRows.holder(owner, today))
 			.place(premises)
-			.title(Texts.title("Anmälan om " + productText, name))
+			.title(Texts.title(subject, name))
 			.description(Texts.join("\n", Arrays.asList(
-				"Anmälan om " + productText + " för " + name + ", migrerad från " + ALKOL.getDisplayName() + ".",
-				line("Anmäld", notifiedText),
+				subject + " för " + name + ", migrerad från " + ALKOL.getDisplayName() + ".",
+				line("Anmäld", notified.text()),
 				line("Diarienummer", diaryNumber))))
 			.labelPaths(properties.errandType(type).labels())
 			.externalTag(TAG_NOTIFICATION, notificationId(place, product.code()))
@@ -376,7 +375,7 @@ public final class AlkolCandidateFactory {
 				.add("diarienummer", "Diarienummer i AlkOL", diaryNumber)
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
-			.asset(new AssetData(null, "Anmälan om " + productText + " på " + name, notified.date(), null, assetParameters))
+			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
 			.files(notificationFiles(place, product, errands))
 			.build();
 	}
@@ -788,6 +787,16 @@ public final class AlkolCandidateFactory {
 	 * @param estimated true when the date is the earliest date of the sales place rather than of the notification
 	 */
 	private record NotifiedDate(LocalDate date, boolean estimated) {
+
+		/**
+		 * @return the date as "ÅÅÅÅ-MM-DD", followed by " (uppskattat)" when it is estimated, or null when it is unknown
+		 */
+		String text() {
+			if (date == null) {
+				return null;
+			}
+			return SourceValues.format(date) + (estimated ? " (uppskattat)" : "");
+		}
 	}
 
 	/**

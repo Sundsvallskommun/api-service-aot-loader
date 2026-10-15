@@ -5,6 +5,7 @@ import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ContactChannel;
+import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
@@ -41,11 +42,7 @@ class TargetMapperTest {
 
 	@Test
 	void toNewDraft() {
-		final var personIds = new ArrayList<String>();
-		personIds.add("person-party-id");
-		personIds.add(null);
-
-		final var errand = mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds("party-id", personIds), TestData.labelIds());
+		final var errand = newDraft();
 
 		assertThat(errand.getTitle()).isEqualTo("Serveringstillstånd – Restaurang 1");
 		assertThat(errand.getDescription()).isEqualTo("Beskrivning");
@@ -71,8 +68,12 @@ class TargetMapperTest {
 			tuple("premisesPhone", "Ställets telefon", List.of("060-2")),
 			tuple("restaurantNumber", "Serveringsställenummer", List.of("12345678")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+	}
 
-		final var stakeholders = errand.getStakeholders();
+	@Test
+	void holderAndContactPersonOfANewDraft() {
+		final var stakeholders = newDraft().getStakeholders();
+
 		assertThat(stakeholders).hasSize(4);
 		assertThat(stakeholders.getFirst()).satisfies(holder -> {
 			assertThat(holder.getRole()).isEqualTo("PRIMARY");
@@ -93,6 +94,12 @@ class TargetMapperTest {
 			assertThat(contact.getContactChannels()).isNullOrEmpty();
 			assertThat(contact.getParameters()).isNullOrEmpty();
 		});
+	}
+
+	@Test
+	void personsOfANewDraft() {
+		final var stakeholders = newDraft().getStakeholders();
+
 		assertThat(stakeholders.get(2)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
 			assertThat(person.getFirstName()).isEqualTo("Person Ett");
@@ -108,6 +115,16 @@ class TargetMapperTest {
 			assertThat(person.getExternalIdType()).isNull();
 			assertThat(person.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")));
 		});
+	}
+
+	/**
+	 * A new draft of a permit with a holder, its contact person and two persons, the second without a party id.
+	 */
+	private Errand newDraft() {
+		final var personIds = new ArrayList<String>();
+		personIds.add("person-party-id");
+		personIds.add(null);
+		return mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds("party-id", personIds), TestData.labelIds());
 	}
 
 	@Test

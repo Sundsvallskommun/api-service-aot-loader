@@ -131,7 +131,8 @@ class SourceSupportTest {
 		assertThat(shared.isShared(null, ATTACHMENTS)).isFalse();
 		assertThat(new FileList(shared).add("ansökan.pdf", ATTACHMENTS).add("ritning.pdf", ATTACHMENTS).build())
 			.containsExactly(new FileReference("ansökan.pdf", ATTACHMENTS, true), new FileReference("ritning.pdf", ATTACHMENTS, false));
-		assertThatThrownBy(() -> SharedFileNames.builder(TWO_DIRECTORIES).add(null, "a.pdf", ATTACHMENTS)).isInstanceOf(NullPointerException.class);
+		final var builder = SharedFileNames.builder(TWO_DIRECTORIES);
+		assertThatThrownBy(() -> builder.add(null, "a.pdf", ATTACHMENTS)).isInstanceOf(NullPointerException.class);
 	}
 
 	@Test

@@ -15,7 +15,8 @@ import static java.util.Map.entry;
  */
 public final class SourceValues {
 
-	private static final Pattern ISO_DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})(?:[ T]\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?)?");
+	private static final Pattern ISO_DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})(?:[ T](.+))?");
+	private static final Pattern ISO_TIME = Pattern.compile("\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?");
 	private static final Pattern COMPACT_DATE = Pattern.compile("(\\d{4})(\\d{2})(\\d{2})");
 	private static final Pattern MONTH_DAY = Pattern.compile("(\\d{2})-(\\d{2})");
 	private static final Pattern DAY_AND_MONTH_NAME = Pattern.compile("(\\d{1,2})\\s*([a-zåäö]+)\\.?");
@@ -48,6 +49,9 @@ public final class SourceValues {
 			return Optional.empty();
 		}
 		var matcher = ISO_DATE.matcher(trimmed);
+		if (matcher.matches() && matcher.group(4) != null && !ISO_TIME.matcher(matcher.group(4)).matches()) {
+			return Optional.empty();
+		}
 		if (!matcher.matches()) {
 			matcher = COMPACT_DATE.matcher(trimmed);
 			if (!matcher.matches()) {

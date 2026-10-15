@@ -17,6 +17,15 @@ public final class LabelPaths {
 		if (path == null) {
 			return null;
 		}
-		return path.strip().replaceAll("^/+|/+$", "").toUpperCase(Locale.ROOT);
+		final var stripped = path.strip();
+		var start = 0;
+		var end = stripped.length();
+		while (start < end && stripped.charAt(start) == '/') {
+			start++;
+		}
+		while (end > start && stripped.charAt(end - 1) == '/') {
+			end--;
+		}
+		return stripped.substring(start, end).toUpperCase(Locale.ROOT);
 	}
 }

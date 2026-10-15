@@ -43,9 +43,7 @@ public record Assessment(Decision decision, List<RuleHit> reasons, String note) 
 				return new Assessment(Decision.REVIEW, notOverridable, "Undantaget i undantagslistan kan inte tillämpas förrän uppgiften är rättad i källan");
 			}
 			final var note = "Undantagslistan: " + exception.get();
-			return exception.get() == ExceptionOutcome.MIGRERA_SOM_UTGANGET
-				? new Assessment(Decision.MIGRATE_AS_EXPIRED, List.of(), note)
-				: new Assessment(Decision.MIGRATE, List.of(), note);
+			return new Assessment(exception.get() == ExceptionOutcome.MIGRERA_SOM_UTGANGET ? Decision.MIGRATE_AS_EXPIRED : Decision.MIGRATE, List.of(), note);
 		}
 		if (!blocking.isEmpty()) {
 			return new Assessment(Decision.REVIEW, blocking, null);

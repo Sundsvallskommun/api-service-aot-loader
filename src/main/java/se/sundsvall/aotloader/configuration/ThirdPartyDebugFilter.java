@@ -15,6 +15,7 @@ public final class ThirdPartyDebugFilter extends TurboFilter {
 	// The libraries write whole requests, responses and objects at those levels, with names and personal identity numbers
 	// of the permit holders, and the secret of the client in the token requests
 	static final String OWN_LOGGERS = "se.sundsvall.aotloader.";
+	private static final Object REGISTRATION_LOCK = new Object();
 
 	/**
 	 * Adds a filter to the logger context, unless it has one.
@@ -23,7 +24,7 @@ public final class ThirdPartyDebugFilter extends TurboFilter {
 	 * @return         the filter of the context
 	 */
 	static ThirdPartyDebugFilter register(final LoggerContext context) {
-		synchronized (context) {
+		synchronized (REGISTRATION_LOCK) {
 			return context.getTurboFilterList().stream()
 				.filter(ThirdPartyDebugFilter.class::isInstance)
 				.map(ThirdPartyDebugFilter.class::cast)

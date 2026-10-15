@@ -52,6 +52,14 @@ public class TargetGuard {
 	}
 
 	static String normalize(final String url) {
-		return Optional.ofNullable(url).map(String::strip).map(value -> value.replaceAll("/+$", "")).map(value -> value.toLowerCase(Locale.ROOT)).orElse("");
+		if (url == null) {
+			return "";
+		}
+		final var stripped = url.strip();
+		var end = stripped.length();
+		while (end > 0 && stripped.charAt(end - 1) == '/') {
+			end--;
+		}
+		return stripped.substring(0, end).toLowerCase(Locale.ROOT);
 	}
 }

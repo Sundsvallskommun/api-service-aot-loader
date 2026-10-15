@@ -133,8 +133,9 @@ class MigrationServiceTest {
 	@Test
 	void theLockIsReleasedWhenTheRunCannotBeStarted() {
 		doThrow(new RejectedExecutionException()).when(executor).execute(any());
+		final var request = new RunRequest(true, null, null, null);
 
-		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null))).isInstanceOf(RejectedExecutionException.class);
+		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, request)).isInstanceOf(RejectedExecutionException.class);
 		assertThat(lock.holder()).isEmpty();
 	}
 

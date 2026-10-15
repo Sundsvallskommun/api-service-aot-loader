@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -25,8 +25,8 @@ import se.sundsvall.aotloader.service.model.Source;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableMap;
-import static java.util.function.Function.identity;
 import static java.util.function.Predicate.not;
+import static java.util.function.UnaryOperator.identity;
 
 /**
  * The settings of the migration. Settings that depend on decisions not yet taken may be left blank: a dry run then
@@ -189,7 +189,7 @@ public record AotLoaderProperties(
 			return paths;
 		}
 
-		private static <K> Map<K, String> strippedValues(final Map<K, String> map, final Function<K, K> keyMapper) {
+		private static <K> Map<K, String> strippedValues(final Map<K, String> map, final UnaryOperator<K> keyMapper) {
 			final var result = new LinkedHashMap<K, String>();
 			Optional.ofNullable(map).orElse(emptyMap()).forEach((key, value) -> result.put(keyMapper.apply(key), value == null ? "" : value.strip()));
 			return unmodifiableMap(result);

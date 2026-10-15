@@ -35,7 +35,10 @@ public final class ReaderResults {
 	}
 
 	private static BigInteger leadingNumber(final String sourceId) {
-		final var digits = sourceId.replaceFirst("^(\\d*).*$", "$1");
-		return digits.isEmpty() ? BigInteger.ZERO : new BigInteger(digits);
+		var end = 0;
+		while (end < sourceId.length() && sourceId.charAt(end) >= '0' && sourceId.charAt(end) <= '9') {
+			end++;
+		}
+		return end == 0 ? BigInteger.ZERO : new BigInteger(sourceId.substring(0, end));
 	}
 }

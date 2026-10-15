@@ -425,11 +425,21 @@ public final class AlktCandidateFactory {
 			if (validTo.isPresent() && validTo.get().isBefore(today)) {
 				continue;
 			}
-			final var codeText = condition.code() == null ? null : snapshot.codeText(CODE_TYPE_CONDITION, condition.code());
-			Optional.ofNullable(codeText == null ? condition.text() : condition.text() == null ? codeText : codeText + ": " + condition.text())
-				.ifPresent(texts::add);
+			Optional.ofNullable(conditionText(condition)).ifPresent(texts::add);
 		}
 		return texts;
+	}
+
+	/**
+	 * @return the text of the condition's code and its own text, as "code text: text" when it has both, or null when it
+	 *         has neither
+	 */
+	private String conditionText(final ConditionRow condition) {
+		final var codeText = condition.code() == null ? null : snapshot.codeText(CODE_TYPE_CONDITION, condition.code());
+		if (codeText == null) {
+			return condition.text();
+		}
+		return condition.text() == null ? codeText : codeText + ": " + condition.text();
 	}
 
 	/**
@@ -568,14 +578,14 @@ public final class AlktCandidateFactory {
 			names.add(place, decision.worddokument(), DOCUMENTS).add(place, decision.bifogadFil(), ATTACHMENTS);
 		});
 		snapshot.places().forEach((objektId, place) -> names
-			.add("objekt:" + objektId, place.bifogadfil(), ATTACHMENTS)
-			.add("objekt:" + objektId, place.bifogadfil2(), ATTACHMENTS));
+			.add(placeKey(objektId), place.bifogadfil(), ATTACHMENTS)
+			.add(placeKey(objektId), place.bifogadfil2(), ATTACHMENTS));
 		snapshot.placeFiles().forEach((objektId, files) -> files
-			.forEach(file -> names.add("objekt:" + objektId, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
+			.forEach(file -> names.add(placeKey(objektId), file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
 		snapshot.unplacedFiles().forEach((handelseId, files) -> files
 			.forEach(file -> names.add("handelse:" + handelseId, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
 		snapshot.visits().visits().forEach(visit -> {
-			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : "objekt:" + visit.objektId();
+			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : placeKey(visit.objektId());
 			snapshot.visits().forEachFile(visit, (name, folder) -> names.add(place, name, folder));
 		});
 		return names.build();
@@ -584,8 +594,12 @@ public final class AlktCandidateFactory {
 	private static String placeKeyOfErrand(final AlktSnapshot snapshot, final Integer arendeId) {
 		return Optional.ofNullable(snapshot.errands().get(arendeId))
 			.map(ErrandRow::objektId)
-			.map(objektId -> "objekt:" + objektId)
+			.map(AlktCandidateFactory::placeKey)
 			.orElse("arende:" + arendeId);
+	}
+
+	private static String placeKey(final Integer objektId) {
+		return "objekt:" + objektId;
 	}
 
 	/**

@@ -108,6 +108,9 @@ public class AlkolRepository {
 
 	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c";
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+	private static final String ARENDE_ID = "ArendeID";
+	private static final String TILLSYNSTILLFALLE_NR = "TillsynsTillfalleNr";
+	private static final String BIFOGADFIL = "Bifogadfil";
 
 	private final SourceDatabases sourceDatabases;
 
@@ -122,23 +125,23 @@ public class AlkolRepository {
 		final var jdbc = sourceDatabases.jdbcTemplate(ALKOL);
 		return new AlkolSnapshot(
 			// FSID, AgarID, ArendeID and SokandeID are primary keys, and the query of the persons leaves out rows without owner
-			jdbc.query(SELECT_PLACES, AlkolRepository::toPlace),
-			byKey(jdbc.query(SELECT_PERMIT_VIEW, AlkolRepository::toPermitView), PermitViewRow::fsId),
-			byKey(jdbc.query(SELECT_OWNERS, PartyRows::toOwner), ContactRow::id),
-			jdbc.query(SELECT_ERRANDS, AlkolRepository::toErrand),
-			jdbc.query(SELECT_DECISIONS, AlkolRepository::toDecision),
-			jdbc.query(SELECT_EVENTS, AlkolRepository::toEvent),
-			byKey(jdbc.query(SELECT_APPLICANTS, PartyRows::toApplicant), ContactRow::id),
-			jdbc.query(SELECT_PERSONS, PartyRows::toPerson).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
+			jdbc.query(SELECT_PLACES, (rs, _) -> toPlace(rs)),
+			byKey(jdbc.query(SELECT_PERMIT_VIEW, (rs, _) -> toPermitView(rs)), PermitViewRow::fsId),
+			byKey(jdbc.query(SELECT_OWNERS, (rs, _) -> PartyRows.toOwner(rs)), ContactRow::id),
+			jdbc.query(SELECT_ERRANDS, (rs, _) -> toErrand(rs)),
+			jdbc.query(SELECT_DECISIONS, (rs, _) -> toDecision(rs)),
+			jdbc.query(SELECT_EVENTS, (rs, _) -> toEvent(rs)),
+			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
+			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			codeTable(jdbc, "Beslutskoder"),
 			codeTable(jdbc, "[Ärendetyper]"),
 			codeTable(jdbc, "Kategorier"),
 			codeTable(jdbc, "[Områden]"),
 			codeTable(jdbc, "PBI_Roller"),
 			new InspectionVisitRows(
-				jdbc.query(SELECT_VISITS, AlkolRepository::toVisit).stream().filter(row -> row.tillfalleNr() != null).toList(),
-				jdbc.query(SELECT_VISIT_REMARKS, AlkolRepository::toRemark).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
-				InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, "TillsynsTillfalleNr"), text(rs, "Bifogadfil")))),
+				jdbc.query(SELECT_VISITS, (rs, _) -> toVisit(rs)).stream().filter(row -> row.tillfalleNr() != null).toList(),
+				jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
+				InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, TILLSYNSTILLFALLE_NR), text(rs, BIFOGADFIL)))),
 				codeTable(jdbc, "TillsynsArt"),
 				codeTable(jdbc, "Anmarkningar")));
 	}
@@ -155,7 +158,7 @@ public class AlkolRepository {
 		return texts;
 	}
 
-	static SalesPlaceRow toPlace(final ResultSet rs, final int rowNum) throws SQLException {
+	static SalesPlaceRow toPlace(final ResultSet rs) throws SQLException {
 		return new SalesPlaceRow(
 			integer(rs, "FSID"),
 			text(rs, "Namn"),
@@ -176,13 +179,13 @@ public class AlkolRepository {
 			integer(rs, "Agarid"));
 	}
 
-	static PermitViewRow toPermitView(final ResultSet rs, final int rowNum) throws SQLException {
+	static PermitViewRow toPermitView(final ResultSet rs) throws SQLException {
 		return new PermitViewRow(integer(rs, "FSID"), isSet(rs, "GTDE"), isSet(rs, "GTPH"), isSet(rs, "GTDI"));
 	}
 
-	static ErrandRow toErrand(final ResultSet rs, final int rowNum) throws SQLException {
+	static ErrandRow toErrand(final ResultSet rs) throws SQLException {
 		return new ErrandRow(
-			integer(rs, "ArendeID"),
+			integer(rs, ARENDE_ID),
 			integer(rs, "ObjektID"),
 			text(rs, "Arendetyp"),
 			text(rs, "DiarieNr"),
@@ -191,21 +194,21 @@ public class AlkolRepository {
 			integer(rs, "Sokandeid"));
 	}
 
-	static DecisionRow toDecision(final ResultSet rs, final int rowNum) throws SQLException {
+	static DecisionRow toDecision(final ResultSet rs) throws SQLException {
 		return new DecisionRow(
 			integer(rs, "BeslutsID"),
-			integer(rs, "ArendeID"),
+			integer(rs, ARENDE_ID),
 			text(rs, "BeslutsTyp"),
 			dateTime(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtFROM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 
-	static VisitRow toVisit(final ResultSet rs, final int rowNum) throws SQLException {
+	static VisitRow toVisit(final ResultSet rs) throws SQLException {
 		return new VisitRow(
-			integer(rs, "TillsynsTillfalleNr"),
+			integer(rs, TILLSYNSTILLFALLE_NR),
 			integer(rs, "ObjektId"),
 			date(rs, "StartDatum"),
 			time(rs, "StartTid"),
@@ -213,11 +216,11 @@ public class AlkolRepository {
 			text(rs, "Tillsynsform"),
 			text(rs, "Fritext"),
 			text(rs, "WordDokument"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 
-	static RemarkRow toRemark(final ResultSet rs, final int rowNum) throws SQLException {
-		return new RemarkRow(integer(rs, "TillsynsTillfalleNr"), text(rs, "Anmarkningskod"), null, null);
+	static RemarkRow toRemark(final ResultSet rs) throws SQLException {
+		return new RemarkRow(integer(rs, TILLSYNSTILLFALLE_NR), text(rs, "Anmarkningskod"), null, null);
 	}
 
 	/**
@@ -229,15 +232,15 @@ public class AlkolRepository {
 		return value == null || LocalTime.MIDNIGHT.equals(value.toLocalTime()) ? null : value.format(TIME);
 	}
 
-	static EventRow toEvent(final ResultSet rs, final int rowNum) throws SQLException {
+	static EventRow toEvent(final ResultSet rs) throws SQLException {
 		return new EventRow(
 			integer(rs, "HandelseID"),
 			integer(rs, "FSID"),
-			integer(rs, "ArendeID"),
+			integer(rs, ARENDE_ID),
 			text(rs, "HandelseTyp"),
 			dateTime(rs, "HandelseDatumTid"),
 			text(rs, "DiarieNr"),
 			text(rs, "Worddokument"),
-			text(rs, "Bifogadfil"));
+			text(rs, BIFOGADFIL));
 	}
 }

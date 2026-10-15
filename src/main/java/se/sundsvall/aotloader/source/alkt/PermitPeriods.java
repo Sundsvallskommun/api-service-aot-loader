@@ -23,49 +23,37 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 
 	static PermitPeriods of(final PermitRow permit) {
 		final var problems = new ArrayList<String>();
-		MonthDay seasonStart = null;
-		MonthDay seasonEnd = null;
-		String rawSeason = null;
-		if (permit.arligPeriodStart() != null || permit.arligPeriodSlut() != null) {
-			final var start = SourceValues.parseDayOfYear(permit.arligPeriodStart());
-			final var end = SourceValues.parseDayOfYear(permit.arligPeriodSlut());
-			if (start.isPresent() && end.isPresent()) {
-				seasonStart = start.get();
-				seasonEnd = end.get();
-			} else {
-				rawSeason = Texts.range(permit.arligPeriodStart(), permit.arligPeriodSlut());
-				problems.add("säsong '" + rawSeason + "'");
-			}
+		final var season = Season.of(permit, problems);
+		if (permit.periodStart() == null && permit.periodSlut() == null) {
+			return new PermitPeriods(season.start(), season.end(), null, null, season.raw(), null, problems);
 		}
-		LocalDate periodStart = null;
-		LocalDate periodEnd = null;
-		String rawPeriod = null;
-		if (permit.periodStart() != null || permit.periodSlut() != null) {
-			final var startDate = SourceValues.parseDate(permit.periodStart());
-			final var endDate = SourceValues.parseDate(permit.periodSlut());
-			final var datesOk = (permit.periodStart() == null || startDate.isPresent()) && (permit.periodSlut() == null || endDate.isPresent());
-			final var startDay = SourceValues.parseDayOfYear(permit.periodStart());
-			final var endDay = SourceValues.parseDayOfYear(permit.periodSlut());
-			if (datesOk) {
-				periodStart = startDate.orElse(null);
-				periodEnd = endDate.orElse(null);
-				final var period = Texts.range(permit.periodStart(), permit.periodSlut());
-				if (periodStart == null || periodEnd == null) {
-					// A period open at one end would make a temporary permit that never ends, or one without a start
-					problems.add("perioden '%s' saknar %s".formatted(period, periodStart == null ? "början" : "slut"));
-				} else if (periodEnd.isBefore(periodStart)) {
-					problems.add("perioden '%s' slutar före sin början".formatted(period));
-				}
-			} else if (startDay.isPresent() && endDay.isPresent() && (seasonStart == null || (seasonStart.equals(startDay.get()) && seasonEnd.equals(endDay.get())))) {
-				// A period of days and months is a season (section 7.3.3)
-				seasonStart = startDay.get();
-				seasonEnd = endDay.get();
-			} else {
-				rawPeriod = Texts.range(permit.periodStart(), permit.periodSlut());
-				problems.add("period '" + rawPeriod + "'");
-			}
+		final var startDate = SourceValues.parseDate(permit.periodStart());
+		final var endDate = SourceValues.parseDate(permit.periodSlut());
+		if ((permit.periodStart() == null || startDate.isPresent()) && (permit.periodSlut() == null || endDate.isPresent())) {
+			final var periodStart = startDate.orElse(null);
+			final var periodEnd = endDate.orElse(null);
+			checkDatePeriod(permit, periodStart, periodEnd, problems);
+			return new PermitPeriods(season.start(), season.end(), periodStart, periodEnd, season.raw(), null, problems);
 		}
-		return new PermitPeriods(seasonStart, seasonEnd, periodStart, periodEnd, rawSeason, rawPeriod, problems);
+		final var startDay = SourceValues.parseDayOfYear(permit.periodStart());
+		final var endDay = SourceValues.parseDayOfYear(permit.periodSlut());
+		if (startDay.isPresent() && endDay.isPresent() && season.allows(startDay.get(), endDay.get())) {
+			// A period of days and months is a season (section 7.3.3)
+			return new PermitPeriods(startDay.get(), endDay.get(), null, null, season.raw(), null, problems);
+		}
+		final var rawPeriod = Texts.range(permit.periodStart(), permit.periodSlut());
+		problems.add("period '" + rawPeriod + "'");
+		return new PermitPeriods(season.start(), season.end(), null, null, season.raw(), rawPeriod, problems);
+	}
+
+	private static void checkDatePeriod(final PermitRow permit, final LocalDate periodStart, final LocalDate periodEnd, final List<String> problems) {
+		final var period = Texts.range(permit.periodStart(), permit.periodSlut());
+		if (periodStart == null || periodEnd == null) {
+			// A period open at one end would make a temporary permit that never ends, or one without a start
+			problems.add("perioden '%s' saknar %s".formatted(period, periodStart == null ? "början" : "slut"));
+		} else if (periodEnd.isBefore(periodStart)) {
+			problems.add("perioden '%s' slutar före sin början".formatted(period));
+		}
 	}
 
 	boolean hasDatePeriod() {
@@ -84,5 +72,37 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 			return Texts.range(SourceValues.format(periodStart), SourceValues.format(periodEnd));
 		}
 		return rawPeriod;
+	}
+
+	/**
+	 * The season of a permit.
+	 *
+	 * @param start the first day, null when there is no season or it cannot be interpreted
+	 * @param end   the last day, null when there is no season or it cannot be interpreted
+	 * @param raw   the season as the source has it, when it cannot be interpreted
+	 */
+	private record Season(MonthDay start, MonthDay end, String raw) {
+
+		static Season of(final PermitRow permit, final List<String> problems) {
+			if (permit.arligPeriodStart() == null && permit.arligPeriodSlut() == null) {
+				return new Season(null, null, null);
+			}
+			final var start = SourceValues.parseDayOfYear(permit.arligPeriodStart());
+			final var end = SourceValues.parseDayOfYear(permit.arligPeriodSlut());
+			if (start.isPresent() && end.isPresent()) {
+				return new Season(start.get(), end.get(), null);
+			}
+			final var raw = Texts.range(permit.arligPeriodStart(), permit.arligPeriodSlut());
+			problems.add("säsong '" + raw + "'");
+			return new Season(null, null, raw);
+		}
+
+		/**
+		 * @return true when a period of days and months can stand for the season: there is no interpreted season, or it is
+		 *         the same
+		 */
+		boolean allows(final MonthDay periodStart, final MonthDay periodEnd) {
+			return start == null || (start.equals(periodStart) && end.equals(periodEnd));
+		}
 	}
 }
