@@ -47,6 +47,16 @@ public final class Constants {
 	/** The parameter of the permit with its conditions, as pw-alkt writes it. */
 	public static final String ASSET_PARAMETER_CONDITIONS = "conditions";
 	public static final String ASSET_ORIGIN = "SUPPORTMANAGEMENT";
+	/**
+	 * The category of the permit certificate on a permit in PartyAssets, the one pw-alkt replaces when the permit changes.
+	 */
+	public static final String ASSET_CATEGORY_CERTIFICATE = "Tillståndsbevis";
+	/** The category of the annex of the permit decision on a permit in PartyAssets. */
+	public static final String ASSET_CATEGORY_ANNEX = "Beslutsbilaga";
+	/** The category of a drawing of the premises on a permit in PartyAssets. */
+	public static final String ASSET_CATEGORY_DRAWING = "Ritning";
+	/** The category of the documents and attachments of the decisions of the issuing errand on a permit in PartyAssets. */
+	public static final String ASSET_CATEGORY_DECISION = "Beslut";
 
 	/** The longest value of an errand parameter in SupportManagement. */
 	public static final int ERRAND_PARAMETER_MAX_LENGTH = 3000;

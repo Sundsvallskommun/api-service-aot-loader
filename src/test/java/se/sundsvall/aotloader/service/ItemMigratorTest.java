@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetAttachment;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
@@ -445,6 +446,69 @@ class ItemMigratorTest {
 	}
 
 	@Test
+	void anExpiredPermitGetsItsFilesWhileActiveAndIsExpiredAgain() throws IOException {
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		expiredByTheExceptionList();
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(List.of());
+		when(partyAssets.createAttachment(MUNICIPALITY_ID, "asset-internal-id", "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), "Tillståndsbevis")).thenReturn(true);
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.EXPIRED)));
+
+		final var result = migrator.process(TestData.permitWithCertificate("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.EXPIRED);
+		final var order = inOrder(partyAssets);
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.ACTIVE));
+		order.verify(partyAssets).createAttachment(MUNICIPALITY_ID, "asset-internal-id", "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), "Tillståndsbevis");
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
+		assertThat(result.detail()).contains("Tillståndet i PartyAssets hade status ACTIVE medan det fick sina filer, eftersom ett EXPIRED tillstånd inte tar emot filer",
+			"Tillståndet i PartyAssets har 1 av 1 filer: Tillståndsbevis 1", "Tillståndet i PartyAssets fick status EXPIRED igen när det hade fått sina filer");
+	}
+
+	@Test
+	void anExpiredPermitThatHasItsFilesStaysExpired() throws IOException {
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		expiredByTheExceptionList();
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(List.of(new AssetAttachment().fileName("BESLUT.rtf").fileSize("dokument".length())));
+
+		final var result = migrator.process(TestData.permitWithCertificate("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		verify(partyAssets, never()).updateAsset(anyString(), anyString(), any());
+		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
+	}
+
+	@Test
+	void aPermitWhosePostDoesNotBecomeExpiredAgainFails() throws IOException {
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		expiredByTheExceptionList();
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(List.of());
+		when(partyAssets.createAttachment(MUNICIPALITY_ID, "asset-internal-id", "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), "Tillståndsbevis")).thenReturn(true);
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)));
+
+		final var result = migrator.process(TestData.permitWithCertificate("1", RuleHit.of(PERMIT_ENDED)), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).startsWith("Steg Tillstånd i PartyAssets: Tillståndet asset-internal-id i PartyAssets fick inte status EXPIRED");
+	}
+
+	/**
+	 * Permit 1 is to be migrated as expired, its errand is active and its post does not exist yet.
+	 */
+	private void expiredByTheExceptionList() {
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+	}
+
+	@Test
 	void thePermitOfAnEarlierRunGetsTheStatusTheExceptionListGivesNow() {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
@@ -863,7 +927,7 @@ class ItemMigratorTest {
 	}
 
 	private ItemMigrator migrator(final AotLoaderProperties settings) {
-		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, settings),
+		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, partyAssets, settings),
 			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings)), settings, CLOCK);
 	}
 

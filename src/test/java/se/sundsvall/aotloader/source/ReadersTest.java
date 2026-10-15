@@ -36,7 +36,7 @@ class ReadersTest {
 		final var permit = new AlktSnapshot.PermitRow(1, null, true, false, false, false, false, true, null, null, null, null, false, false, false, false, false, false, false, false, false, true, false, List.of(), null, null, null,
 			List.of(), null, null, null, "IAN-1", null, null);
 		final var errand = new AlktSnapshot.ErrandRow(700, 1, "07", null, null, null, null);
-		when(repository.readSnapshot()).thenReturn(new AlktSnapshot(List.of(permit), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(700, errand), Map.of(), Map.of(), Map.of(), Map.of(),
+		when(repository.readSnapshot()).thenReturn(new AlktSnapshot(List.of(permit), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(700, errand), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(),
 			new InspectionVisitRows(List.of(new VisitRow(900, 1, null, null, null, null, null, null, null)), Map.of(), Map.of(), Map.of(), Map.of())));
 		final var reader = AlktReaderAccess.create(repository, TestData.properties(), CLOCK);
 

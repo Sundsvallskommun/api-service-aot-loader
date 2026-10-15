@@ -1,29 +1,36 @@
 package se.sundsvall.aotloader.service;
 
 import com.google.common.hash.Hashing;
+import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetAttachment;
+import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.support.MigrationException;
 
+import static java.util.stream.Collectors.joining;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FILE_NOT_UPLOADED;
 
 /**
- * Uploads the files of an item to its draft errand, or in a dry run checks that they can be found (step 3 of section
- * 6). The file names of the files that are not uploaded are listed in the report, for the business to find the files
- * (G14).
+ * Uploads the files of an item to its draft errand, and those that belong on its post in PartyAssets there, or in a dry
+ * run checks that they can be found (steps 3 and 4 of section 6). The file names of the files that are not uploaded are
+ * listed in the report, for the business to find the files (G14).
  */
 @Component
 class FileUploader {
@@ -31,10 +38,12 @@ class FileUploader {
 	static final int MAX_FILE_NAMES_IN_REPORT = 20;
 
 	private final SupportManagementIntegration supportManagement;
+	private final PartyAssetsIntegration partyAssets;
 	private final AotLoaderProperties properties;
 
-	FileUploader(final SupportManagementIntegration supportManagement, final AotLoaderProperties properties) {
+	FileUploader(final SupportManagementIntegration supportManagement, final PartyAssetsIntegration partyAssets, final AotLoaderProperties properties) {
 		this.supportManagement = supportManagement;
+		this.partyAssets = partyAssets;
 		this.properties = properties;
 	}
 
@@ -64,7 +73,8 @@ class FileUploader {
 	}
 
 	/**
-	 * Checks that the files can be found and would be uploaded, without uploading anything.
+	 * Checks that the files can be found and would be uploaded, without uploading anything, and tells which would go on
+	 * the post in PartyAssets.
 	 */
 	void check(final Candidate candidate, final RunContext context, final ReportNotes notes) {
 		if (candidate.files().isEmpty()) {
@@ -76,7 +86,107 @@ class FileUploader {
 			final var lookup = fileArea.find(reference);
 			problemOf(reference, lookup).ifPresent(problem -> problems.add(problem, lookup.name()));
 		}
+		if (candidate.asset() != null && !candidate.assetFiles().isEmpty()) {
+			notes.line("Till tillståndet i PartyAssets: " + categoryCounts(candidate.assetFiles()));
+		}
 		problems.report(notes, maxFileSizeText());
+	}
+
+	/**
+	 * Puts the files that belong on the post in PartyAssets there, each in its category. A file already on the post, with
+	 * the same name and size, is not put there again. A file that the errand does not get either, since it cannot be found
+	 * or is not to be uploaded, is skipped without a note: every such file is one of the errand's, whose step lists it
+	 * (G14). A file PartyAssets refuses is listed.
+	 *
+	 * @throws MigrationException when the file area cannot be read, or when PartyAssets refuses a file because the post is
+	 *                            not ACTIVE, so that the step is made again in the next run
+	 */
+	void uploadToAsset(final Candidate candidate, final RunContext context, final String municipalityId, final String partyAssetsId, final ReportNotes notes) {
+		if (candidate.assetFiles().isEmpty()) {
+			return;
+		}
+		final var fileArea = context.fileArea(candidate.key().source());
+		final var attached = new ArrayList<>(partyAssets.getAttachments(municipalityId, partyAssetsId).stream().map(AttachedFile::of).toList());
+		final var problems = new FileProblems();
+		var onPost = 0;
+		for (final var file : candidate.assetFiles()) {
+			final var lookup = fileArea.find(file.reference());
+			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
+				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
+			}
+			if (problemOf(file.reference(), lookup).isPresent()) {
+				continue;
+			}
+			if (uploadToAsset(municipalityId, partyAssetsId, lookup, file.category(), attached, problems)) {
+				onPost++;
+			}
+		}
+		notes.line("Tillståndet i PartyAssets har %d av %d filer: %s".formatted(onPost, candidate.assetFiles().size(), categoryCounts(candidate.assetFiles())));
+		problems.report(notes, maxFileSizeText());
+	}
+
+	/**
+	 * @return true when the file is on the post, put there now or by an earlier run
+	 */
+	private boolean uploadToAsset(final String municipalityId, final String partyAssetsId, final FileArea.Lookup lookup, final String category, final List<AttachedFile> attached,
+		final FileProblems problems) {
+		final byte[] content;
+		try {
+			content = FileArea.read(lookup.path());
+		} catch (final IOException e) {
+			problems.add(FileProblem.UNREADABLE, lookup.name());
+			return false;
+		}
+		// PartyAssets gives no hash, so the size tells the content apart
+		final var file = new AttachedFile(lookup.name(), null, content.length);
+		if (attached.stream().anyMatch(file::isSameAs)) {
+			return true;
+		}
+		if (partyAssets.createAttachment(municipalityId, partyAssetsId, lookup.name(), content, category)) {
+			attached.add(file);
+			return true;
+		}
+		// PartyAssets answers the same when the post takes no files, as after the nightly job has made it EXPIRED
+		final var status = partyAssets.getAsset(municipalityId, partyAssetsId).map(Asset::getStatus).orElse(null);
+		if (status != Status.ACTIVE) {
+			throw new MigrationException("Tillståndet %s i PartyAssets har status %s och tar inte emot filer".formatted(partyAssetsId, status));
+		}
+		problems.add(FileProblem.REFUSED_BY_PARTY_ASSETS, lookup.name());
+		return false;
+	}
+
+	/**
+	 * @return                    the number of files for the post in PartyAssets that are to be put there and are not on it
+	 *                            yet
+	 * @throws MigrationException when the file area cannot be read
+	 */
+	int missingOnAsset(final Candidate candidate, final RunContext context, final String municipalityId, final String partyAssetsId) {
+		if (candidate.assetFiles().isEmpty()) {
+			return 0;
+		}
+		final var fileArea = context.fileArea(candidate.key().source());
+		final var attached = partyAssets.getAttachments(municipalityId, partyAssetsId).stream().map(AttachedFile::of).toList();
+		var missing = 0;
+		for (final var file : candidate.assetFiles()) {
+			final var lookup = fileArea.find(file.reference());
+			if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
+				throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
+			}
+			final var onFileArea = new AttachedFile(lookup.name(), null, (int) lookup.size());
+			if (problemOf(file.reference(), lookup).isEmpty() && attached.stream().noneMatch(onFileArea::isSameAs)) {
+				missing++;
+			}
+		}
+		return missing;
+	}
+
+	/**
+	 * @return the number of files per category, e.g. "Tillståndsbevis 1, Ritning 2"
+	 */
+	private static String categoryCounts(final List<AssetFile> files) {
+		final var counts = new LinkedHashMap<String, Integer>();
+		files.forEach(file -> counts.merge(file.category(), 1, Integer::sum));
+		return counts.entrySet().stream().map(entry -> entry.getKey() + " " + entry.getValue()).collect(joining(", "));
 	}
 
 	/**
@@ -136,6 +246,10 @@ class FileUploader {
 			return new AttachedFile(attachment.getFileName(), attachment.getHash(), attachment.getFileSize());
 		}
 
+		static AttachedFile of(final AssetAttachment attachment) {
+			return new AttachedFile(attachment.getFileName(), null, attachment.getFileSize());
+		}
+
 		/**
 		 * @return true for the same name, regardless of case, and the same content: the same hash, or the same size when a
 		 *         hash is missing. Without either, the files are taken to differ, since a file uploaded twice is better than
@@ -164,6 +278,7 @@ class FileUploader {
 		UNREADABLE("fil gick inte att läsa", "filer gick inte att läsa"),
 		DIRECTORY_UNAVAILABLE("fil kunde inte kontrolleras, filarean gick inte att läsa", "filer kunde inte kontrolleras, filarean gick inte att läsa"),
 		REJECTED("fil togs inte emot av SupportManagement", "filer togs inte emot av SupportManagement"),
+		REFUSED_BY_PARTY_ASSETS("fil togs inte emot av PartyAssets och ligger bara på ärendet", "filer togs inte emot av PartyAssets och ligger bara på ärendet"),
 		SHARED_NAME("fil har ett namn som också används på ett annat ställe och laddas inte upp", "filer har namn som också används på andra ställen och laddas inte upp");
 
 		private final String one;

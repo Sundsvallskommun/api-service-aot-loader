@@ -1,13 +1,18 @@
 package se.sundsvall.aotloader.service;
 
+import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetAttachment;
+import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,10 +21,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.FileUploader.AttachedFile;
 import se.sundsvall.aotloader.service.FileUploader.FileProblem;
 import se.sundsvall.aotloader.service.FileUploader.FileProblems;
+import se.sundsvall.aotloader.service.model.AssetData;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -29,12 +37,15 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
+import se.sundsvall.aotloader.support.MigrationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,9 +57,13 @@ class FileUploaderTest {
 
 	private static final String MUNICIPALITY_ID = "2281";
 	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
+	private static final String ASSET_ID = "22222222-2222-2222-2222-222222222222";
 
 	@Mock
 	private SupportManagementIntegration supportManagement;
+
+	@Mock
+	private PartyAssetsIntegration partyAssets;
 
 	@TempDir
 	private Path documents;
@@ -62,7 +77,7 @@ class FileUploaderTest {
 	@BeforeEach
 	void setUp() throws IOException {
 		properties = TestData.properties(documents.toString(), attachments.toString());
-		uploader = new FileUploader(supportManagement, properties);
+		uploader = new FileUploader(supportManagement, partyAssets, properties);
 		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
 		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
 	}
@@ -139,6 +154,94 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void theFilesOfThePostGoThereInTheirCategoryOnceAndThoseTheErrandStepListsAreSkipped() throws IOException {
+		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
+		final var candidate = withAssetFiles(
+			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Beslut"),
+			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("saknas.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("delad.pdf", ATTACHMENTS, true), "Beslut"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of(new AssetAttachment().fileName("ANSOKAN.pdf").fileSize("bilaga".length())));
+		when(partyAssets.createAttachment(MUNICIPALITY_ID, ASSET_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), "Tillståndsbevis")).thenReturn(true);
+		when(partyAssets.createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "Ritning")).thenReturn(false);
+		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.ACTIVE)));
+		final var notes = new ReportNotes();
+
+		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
+
+		verify(partyAssets, times(2)).createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString());
+		final var result = notes.result(Outcome.MIGRERAD, null);
+		assertThat(result.rules()).containsExactly("G14");
+		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets har 2 av 5 filer: Tillståndsbevis 1, Beslut 2, Ritning 2; "
+			+ "G14 1 fil togs inte emot av PartyAssets och ligger bara på ärendet (ritning.pdf)");
+		verifyNoInteractions(supportManagement);
+	}
+
+	@Test
+	void aFileRefusedSinceThePostIsNoLongerActiveFailsTheStep() {
+		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(false);
+		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
+
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Tillståndet " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
+	}
+
+	@Test
+	void theFilesMissingOnThePostAreThoseToBeUploadedThatAreNotThere() throws IOException {
+		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
+		final var candidate = withAssetFiles(
+			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Beslut"),
+			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("saknas.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("delad.pdf", ATTACHMENTS, true), "Beslut"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of(
+			new AssetAttachment().fileName("beslut.rtf").fileSize("dokument".length()),
+			new AssetAttachment().fileName("ansokan.pdf").fileSize(1)));
+
+		assertThat(uploader.missingOnAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID)).as("ansokan.pdf has another size, ritning.pdf is not there").isEqualTo(2);
+		assertThat(uploader.missingOnAsset(TestData.permit("1"), context(), MUNICIPALITY_ID, ASSET_ID)).isZero();
+		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
+	}
+
+	@Test
+	void aPermitWithoutFilesForThePostCallsNothing() {
+		final var notes = new ReportNotes();
+
+		uploader.uploadToAsset(TestData.permit("1"), context(), MUNICIPALITY_ID, ASSET_ID, notes);
+
+		verifyNoInteractions(partyAssets);
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
+	}
+
+	@Test
+	void aFileAreaThatCannotBeReadStopsTheFilesOfThePost() {
+		properties = TestData.properties(documents.resolve("finns-inte").toString(), attachments.toString());
+		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Filarean för AlkT gick inte att läsa");
+		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
+	}
+
+	@Test
+	void aDryRunTellsWhichFilesWouldGoOnThePost() {
+		final var notes = new ReportNotes();
+
+		uploader.check(withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Ritning")), context(), notes);
+
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till tillståndet i PartyAssets: Tillståndsbevis 1, Ritning 1");
+		verifyNoInteractions(supportManagement, partyAssets);
+	}
+
+	@Test
 	void attachedFiles() {
 		final var file = new AttachedFile("Beslut.rtf", "ABC", 3);
 
@@ -150,6 +253,7 @@ class FileUploaderTest {
 		assertThat(new AttachedFile("beslut.rtf", null, null).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
 		assertThat(new AttachedFile(null, "abc", 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
 		assertThat(AttachedFile.of(new ErrandAttachment().fileName("a.pdf").hash("h").fileSize(1))).isEqualTo(new AttachedFile("a.pdf", "h", 1));
+		assertThat(AttachedFile.of(new AssetAttachment().fileName("a.pdf").fileSize(1))).isEqualTo(new AttachedFile("a.pdf", null, 1));
 	}
 
 	@Test
@@ -188,6 +292,7 @@ class FileUploaderTest {
 			"G14 1 fil gick inte att läsa (en.pdf)",
 			"G14 1 fil kunde inte kontrolleras, filarean gick inte att läsa (en.pdf)",
 			"G14 1 fil togs inte emot av SupportManagement (en.pdf)",
+			"G14 1 fil togs inte emot av PartyAssets och ligger bara på ärendet (en.pdf)",
 			"G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (en.pdf)"));
 		assertThat(severalNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
 			"G14 2 filer saknas på filarean (ett.pdf, två.pdf)",
@@ -197,6 +302,7 @@ class FileUploaderTest {
 			"G14 2 filer gick inte att läsa (ett.pdf, två.pdf)",
 			"G14 2 filer kunde inte kontrolleras, filarean gick inte att läsa (ett.pdf, två.pdf)",
 			"G14 2 filer togs inte emot av SupportManagement (ett.pdf, två.pdf)",
+			"G14 2 filer togs inte emot av PartyAssets och ligger bara på ärendet (ett.pdf, två.pdf)",
 			"G14 2 filer har namn som också används på andra ställen och laddas inte upp (ett.pdf, två.pdf)"));
 	}
 
@@ -229,6 +335,17 @@ class FileUploaderTest {
 
 	private static Candidate withFiles(final FileReference... files) {
 		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).files(List.of(files)).build();
+	}
+
+	/**
+	 * @return a permit with a post in PartyAssets, whose files are those of the errand
+	 */
+	private static Candidate withAssetFiles(final AssetFile... files) {
+		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.files(Arrays.stream(files).map(AssetFile::reference).toList())
+			.assetFiles(List.of(files))
+			.build();
 	}
 
 	private RunContext context() {

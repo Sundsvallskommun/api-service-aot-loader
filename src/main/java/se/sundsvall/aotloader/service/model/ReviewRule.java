@@ -24,7 +24,7 @@ public enum ReviewRule {
 	HOLDER_NOT_IN_PARTY("G10", "Tillståndshavaren finns inte i Party", BLOCKING, false),
 	INSPECTION_HOLDER_NOT_IN_PARTY("G10", "Tillståndshavaren som ärendet gällde finns inte i Party och läggs in utan partyId", INFO, true),
 	PERIOD_ON_ALL_YEAR("G12", "Gäller året runt men har en datumperiod, troligen ett tillfälligt tillägg", BLOCKING, true),
-	NO_ISSUING_ERRAND("G13", "Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt", INFO, true),
+	NO_ISSUING_ERRAND("G13", "Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt", INFO, true),
 	FILE_NOT_UPLOADED("G14", "En fil som ska följa med finns inte på filarean, eller är för stor, och laddas inte upp", INFO, true),
 	DIARY_NUMBER_MISSING("G15", "Tillståndet saknar diarienummer", BLOCKING, false),
 	DIARY_NUMBER_ON_SEVERAL("G16", "Diarienumret finns på mer än ett tillstånd", BLOCKING, true),
@@ -40,6 +40,9 @@ public enum ReviewRule {
 	PERMIT_ROWS_ON_PLACE("G26", "Serveringsstället har flera rader i Gällande_Tillstånd, och bara en kan migreras", BLOCKING, false),
 	DECISION_MISSING("G27", "Tillståndet pekar på ett beslut som saknas i AlkT", INFO, true),
 	VISIT_DATE_INVALID("G28", "Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört", BLOCKING, true),
+	CERTIFICATE_MISSING("G29", "Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets", INFO, true),
+	CERTIFICATE_OLDER("G29", "Det senaste tillståndsbeviset är äldre än tillståndet, eller saknar datum, och kan höra till en tidigare tillståndshavare. Det läggs bara på ärendet, inte på tillståndet i PartyAssets",
+		INFO, true),
 	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false),
 	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true);
 

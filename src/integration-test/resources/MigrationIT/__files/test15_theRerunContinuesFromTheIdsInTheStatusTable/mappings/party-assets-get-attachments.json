@@ -1,0 +1,34 @@
+{
+	"name": "party-assets-get-attachments",
+	"request": {
+		"method": "GET",
+		"url": "/party-assets/2281/assets/asset-internal-6/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"fileName": "44444444.rtf",
+				"category": "Beslut",
+				"fileSize": 28
+			},
+			{
+				"fileName": "ritning våning 2.pdf",
+				"category": "Ritning",
+				"fileSize": 16
+			}
+		]
+	}
+}

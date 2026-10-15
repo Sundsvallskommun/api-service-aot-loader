@@ -21,6 +21,7 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -39,6 +40,7 @@ import se.sundsvall.aotloader.source.InspectionVisitCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
+import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.EventRow;
@@ -49,6 +51,9 @@ import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.Constants.TAG_NOTIFICATION;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
@@ -56,6 +61,8 @@ import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCU
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.APPLICANT_NOT_OWNER;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
@@ -86,6 +93,11 @@ public final class AlkolCandidateFactory {
 	static final String NOTICE_TOBACCO_WITHOUT_PERMIT = "Ö2";
 
 	private static final Set<String> GRANTING_DECISIONS = Set.of("GTDE", "GTPH", "GTDI");
+	/**
+	 * The templates of the tobacco permit certificate, of Sundsvall and of Timrå, made at the granting decision (decision
+	 * 34).
+	 */
+	private static final Set<String> CERTIFICATE_TEMPLATES = Set.of("TILLSTT", "TILLTT");
 	private static final Set<String> ENDING_DECISIONS = Set.of("GTDEU", "GTDEÅ");
 	private static final String SERVING_PLACE_CATEGORY_PREFIX = "serveringsställe";
 	// The product part of the id of the notice for a sales place without any notified product
@@ -208,6 +220,7 @@ public final class AlkolCandidateFactory {
 		final var kindsText = Texts.join(", ", permitKinds(fsId, grant));
 		final var holder = PartyRows.holder(owner, today);
 		final var premises = place == null ? null : place(place);
+		final var files = permitFiles(place, fsId, grant, grantErrand, hits);
 
 		return Candidate.builder(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), ErrandType.TOBACCO_PERMIT)
 			.placeName(placeName)
@@ -236,8 +249,83 @@ public final class AlkolCandidateFactory {
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
 				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber)))
-			.files(errandFiles(grantErrand == null ? List.of() : List.of(grantErrand.arendeId())))
+			.files(files.build())
+			.assetFiles(files.assetFiles())
 			.build();
+	}
+
+	/**
+	 * The files of the tobacco permit: those of the errand of the latest granting decision (decision 7), and those of the
+	 * place's events without an errand that register no notification (decision 37). The certificate, and the drawings and
+	 * the decisions of that errand, also go on the post in PartyAssets, in that order of precedence (decisions 34 and 35).
+	 * A certificate of an earlier grant than the latest may be a former holder's: it goes on the errand only and hits G29,
+	 * as does a permit without a certificate.
+	 */
+	private FileList permitFiles(final SalesPlaceRow place, final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final List<RuleHit> hits) {
+		final var arendeIds = grantErrand == null ? List.<Integer>of() : List.of(grantErrand.arendeId());
+		final var files = addErrandFiles(arendeIds, new FileList(sharedFileNames));
+		eventsWithoutErrand(fsId)
+			.filter(event -> !registersNotification(place, event))
+			.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
+
+		certificate(fsId).ifPresentOrElse(certificate -> {
+			if (grant != null && DECISION_ORDER.compare(certificate.decision(), grant) < 0) {
+				files.addToErrandOnly(certificate.name(), certificate.folder());
+				hits.add(RuleHit.of(CERTIFICATE_OLDER, "beviset hör till beslutet %s, det senaste beviljandet är %s"
+					.formatted(SourceValues.format(certificate.decision().beslutsDatum()), SourceValues.format(grant.beslutsDatum()))));
+			} else {
+				files.add(certificate.name(), certificate.folder(), ASSET_CATEGORY_CERTIFICATE);
+			}
+		}, () -> hits.add(RuleHit.of(CERTIFICATE_MISSING)));
+		arendeIds.forEach(arendeId -> {
+			eventsByErrand.getOrDefault(arendeId, List.of()).stream()
+				.filter(event -> PermitFiles.isDrawing(event.bifogadfil()))
+				.forEach(event -> files.add(event.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).stream()
+				.filter(decision -> PermitFiles.isDrawing(decision.bifogadfil()))
+				.forEach(decision -> files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files
+				.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION)
+				.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DECISION));
+		});
+		return files;
+	}
+
+	/**
+	 * @return the latest certificate of the place: the document of a granting decision made from the template of the
+	 *         certificate, or else an attachment of the decision whose name tells it is a certificate
+	 */
+	private Optional<Certificate> certificate(final Integer fsId) {
+		return decisionsOf(fsId).stream()
+			.filter(decision -> isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
+			.sorted(DECISION_ORDER.reversed())
+			.map(decision -> {
+				if (decision.worddokument() != null && PermitFiles.isTemplate(decision.mall(), CERTIFICATE_TEMPLATES)) {
+					return new Certificate(decision, decision.worddokument(), DOCUMENTS);
+				}
+				if (PermitFiles.isCertificate(decision.bifogadfil())) {
+					return new Certificate(decision, decision.bifogadfil(), ATTACHMENTS);
+				}
+				return null;
+			})
+			.filter(Objects::nonNull)
+			.findFirst();
+	}
+
+	/**
+	 * @return the events of the place that have no errand
+	 */
+	private Stream<EventRow> eventsWithoutErrand(final Integer fsId) {
+		return eventsByPlace.getOrDefault(fsId, List.of()).stream().filter(event -> event.arendeId() == null);
+	}
+
+	/**
+	 * @return true for an event that registers a product the place has a notification of; its files go to that
+	 *         notification
+	 */
+	private static boolean registersNotification(final SalesPlaceRow place, final EventRow event) {
+		return place != null && !place.upphort() && Arrays.stream(Product.values())
+			.anyMatch(product -> product.isNotifiedOn(place) && product.isEventType(event.handelseTyp()));
 	}
 
 	private Candidate notification(final SalesPlaceRow place, final Product product) {
@@ -289,8 +377,20 @@ public final class AlkolCandidateFactory {
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(null, "Anmälan om " + productText + " på " + name, notified.date(), null, assetParameters))
-			.files(errandFiles(errands.stream().map(ErrandRow::arendeId).toList()))
+			.files(notificationFiles(place, product, errands))
 			.build();
+	}
+
+	/**
+	 * The files of the notification: those of its errands and of its own events without an errand, and, when the place
+	 * has no tobacco permit, those of the place's events without an errand that register no notification (decision 37).
+	 */
+	private List<FileReference> notificationFiles(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands) {
+		final var files = addErrandFiles(errands.stream().map(ErrandRow::arendeId).toList(), new FileList(sharedFileNames));
+		eventsWithoutErrand(place.fsId())
+			.filter(event -> product.isEventType(event.handelseTyp()) || (!hasPermit(place.fsId()) && !registersNotification(place, event)))
+			.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
+		return files.build();
 	}
 
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
@@ -306,7 +406,7 @@ public final class AlkolCandidateFactory {
 			.toList();
 
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions)
-			.files(errandFiles(List.of(errand.arendeId())))
+			.files(addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames)).build())
 			.build();
 	}
 
@@ -556,13 +656,12 @@ public final class AlkolCandidateFactory {
 			.min(Comparator.naturalOrder());
 	}
 
-	private List<FileReference> errandFiles(final Collection<Integer> arendeIds) {
-		final var files = new FileList(sharedFileNames);
+	private FileList addErrandFiles(final Collection<Integer> arendeIds, final FileList files) {
 		for (final var arendeId : arendeIds) {
 			eventsByErrand.getOrDefault(arendeId, List.of()).forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
 			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files.add(decision.worddokument(), DOCUMENTS).add(decision.bifogadfil(), ATTACHMENTS));
 		}
-		return files.build();
+		return files;
 	}
 
 	/**
@@ -670,6 +769,16 @@ public final class AlkolCandidateFactory {
 			.map(grant -> errandsById.get(grant.arendeId()))
 			.map(errand -> DiaryNumbers.normalize(errand.diarieNr()))
 			.ifPresent(number -> permitsByDiaryNumber.merge(number, 1, Integer::sum)));
+	}
+
+	/**
+	 * The certificate of a tobacco permit.
+	 *
+	 * @param decision the granting decision it belongs to
+	 * @param name     the file name
+	 * @param folder   the directory of the file area
+	 */
+	private record Certificate(DecisionRow decision, String name, FileFolder folder) {
 	}
 
 	/**

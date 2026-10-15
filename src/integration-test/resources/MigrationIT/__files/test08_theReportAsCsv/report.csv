@@ -1,2 +1,2 @@
 ﻿Källa;Sort;Käll-id;Serveringsställenummer;Ställe;Utfall;Regler;Detalj;Ärendenummer
-"ALKT";"TILLSTAND";"2";"12345679";"Krogen Två";"GRANSKAS";"G2,G13";"G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt";""
+"ALKT";"TILLSTAND";"2";"12345679";"Krogen Två";"GRANSKAS";"G2,G13,G29";"G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets";""

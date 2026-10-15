@@ -64,7 +64,7 @@ public class AlkolRepository {
 
 	private static final String SELECT_DECISIONS = """
 		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum,
-		       b.Worddokument, b.Bifogadfil
+		       b.Dokument, b.Worddokument, b.Bifogadfil
 		FROM dbo.Beslut b
 		""";
 
@@ -198,6 +198,7 @@ public class AlkolRepository {
 			text(rs, "BeslutsTyp"),
 			dateTime(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtFROM_Datum"),
+			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
 			text(rs, "Bifogadfil"));
 	}

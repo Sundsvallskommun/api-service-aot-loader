@@ -41,6 +41,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.springframework.http.HttpHeaders.LOCATION;
 import static org.springframework.http.HttpMethod.GET;
 import static org.springframework.http.HttpMethod.POST;
@@ -156,7 +157,11 @@ class MigrationIT extends AbstractAppTest {
 		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26)
-			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf");
+			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "55555555.rtf", "serveringsansvarig.pdf");
+		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-1/attachments"))))
+			.as("The certificate and the decision of the issuing errand also go on the permit (decision 34)")
+			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
+			.containsExactlyInAnyOrder(tuple("55555555.rtf", "Tillståndsbevis"), tuple("22222222.rtf", "Beslut"));
 		final var created = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands"))).getFirst().getBodyAsString();
 		final List<Map<String, Object>> personParameters = JsonPath.read(created, "$.stakeholders[?(@.externalId == '22222222-aaaa-bbbb-cccc-000000000002')].parameters[*]");
 		assertThat(personParameters).extracting(parameter -> parameter.get("key")).containsExactly("PBI", "befattning");
@@ -286,6 +291,10 @@ class MigrationIT extends AbstractAppTest {
 		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			.containsExactlyInAnyOrder("44444444.rtf", "ansökan räkenskaper.pdf", "ritning våning 2.pdf", "fasad.jpg", "Översiktskarta.pdf");
+		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-6/attachments"))))
+			.as("The drawing and the decision of the issuing errand also go on the permit (decisions 34 and 35)")
+			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
+			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Ritning"), tuple("44444444.rtf", "Beslut"));
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
 		verifyStubs();
 
@@ -426,6 +435,7 @@ class MigrationIT extends AbstractAppTest {
 			Files.writeString(root.resolve("alkt-dokument").resolve("11111111.rtf"), "{\\rtf1 Dokument}");
 			Files.writeString(root.resolve("alkt-dokument").resolve("22222222.rtf"), "{\\rtf1 Beslut}");
 			Files.writeString(root.resolve("alkt-dokument").resolve("44444444.rtf"), "{\\rtf1 Beslut om Krogen Tre}");
+			Files.writeString(root.resolve("alkt-dokument").resolve("55555555.rtf"), "{\\rtf1 Tillståndsbevis}");
 			Files.writeString(root.resolve("alkt-bilder").resolve("ansokan.pdf"), "%PDF-1.4 ansökan");
 			Files.writeString(root.resolve("alkt-bilder").resolve("skylt.jpg"), "bild");
 			Files.writeString(root.resolve("alkt-bilder").resolve("ansökan räkenskaper.pdf"), "%PDF-1.4 räkenskaper");
@@ -434,6 +444,7 @@ class MigrationIT extends AbstractAppTest {
 			Files.writeString(root.resolve("alkt-bilder").resolve("Översiktskarta.pdf"), "%PDF-1.4 karta");
 			Files.writeString(root.resolve("alkt-bilder").resolve("besöksrapport.pdf"), "%PDF-1.4 besök");
 			Files.writeString(root.resolve("alkt-bilder").resolve("foto.jpg"), "foto");
+			Files.writeString(root.resolve("alkt-bilder").resolve("serveringsansvarig.pdf"), "%PDF-1.4 serveringsansvarig");
 			Files.writeString(root.resolve("alkol").resolve("33333333.rtf"), "{\\rtf1 Tobak}");
 			root.toFile().deleteOnExit();
 			return root;

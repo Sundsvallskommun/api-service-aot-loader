@@ -89,8 +89,11 @@ public record AlkolSnapshot(
 
 	/**
 	 * A row of Beslut.
+	 *
+	 * @param mall the code of the document template the decision document was made from, null when none
 	 */
-	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, String worddokument, String bifogadfil) {
+	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, String mall, String worddokument,
+		String bifogadfil) {
 
 		/**
 		 * @return the date the decision was made, null when unknown

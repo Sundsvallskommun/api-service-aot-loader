@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.service;
 
+import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -223,8 +224,17 @@ public class ItemMigrator {
 
 			step = Step.TILLSTAND;
 			if (candidate.asset() != null) {
-				entity.setPartyAssetsId(targets.ensureAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes));
+				final var partyAssetsId = targets.ensureAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes);
+				entity.setPartyAssetsId(partyAssetsId);
 				entity.setAssetId(errand.getId());
+				if (!expired) {
+					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+				} else if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) > 0) {
+					// An EXPIRED post takes no files, so it is ACTIVE while it gets those it lacks
+					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, notes);
+					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, notes);
+				}
 				saveAs(TILLSTAND_SKAPAT);
 			}
 

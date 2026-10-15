@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.FileRefusal;
 import se.sundsvall.aotloader.support.ByteArrayMultipartFile;
 import se.sundsvall.aotloader.support.FilterValues;
 import se.sundsvall.aotloader.support.Locations;
@@ -19,7 +20,6 @@ import se.sundsvall.dept44.problem.ThrowableProblem;
 
 import static java.util.Collections.emptyList;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
-import static se.sundsvall.aotloader.integration.supportmanagement.configuration.SupportManagementConfiguration.FILE_REFUSED_STATUSES;
 
 @Component
 public class SupportManagementIntegration {
@@ -119,7 +119,7 @@ public class SupportManagementIntegration {
 			client.createAttachment(municipalityId, namespace, errandId, new ByteArrayMultipartFile(SupportManagementClient.ATTACHMENT_PART, fileName, content));
 			return true;
 		} catch (final ThrowableProblem problem) {
-			if (problem.getStatus() != null && FILE_REFUSED_STATUSES.contains(problem.getStatus().value())) {
+			if (FileRefusal.isRefusal(problem)) {
 				return false;
 			}
 			throw problem;

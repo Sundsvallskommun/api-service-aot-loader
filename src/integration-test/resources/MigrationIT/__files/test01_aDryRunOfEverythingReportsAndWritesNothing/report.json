@@ -7,7 +7,7 @@
 		"placeName": "Krogen Ett",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "G14",
-		"detail": "G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg)"
+		"detail": "Till tillståndet i PartyAssets: Tillståndsbevis 1, Beslut 1; G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg)"
 	},
 	{
 		"source": "ALKT",
@@ -16,8 +16,8 @@
 		"placeNumber": "12345679",
 		"placeName": "Krogen Två",
 		"outcome": "GRANSKAS",
-		"rules": "G2,G13",
-		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+		"rules": "G2,G13,G29",
+		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
 	},
 	{
 		"source": "ALKT",
@@ -26,7 +26,8 @@
 		"placeNumber": "12345680",
 		"placeName": "Krogen Tre",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": ""
+		"rules": "G29",
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning 1, Beslut 1"
 	},
 	{
 		"source": "ALKT",
@@ -35,8 +36,8 @@
 		"placeNumber": "12345681",
 		"placeName": "Timråkrogen",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": "G13",
-		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer automatiskt"
+		"rules": "G13,G29",
+		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
 	},
 	{
 		"source": "ALKT",
@@ -83,7 +84,8 @@
 		"sourceId": "1",
 		"placeName": "Kiosken",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": ""
+		"rules": "G29",
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
 	},
 	{
 		"source": "ALKOL",

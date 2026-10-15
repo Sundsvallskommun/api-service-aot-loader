@@ -5,6 +5,7 @@
 	"placeNumber": "12345680",
 	"placeName": "Krogen Tre",
 	"outcome": "MIGRERAD",
-	"rules": "",
+	"rules": "G29",
+	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Tillståndet i PartyAssets har 2 av 2 filer: Ritning 1, Beslut 1",
 	"errandNumber": "ALKT-2026-6"
 }

@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
@@ -18,6 +19,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettin
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.service.TestData;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -61,6 +63,51 @@ class SourceSupportTest {
 			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]", "c=[y]");
 		assertThat(new FileList(SharedFileNames.builder(TWO_DIRECTORIES).build()).add(" a.pdf ", ATTACHMENTS).add("A.PDF", ATTACHMENTS).add("a.pdf", DOCUMENTS).add(" ", DOCUMENTS).add(null, DOCUMENTS).build())
 			.containsExactly(new FileReference("a.pdf", ATTACHMENTS), new FileReference("a.pdf", DOCUMENTS));
+	}
+
+	@Test
+	void aFileForThePostKeepsTheCategoryItIsFirstMarkedWithAndIsAFileOfTheErrandToo() {
+		final var shared = SharedFileNames.builder(TWO_DIRECTORIES).add("objekt:1", "delad.pdf", ATTACHMENTS).add("objekt:2", "delad.pdf", ATTACHMENTS).build();
+		final var files = new FileList(shared)
+			.add("ansokan.pdf", ATTACHMENTS)
+			.add("bevis.rtf", DOCUMENTS, "Tillståndsbevis")
+			.add("BEVIS.RTF", DOCUMENTS, "Beslut")
+			.add("delad.pdf", ATTACHMENTS, "Ritning")
+			.add(" ", ATTACHMENTS, "Ritning")
+			.add("ansokan.pdf", ATTACHMENTS, "Beslut");
+
+		assertThat(files.build()).containsExactly(
+			new FileReference("ansokan.pdf", ATTACHMENTS),
+			new FileReference("bevis.rtf", DOCUMENTS),
+			new FileReference("delad.pdf", ATTACHMENTS, true));
+		assertThat(files.assetFiles()).containsExactly(
+			new AssetFile(new FileReference("bevis.rtf", DOCUMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("delad.pdf", ATTACHMENTS, true), "Ritning"),
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Beslut"));
+
+		final var errandOnly = new FileList(shared)
+			.addToErrandOnly("gammalt-bevis.rtf", DOCUMENTS)
+			.add("GAMMALT-BEVIS.rtf", DOCUMENTS, "Beslut")
+			.add("bevis.rtf", DOCUMENTS, "Tillståndsbevis")
+			.addToErrandOnly("bevis.rtf", DOCUMENTS);
+		assertThat(errandOnly.build()).extracting(FileReference::name).containsExactly("gammalt-bevis.rtf", "bevis.rtf");
+		assertThat(errandOnly.assetFiles()).containsExactly(new AssetFile(new FileReference("bevis.rtf", DOCUMENTS), "Tillståndsbevis"));
+	}
+
+	@Test
+	void permitFiles() {
+		assertThat(PermitFiles.isDrawing("Planritning.PDF")).isTrue();
+		assertThat(PermitFiles.isDrawing("RITNING våning 2.pdf")).isTrue();
+		assertThat(PermitFiles.isDrawing("ritn.pdf")).isFalse();
+		assertThat(PermitFiles.isDrawing(null)).isFalse();
+		assertThat(PermitFiles.isTemplate(" tdbv2 ", Set.of("TDBV2"))).isTrue();
+		assertThat(PermitFiles.isTemplate("TDBV", Set.of("TDBV2"))).isFalse();
+		assertThat(PermitFiles.isTemplate(null, Set.of("TDBV2"))).isFalse();
+		assertThat(PermitFiles.isCertificate("Tillståndsbevis 2023.pdf")).isTrue();
+		assertThat(PermitFiles.isCertificate("TILLSTANDS_BEVIS.pdf")).isTrue();
+		assertThat(PermitFiles.isCertificate("Mottagningsbevis.pdf")).isFalse();
+		assertThat(PermitFiles.isCertificate("Delgivningsbevis tillstånd.pdf")).isFalse();
+		assertThat(PermitFiles.isCertificate(null)).isFalse();
 	}
 
 	@Test

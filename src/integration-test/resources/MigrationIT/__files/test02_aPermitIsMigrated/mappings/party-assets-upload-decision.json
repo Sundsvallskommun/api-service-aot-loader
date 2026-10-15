@@ -1,0 +1,50 @@
+{
+	"name": "party-assets-upload-decision",
+	"request": {
+		"method": "POST",
+		"url": "/party-assets/2281/assets/asset-internal-1/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"multipartPatterns": [
+			{
+				"matchingType": "ANY",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "name=\"attachment\""
+					}
+				},
+				"bodyPatterns": [
+					{
+						"equalTo": "{\\rtf1 Beslut}"
+					}
+				]
+			},
+			{
+				"matchingType": "ANY",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "name=\"category\""
+					}
+				},
+				"bodyPatterns": [
+					{
+						"equalTo": "Beslut"
+					}
+				]
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-1/attachments/x"
+		}
+	}
+}

@@ -15,17 +15,23 @@ import static java.util.Collections.emptyMap;
  * What the migration reads from AlkT in one go: the tables it needs, in memory, so that rules that compare permits with
  * each other see all of them. It holds personal data and is never logged or stored.
  *
- * @param permits     the rows of Gällande_Tillstånd
- * @param places      the serving places by ObjektID
- * @param owners      the owners by AgarID
- * @param conditions  the conditions by ObjektID
- * @param decisions   the decisions by BeslutsID
- * @param errands     the errands by ArendeID
- * @param errandFiles the files of the errands' events and pictures, by ArendeID
- * @param persons     the active persons with significant influence, by AgarID
- * @param applicants  the applicants of the inspection errands, by SokandeID
- * @param codeTexts   the texts of the code lists, by code type and code
- * @param visits      the inspection visits, with the code lists of kinds and remarks (code types L and V)
+ * @param permits       the rows of Gällande_Tillstånd
+ * @param places        the serving places by ObjektID
+ * @param owners        the owners by AgarID
+ * @param conditions    the conditions by ObjektID
+ * @param decisions     the decisions by BeslutsID
+ * @param errands       the errands by ArendeID
+ * @param errandFiles   the files of the errands' events and pictures, by ArendeID
+ * @param placeFiles    the files of the events without an errand, by the ObjektID of the event; an event whose errand
+ *                      is
+ *                      missing counts as one without an errand
+ * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
+ *                      tell which file names are shared
+ * @param documents     the documents AlkT generated at events, with the template each was made from
+ * @param persons       the active persons with significant influence, by AgarID
+ * @param applicants    the applicants of the inspection errands, by SokandeID
+ * @param codeTexts     the texts of the code lists, by code type and code
+ * @param visits        the inspection visits, with the code lists of kinds and remarks (code types L and V)
  */
 public record AlktSnapshot(
 	List<PermitRow> permits,
@@ -35,6 +41,9 @@ public record AlktSnapshot(
 	Map<Integer, DecisionRow> decisions,
 	Map<Integer, ErrandRow> errands,
 	Map<Integer, List<FileRow>> errandFiles,
+	Map<Integer, List<FileRow>> placeFiles,
+	Map<Integer, List<FileRow>> unplacedFiles,
+	List<DocumentRow> documents,
 	Map<Integer, List<PersonRow>> persons,
 	Map<Integer, ContactRow> applicants,
 	Map<String, Map<String, String>> codeTexts,
@@ -67,6 +76,13 @@ public record AlktSnapshot(
 
 	public List<FileRow> filesOf(final Integer arendeId) {
 		return errandFiles.getOrDefault(arendeId, emptyList());
+	}
+
+	/**
+	 * @return the files of the events of the place that have no errand
+	 */
+	public List<FileRow> placeFilesOf(final Integer objektId) {
+		return placeFiles.getOrDefault(objektId, emptyList());
 	}
 
 	public List<PersonRow> personsOf(final Integer agarId) {
@@ -146,6 +162,8 @@ public record AlktSnapshot(
 
 	/**
 	 * A row of Ärende_Beslut.
+	 *
+	 * @param mall the code of the document template the decision document was made from, null when none
 	 */
 	public record DecisionRow(
 		Integer beslutsId,
@@ -153,6 +171,7 @@ public record AlktSnapshot(
 		String beslutsTyp,
 		LocalDate beslutsDatum,
 		LocalDate giltigtTom,
+		String mall,
 		String worddokument,
 		String bifogadFil) {
 	}
@@ -178,6 +197,19 @@ public record AlktSnapshot(
 	 * @param generated true for a document AlkT generated, false for an attachment
 	 */
 	public record FileRow(Integer arendeId, String name, boolean generated) {
+	}
+
+	/**
+	 * A document AlkT generated at an event.
+	 *
+	 * @param handelseId the event
+	 * @param arendeId   the errand of the event, null when it has none
+	 * @param objektId   the place of the event itself, which an event without an errand belongs to
+	 * @param mall       the code of the document template, null when none
+	 * @param datum      the date of the event, null when unknown
+	 * @param name       the file name
+	 */
+	public record DocumentRow(Integer handelseId, Integer arendeId, Integer objektId, String mall, LocalDate datum, String name) {
 	}
 
 }

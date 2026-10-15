@@ -112,6 +112,24 @@ class TargetWriter {
 				.orElseThrow(() -> new MigrationException("PartyAssets svarade att tillståndet redan finns, men det gick inte att hitta")), wanted, notes));
 	}
 
+	/**
+	 * Gives an EXPIRED post the status ACTIVE while it gets its files, since an EXPIRED post takes none, and EXPIRED back
+	 * once it has them.
+	 *
+	 * @throws MigrationException when the post does not get the status, or is gone
+	 */
+	void changeAssetStatus(final String municipalityId, final String partyAssetsId, final Status status, final ReportNotes notes) {
+		partyAssets.updateAsset(municipalityId, partyAssetsId, new AssetUpdateRequest().status(status));
+		final var updated = partyAssets.getAsset(municipalityId, partyAssetsId)
+			.orElseThrow(() -> new MigrationException("Tillståndet %s fanns inte i PartyAssets efter ändringen".formatted(partyAssetsId)));
+		if (updated.getStatus() != status) {
+			throw new MigrationException("Tillståndet %s i PartyAssets fick inte status %s".formatted(partyAssetsId, status));
+		}
+		notes.line(status == Status.ACTIVE
+			? "Tillståndet i PartyAssets hade status ACTIVE medan det fick sina filer, eftersom ett EXPIRED tillstånd inte tar emot filer"
+			: "Tillståndet i PartyAssets fick status EXPIRED igen när det hade fått sina filer");
+	}
+
 	private static String holderPartyId(final PartyIds parties) {
 		return parties.holderPartyId().orElseThrow(() -> new MigrationException("Tillståndshavaren saknar partyId"));
 	}

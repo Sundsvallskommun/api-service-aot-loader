@@ -12,6 +12,7 @@ import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
@@ -67,6 +68,9 @@ final class AlktTestData {
 		private final Map<Integer, DecisionRow> decisions = new HashMap<>();
 		private final Map<Integer, ErrandRow> errands = new HashMap<>();
 		private final Map<Integer, List<FileRow>> files = new HashMap<>();
+		private final Map<Integer, List<FileRow>> placeFiles = new HashMap<>();
+		private final Map<Integer, List<FileRow>> unplacedFiles = new HashMap<>();
+		private final List<DocumentRow> documents = new ArrayList<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
 		private final List<VisitRow> visits = new ArrayList<>();
@@ -108,6 +112,21 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder placeFile(final int objektId, final FileRow row) {
+			placeFiles.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		SnapshotBuilder unplacedFile(final int handelseId, final FileRow row) {
+			unplacedFiles.computeIfAbsent(handelseId, _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		SnapshotBuilder document(final DocumentRow row) {
+			documents.add(row);
+			return this;
+		}
+
 		SnapshotBuilder person(final PersonRow row) {
 			persons.computeIfAbsent(row.agarId(), _ -> new ArrayList<>()).add(row);
 			return this;
@@ -135,7 +154,7 @@ final class AlktTestData {
 
 		AlktSnapshot build() {
 			final var texts = codeTexts();
-			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, persons, applicants, texts,
+			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeFiles, unplacedFiles, documents, persons, applicants, texts,
 				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V")));
 		}
 	}

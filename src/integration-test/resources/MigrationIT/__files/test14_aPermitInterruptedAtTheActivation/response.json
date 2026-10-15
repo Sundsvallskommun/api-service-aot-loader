@@ -5,7 +5,7 @@
 	"placeNumber": "12345680",
 	"placeName": "Krogen Tre",
 	"outcome": "FEL",
-	"rules": "",
-	"detail": "${json-unit.regex}Steg Aktivera ärendet: RetryableException: Connection reset executing PATCH http://localhost:\\d+/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006",
+	"rules": "G29",
+	"detail": "${json-unit.regex}Steg Aktivera ärendet: RetryableException: Connection reset executing PATCH http://localhost:\\d+/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Tillståndet i PartyAssets har 2 av 2 filer: Ritning 1, Beslut 1",
 	"errandNumber": "ALKT-2026-6"
 }

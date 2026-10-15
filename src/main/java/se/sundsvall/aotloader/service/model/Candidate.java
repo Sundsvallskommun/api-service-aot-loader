@@ -29,6 +29,7 @@ import static java.util.Objects.requireNonNull;
  * @param parameters   the parameters of the errand
  * @param asset        the post in PartyAssets, null for an errand without one
  * @param files        the files that follow the errand
+ * @param assetFiles   the files that also go on the post in PartyAssets, each one of the files of the errand
  * @param permitLink   for an inspection errand, what decides the relation to the permit errand, otherwise null
  */
 public record Candidate(
@@ -47,6 +48,7 @@ public record Candidate(
 	List<Parameter> parameters,
 	AssetData asset,
 	List<FileReference> files,
+	List<AssetFile> assetFiles,
 	PermitLink permitLink) {
 
 	public Candidate {
@@ -58,6 +60,7 @@ public record Candidate(
 		externalTags = externalTags == null ? Map.of() : unmodifiableMap(new LinkedHashMap<>(externalTags));
 		parameters = parameters == null ? List.of() : List.copyOf(parameters);
 		files = files == null ? List.of() : List.copyOf(files);
+		assetFiles = assetFiles == null ? List.of() : List.copyOf(assetFiles);
 	}
 
 	public static Builder builder(final ItemKey key, final ErrandType type) {
@@ -82,6 +85,7 @@ public record Candidate(
 		private final Map<String, String> externalTags = new LinkedHashMap<>();
 		private final List<Parameter> parameters = new ArrayList<>();
 		private final List<FileReference> files = new ArrayList<>();
+		private final List<AssetFile> assetFiles = new ArrayList<>();
 		private String placeName;
 		private String placeNumber;
 		private Holder holder;
@@ -173,13 +177,18 @@ public record Candidate(
 			return this;
 		}
 
+		public Builder assetFiles(final List<AssetFile> values) {
+			this.assetFiles.addAll(values);
+			return this;
+		}
+
 		public Builder permitLink(final PermitLink value) {
 			this.permitLink = value;
 			return this;
 		}
 
 		public Candidate build() {
-			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, asset, files, permitLink);
+			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, asset, files, assetFiles, permitLink);
 		}
 	}
 }

@@ -2,11 +2,14 @@ package se.sundsvall.aotloader.source.alkt;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -20,6 +23,7 @@ import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.SourceDatabases;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
@@ -78,7 +82,7 @@ public class AlktRepository {
 		""";
 
 	private static final String SELECT_DECISIONS = """
-		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtTOM_Datum, b.Worddokument, b.BifogadFil
+		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtTOM_Datum, b.Dokument, b.Worddokument, b.BifogadFil
 		FROM dbo.[Ärende_Beslut] b
 		""";
 
@@ -87,19 +91,18 @@ public class AlktRepository {
 		FROM dbo.[Ärende] ar
 		""";
 
+	// Also the events without an errand, whose files go to the permit of their place (decision 37)
 	private static final String SELECT_EVENT_FILES = """
-		SELECT h.ArendeID, h.Worddokument, h.Bifogadfil
+		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.Dokument, h.HandelseDatumTid, h.Worddokument, h.Bifogadfil
 		FROM dbo.[Ärende_Händelser] h
-		WHERE h.ArendeID IS NOT NULL
-		  AND (h.Worddokument IS NOT NULL OR h.Bifogadfil IS NOT NULL)
+		WHERE h.Worddokument IS NOT NULL OR h.Bifogadfil IS NOT NULL
 		""";
 
 	private static final String SELECT_EVENT_EXTRA_FILES = """
-		SELECT h.ArendeID, f.Bifogadfil
+		SELECT h.HandelseID, h.ArendeID, h.ObjektID, f.Bifogadfil
 		FROM dbo.[Ärende_Händelser_Filer] f
 		JOIN dbo.[Ärende_Händelser] h ON h.HandelseID = f.HandelseID
-		WHERE h.ArendeID IS NOT NULL
-		  AND f.Bifogadfil IS NOT NULL
+		WHERE f.Bifogadfil IS NOT NULL
 		""";
 
 	private static final String SELECT_PICTURES = """
@@ -160,13 +163,13 @@ public class AlktRepository {
 	 */
 	public AlktSnapshot readSnapshot() {
 		final var jdbc = sourceDatabases.jdbcTemplate(ALKT);
-		final var fileRows = Stream.of(
-			jdbc.query(SELECT_EVENT_FILES, AlktRepository::toEventFiles).stream().flatMap(List::stream),
-			jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bifogadfil"), false)).stream(),
-			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bildfilnamn"), false)).stream())
-			.flatMap(s -> s)
-			.filter(row -> row.name() != null && row.arendeId() != null)
-			.collect(groupingBy(FileRow::arendeId));
+		final var errands = byKey(jdbc.query(SELECT_ERRANDS, AlktRepository::toErrand), ErrandRow::arendeId);
+		final var eventFiles = EventFiles.of(
+			Stream.concat(
+				jdbc.query(SELECT_EVENT_FILES, AlktRepository::toEventFile).stream(),
+				jdbc.query(SELECT_EVENT_EXTRA_FILES, AlktRepository::toEventExtraFile).stream()).toList(),
+			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, "ArendeID"), text(rs, "Bildfilnamn"), false)),
+			errands.keySet());
 
 		final var codeTexts = readCodeTexts(jdbc);
 		return new AlktSnapshot(
@@ -175,8 +178,11 @@ public class AlktRepository {
 			byKey(jdbc.query(SELECT_OWNERS, PartyRows::toOwner), ContactRow::id),
 			jdbc.query(SELECT_CONDITIONS, AlktRepository::toCondition).stream().filter(row -> row.objektId() != null).collect(groupingBy(ConditionRow::objektId)),
 			byKey(jdbc.query(SELECT_DECISIONS, AlktRepository::toDecision), DecisionRow::beslutsId),
-			byKey(jdbc.query(SELECT_ERRANDS, AlktRepository::toErrand), ErrandRow::arendeId),
-			fileRows,
+			errands,
+			eventFiles.errandFiles(),
+			eventFiles.placeFiles(),
+			eventFiles.unplacedFiles(),
+			eventFiles.documents(),
 			jdbc.query(SELECT_PERSONS, PartyRows::toPerson).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, PartyRows::toApplicant), ContactRow::id),
 			codeTexts,
@@ -279,6 +285,7 @@ public class AlktRepository {
 			text(rs, "BeslutsTyp"),
 			date(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtTOM_Datum"),
+			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
 			text(rs, "BifogadFil"));
 	}
@@ -315,10 +322,61 @@ public class AlktRepository {
 			text(rs, "Bifogadfil"));
 	}
 
-	static List<FileRow> toEventFiles(final ResultSet rs, final int rowNum) throws SQLException {
-		final var arendeId = integer(rs, "ArendeID");
-		return List.of(
-			new FileRow(arendeId, text(rs, "Worddokument"), true),
-			new FileRow(arendeId, text(rs, "Bifogadfil"), false));
+	static EventFile toEventFile(final ResultSet rs, final int rowNum) throws SQLException {
+		return new EventFile(
+			integer(rs, "HandelseID"),
+			integer(rs, "ArendeID"),
+			integer(rs, "ObjektID"),
+			text(rs, "Dokument"),
+			date(rs, "HandelseDatumTid"),
+			text(rs, "Worddokument"),
+			text(rs, "Bifogadfil"));
+	}
+
+	static EventFile toEventExtraFile(final ResultSet rs, final int rowNum) throws SQLException {
+		return new EventFile(integer(rs, "HandelseID"), integer(rs, "ArendeID"), integer(rs, "ObjektID"), null, null, null, text(rs, "Bifogadfil"));
+	}
+
+	/**
+	 * The files of an event of AlkT, from the event itself or from Ärende_Händelser_Filer.
+	 */
+	record EventFile(Integer handelseId, Integer arendeId, Integer objektId, String mall, LocalDate datum, String worddokument, String bifogadfil) {
+
+		private Stream<FileRow> files(final Integer errand) {
+			return Stream.of(new FileRow(errand, worddokument, true), new FileRow(errand, bifogadfil, false))
+				.filter(row -> row.name() != null);
+		}
+	}
+
+	/**
+	 * The files of the events and pictures, split by where they go. An event whose errand is missing in Ärende counts as
+	 * one without an errand.
+	 *
+	 * @param errandFiles   the files of the events with an errand, and the pictures, by ArendeID
+	 * @param placeFiles    the files of the events without an errand, by the ObjektID of the event
+	 * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID
+	 * @param documents     the documents of every event, with their template
+	 */
+	record EventFiles(Map<Integer, List<FileRow>> errandFiles, Map<Integer, List<FileRow>> placeFiles, Map<Integer, List<FileRow>> unplacedFiles, List<DocumentRow> documents) {
+
+		static EventFiles of(final List<EventFile> events, final List<FileRow> pictures, final Set<Integer> errandIds) {
+			final Predicate<EventFile> withErrand = event -> event.arendeId() != null && errandIds.contains(event.arendeId());
+			final var errandFiles = Stream.concat(
+				events.stream().filter(withErrand).flatMap(event -> event.files(event.arendeId())),
+				pictures.stream().filter(row -> row.name() != null && row.arendeId() != null))
+				.collect(groupingBy(FileRow::arendeId));
+			final var placeFiles = new HashMap<Integer, List<FileRow>>();
+			final var unplacedFiles = new HashMap<Integer, List<FileRow>>();
+			events.stream()
+				.filter(withErrand.negate())
+				.forEach(event -> event.files(null).forEach(row -> (event.objektId() == null
+					? unplacedFiles.computeIfAbsent(event.handelseId(), _ -> new ArrayList<>())
+					: placeFiles.computeIfAbsent(event.objektId(), _ -> new ArrayList<>())).add(row)));
+			final var documents = events.stream()
+				.filter(event -> event.worddokument() != null)
+				.map(event -> new DocumentRow(event.handelseId(), event.arendeId(), event.objektId(), event.mall(), event.datum(), event.worddokument()))
+				.toList();
+			return new EventFiles(errandFiles, placeFiles, unplacedFiles, documents);
+		}
 	}
 }

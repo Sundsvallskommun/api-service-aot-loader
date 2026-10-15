@@ -42,7 +42,7 @@ class PersonalDataTest {
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1));
 		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
@@ -66,7 +66,7 @@ class PersonalDataTest {
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");
@@ -86,8 +86,8 @@ class PersonalDataTest {
 		assertThat(CodeTexts.textOf(Map.of("KIO", "Kiosk"), "KIO")).isEqualTo("Kiosk");
 		assertThat(CodeTexts.textOf(Map.of(), "KIO")).isEqualTo("KIO");
 		assertThat(CodeTexts.textOf(Map.of(), null)).isNull();
-		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", LocalDateTime.of(2020, 1, 2, 3, 4), null, null, null).beslutsDatum()).isEqualTo(LocalDate.of(2020, 1, 2));
-		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", null, null, null, null).beslutsDatum()).isNull();
+		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", LocalDateTime.of(2020, 1, 2, 3, 4), null, null, null, null).beslutsDatum()).isEqualTo(LocalDate.of(2020, 1, 2));
+		assertThat(new AlkolSnapshot.DecisionRow(1, 1, "GTDE", null, null, null, null, null).beslutsDatum()).isNull();
 	}
 
 	private static void assertHidden(final Object object) {

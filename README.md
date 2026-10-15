@@ -4,7 +4,8 @@ _Migrates the current alcohol and tobacco permits, the notifications and the ins
 (AlkT, and AlkOL2 with the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products) to SupportManagement and PartyAssets._
 
 Every permit and notification becomes a closed errand in the namespace AOT and a post in PartyAssets, linked to the
-errand. Every inspection errand becomes a closed errand, related to the permit errand of its place when it concerned the
+errand. The files of the source go on the errand, and the permit certificate, the annex, the drawings and the decisions
+of a permit also go on its post, each in its category (decisions 34–37). Every inspection errand becomes a closed errand, related to the permit errand of its place when it concerned the
 same permit holder. The migrated errands carry the label "Migrerat ärende", which keeps every process away from them. No
 mail, SMS or message is sent, and no process is started. The design, the mapping and the decisions are in
 [the solution document](docs/losningsdokument-migrering.md).
@@ -191,7 +192,8 @@ twice; an item already migrated is left as it is, and an item that stopped half 
 Its post in PartyAssets is then brought up to date: it gets the status the item is to have now, ACTIVE or EXPIRED, since
 the exception list may have changed in between, and the title, last day and parameters the source gives now. PartyAssets
 changes those only while the post is ACTIVE, and never its type, issue date, description or party; the report lists
-what could not be changed.
+what could not be changed. A file already on the errand or the post, with the same name and content, is not uploaded
+again.
 
 ### Example
 

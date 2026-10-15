@@ -14,11 +14,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
-import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -36,6 +36,7 @@ import se.sundsvall.aotloader.source.InspectionVisitCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
+import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
@@ -46,12 +47,18 @@ import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_ANNEX;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
 import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_CONDITIONS;
 import static se.sundsvall.aotloader.Constants.PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
@@ -89,6 +96,15 @@ public final class AlktCandidateFactory {
 
 	private static final Set<String> PLACE_MARKINGS = Set.of("UNG", "UTOK");
 	private static final String WITHOUT_ID = "utan-id-";
+	/** The templates of the permit certificate: Sundsvall bevis and the one before it (decision 34). */
+	private static final Set<String> CERTIFICATE_TEMPLATES = Set.of("TDBV2", "TDBV");
+	/** The templates of the annex of the permit: of Sundsvall, of Timrå, or the older one (decision 34). */
+	private static final Set<String> ANNEX_TEMPLATES = Set.of("TDBBS", "TBBT", "TDBB");
+	/** The template of the annex for catering, which a permit with catering gets besides the other (decision 34). */
+	private static final Set<String> CATERING_ANNEX_TEMPLATES = Set.of("TDBBC");
+	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
+		.comparing(PlaceDocument::datum, Comparator.nullsFirst(Comparator.<LocalDate>naturalOrder()))
+		.thenComparing(PlaceDocument::order, Comparator.nullsFirst(Comparator.<Integer>naturalOrder()));
 
 	private final AlktSnapshot snapshot;
 	private final LocalDate today;
@@ -97,6 +113,7 @@ public final class AlktCandidateFactory {
 	private final Map<String, Integer> permitsByDiaryNumber = new HashMap<>();
 	private final Map<Integer, Integer> permitRowsByPlace = new HashMap<>();
 	private final Map<Integer, List<DecisionRow>> decisionsByErrand = new HashMap<>();
+	private final Map<Integer, List<PlaceDocument>> documentsByPlace = new HashMap<>();
 	private final SharedFileNames sharedFileNames;
 
 	public AlktCandidateFactory(final AlktSnapshot snapshot, final LocalDate today, final AotLoaderProperties properties) {
@@ -114,6 +131,7 @@ public final class AlktCandidateFactory {
 		snapshot.decisions().values().stream()
 			.filter(decision -> decision.arendeId() != null)
 			.forEach(decision -> decisionsByErrand.computeIfAbsent(decision.arendeId(), _ -> new ArrayList<>()).add(decision));
+		indexDocuments();
 	}
 
 	/**
@@ -183,6 +201,7 @@ public final class AlktCandidateFactory {
 		if (subtype == null) {
 			hits.add(RuleHit.of(SUBTYPE_MISSING));
 		}
+		final var files = permitFiles(permit, place, issuingErrands, hits);
 
 		final var placeName = place == null ? null : place.namn();
 		final var restaurantNumber = place == null ? null : place.restaurangBeteckning();
@@ -223,7 +242,8 @@ public final class AlktCandidateFactory {
 			.asset(new AssetData(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(),
 				!permit.aretRunt() && periods.hasDatePeriod() ? periods.periodEnd() : null,
 				assetParameters(content, holder, premises, restaurantNumber)))
-			.files(permitFiles(place, issuingErrands));
+			.files(files.build())
+			.assetFiles(files.assetFiles());
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -433,12 +453,94 @@ public final class AlktCandidateFactory {
 		return errands;
 	}
 
-	private List<FileReference> permitFiles(final PlaceRow place, final Set<Integer> issuingErrands) {
+	/**
+	 * The files of the permit: those of the errands that issued it and of the place (decision 7), and those of the place's
+	 * events without an errand (decision 37). The latest certificate and annexes of the place, and the drawings and the
+	 * decisions of the issuing errands, also go on the post in PartyAssets, in that order of precedence (decisions 34 and
+	 * 35). A certificate older than the permit, or without a date, may be a former holder's: it goes on the errand only and
+	 * hits G29, as does a permit without a certificate. An annex older than the permit, or of catering on a permit without
+	 * catering, is left out.
+	 */
+	private FileList permitFiles(final PermitRow permit, final PlaceRow place, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
 		final var files = errandFiles(issuingErrands, new FileList(sharedFileNames));
 		if (place != null) {
 			files.add(place.bifogadfil(), ATTACHMENTS).add(place.bifogadfil2(), ATTACHMENTS);
 		}
-		return files.build();
+		snapshot.placeFilesOf(permit.objektId()).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS));
+
+		latestDocument(permit.objektId(), CERTIFICATE_TEMPLATES).ifPresentOrElse(certificate -> {
+			if (isCurrent(certificate, permit)) {
+				files.add(certificate.name(), DOCUMENTS, ASSET_CATEGORY_CERTIFICATE);
+			} else {
+				files.addToErrandOnly(certificate.name(), DOCUMENTS);
+				hits.add(RuleHit.of(CERTIFICATE_OLDER, certificate.datum() == null ? "beviset saknar datum"
+					: "beviset är från %s, tillståndet utfärdades %s".formatted(certificate.datum(), permit.utfardandeDatum())));
+			}
+		}, () -> hits.add(RuleHit.of(CERTIFICATE_MISSING)));
+		latestDocument(permit.objektId(), ANNEX_TEMPLATES)
+			.filter(annex -> isCurrent(annex, permit))
+			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
+		latestDocument(permit.objektId(), CATERING_ANNEX_TEMPLATES)
+			.filter(annex -> permit.catering() && isCurrent(annex, permit))
+			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
+
+		for (final var arendeId : issuingErrands) {
+			snapshot.filesOf(arendeId).stream()
+				.filter(file -> !file.generated() && PermitFiles.isDrawing(file.name()))
+				.forEach(file -> files.add(file.name(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+			decisionsOf(arendeId).stream()
+				.filter(decision -> PermitFiles.isDrawing(decision.bifogadFil()))
+				.forEach(decision -> files.add(decision.bifogadFil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+		}
+		if (place != null) {
+			Stream.of(place.bifogadfil(), place.bifogadfil2())
+				.filter(PermitFiles::isDrawing)
+				.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+		}
+		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> files
+			.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION)
+			.add(decision.bifogadFil(), ATTACHMENTS, ASSET_CATEGORY_DECISION)));
+		return files;
+	}
+
+	/**
+	 * @return true when the document is from the day the permit was issued or later; a permit without an issue date is
+	 *         held for review by G9 anyway
+	 */
+	private static boolean isCurrent(final PlaceDocument document, final PermitRow permit) {
+		return document.datum() != null && (permit.utfardandeDatum() == null || !document.datum().isBefore(permit.utfardandeDatum()));
+	}
+
+	/**
+	 * @return the latest document of the place made from one of the templates, from its events or decisions
+	 */
+	private Optional<PlaceDocument> latestDocument(final Integer objektId, final Set<String> templates) {
+		return documentsByPlace.getOrDefault(objektId, List.of()).stream()
+			.filter(document -> PermitFiles.isTemplate(document.mall(), templates))
+			.max(DOCUMENT_ORDER);
+	}
+
+	private List<DecisionRow> decisionsOf(final Integer arendeId) {
+		return decisionsByErrand.getOrDefault(arendeId, List.of());
+	}
+
+	/**
+	 * Indexes the documents of the events and the decisions by their place: the place of their errand, or, for an event
+	 * without an errand, the event's own place.
+	 */
+	private void indexDocuments() {
+		snapshot.documents().forEach(document -> Optional.ofNullable(document.arendeId())
+			.map(snapshot.errands()::get)
+			.map(ErrandRow::objektId)
+			.or(() -> Optional.ofNullable(document.objektId()))
+			.ifPresent(objektId -> documentsByPlace.computeIfAbsent(objektId, _ -> new ArrayList<>())
+				.add(new PlaceDocument(document.name(), document.mall(), document.datum(), document.handelseId()))));
+		snapshot.decisions().values().stream()
+			.filter(decision -> decision.worddokument() != null && decision.arendeId() != null)
+			.forEach(decision -> Optional.ofNullable(snapshot.errands().get(decision.arendeId()))
+				.map(ErrandRow::objektId)
+				.ifPresent(objektId -> documentsByPlace.computeIfAbsent(objektId, _ -> new ArrayList<>())
+					.add(new PlaceDocument(decision.worddokument(), decision.mall(), decision.beslutsDatum(), decision.beslutsId()))));
 	}
 
 	private FileList errandFiles(final Collection<Integer> arendeIds, final FileList files) {
@@ -468,6 +570,10 @@ public final class AlktCandidateFactory {
 		snapshot.places().forEach((objektId, place) -> names
 			.add("objekt:" + objektId, place.bifogadfil(), ATTACHMENTS)
 			.add("objekt:" + objektId, place.bifogadfil2(), ATTACHMENTS));
+		snapshot.placeFiles().forEach((objektId, files) -> files
+			.forEach(file -> names.add("objekt:" + objektId, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
+		snapshot.unplacedFiles().forEach((handelseId, files) -> files
+			.forEach(file -> names.add("handelse:" + handelseId, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
 		snapshot.visits().visits().forEach(visit -> {
 			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : "objekt:" + visit.objektId();
 			snapshot.visits().forEachFile(visit, (name, folder) -> names.add(place, name, folder));
@@ -540,6 +646,14 @@ public final class AlktCandidateFactory {
 			snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()),
 			SourceValues.format(decision.beslutsDatum()),
 			withValidTo && decision.giltigtTom() != null ? "giltigt till " + decision.giltigtTom() : null));
+	}
+
+	/**
+	 * A document of a place, from an event or a decision.
+	 *
+	 * @param order the id of the event or decision, which orders documents of the same date
+	 */
+	private record PlaceDocument(String name, String mall, LocalDate datum, Integer order) {
 	}
 
 	/**

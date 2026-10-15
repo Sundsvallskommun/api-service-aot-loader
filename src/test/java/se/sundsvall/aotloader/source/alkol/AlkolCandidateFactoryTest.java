@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.TestData;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -40,6 +41,8 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.APPLICANT_NOT_OWNER;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
@@ -70,10 +73,10 @@ class AlkolCandidateFactoryTest {
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), 50))
 			.errand(new ErrandRow(101, 1, "WADE", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
 			.errand(new ErrandRow(102, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), "11111111.rtf", "bilaga.pdf"))
-			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2015, 2, 1, 10, 0), null, null, null))
-			.decision(new DecisionRow(202, 102, "AÄDE", LocalDateTime.of(2021, 2, 1, 10, 0), null, null, null))
-			.decision(new DecisionRow(203, 101, "GTDEU", LocalDateTime.of(2016, 1, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), "TillstT", "11111111.rtf", "bilaga.pdf"))
+			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2015, 2, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(202, 102, "AÄDE", LocalDateTime.of(2021, 2, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(203, 101, "GTDEU", LocalDateTime.of(2016, 1, 1, 10, 0), null, null, null, null))
 			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), "IAN-2019-100", "22222222.rtf", "ansokan.pdf"))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null))
 			.person(new PersonRow(10, "Person", "8001011234", List.of("VD"), false));
@@ -126,6 +129,86 @@ class AlkolCandidateFactoryTest {
 			new FileReference("ansokan.pdf", ATTACHMENTS),
 			new FileReference("11111111.rtf", DOCUMENTS),
 			new FileReference("bilaga.pdf", ATTACHMENTS));
+		assertThat(candidate.assetFiles()).containsExactly(
+			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("bilaga.pdf", ATTACHMENTS), "Beslut"));
+	}
+
+	@Test
+	void theCertificateIsThatOfTheLatestGrantThatHasOneAndAnOlderOneIsNoted() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.place(place(2, 10))
+			.place(place(3, 10))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(2, true, false, false))
+			.view(new PermitViewRow(3, true, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", null, LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(101, 1, "WADE", "IAN-2023-1", null, LocalDate.of(2023, 3, 1), null))
+			.errand(new ErrandRow(200, 2, "WADE", "IAN-2019-2", null, LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(201, 2, "WADE", "IAN-2022-2", null, LocalDate.of(2022, 1, 1), null))
+			.errand(new ErrandRow(300, 3, "WADE", "IAN-2019-3", null, LocalDate.of(2019, 7, 1), null))
+			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null))
+			.decision(new DecisionRow(1001, 101, "GTDE", LocalDateTime.of(2023, 3, 1, 10, 0), null, null, null, "Tillståndsbevis 2023.pdf"))
+			.decision(new DecisionRow(2000, 200, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TILLTT", "22222222.rtf", null))
+			.decision(new DecisionRow(2001, 201, "GTDE", LocalDateTime.of(2022, 1, 1, 10, 0), null, "MotTob", "33333333.rtf", "beslut.pdf"))
+			.decision(new DecisionRow(3000, 300, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "MotTob", "44444444.rtf", "Mottagningsbevis.pdf"))
+			.event(new EventRow(400, 1, 101, "016", LocalDateTime.of(2023, 2, 1, 9, 0), null, null, "Planritning.pdf"));
+
+		final var candidates = data.factory().permits().candidates();
+
+		final var scanned = candidates.get(0);
+		assertThat(scanned.ruleHits()).isEmpty();
+		assertThat(scanned.assetFiles()).containsExactly(
+			new AssetFile(new FileReference("Tillståndsbevis 2023.pdf", ATTACHMENTS), "Tillståndsbevis"),
+			new AssetFile(new FileReference("Planritning.pdf", ATTACHMENTS), "Ritning"));
+		assertThat(scanned.files()).containsExactly(new FileReference("Planritning.pdf", ATTACHMENTS), new FileReference("Tillståndsbevis 2023.pdf", ATTACHMENTS));
+
+		final var older = candidates.get(1);
+		assertThat(older.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.containsExactly(tuple(CERTIFICATE_OLDER, "beviset hör till beslutet 2019-07-01, det senaste beviljandet är 2022-01-01"));
+		// The certificate of the earlier grant may be a former holder's, so it goes on the errand only
+		assertThat(older.assetFiles()).containsExactly(
+			new AssetFile(new FileReference("33333333.rtf", DOCUMENTS), "Beslut"),
+			new AssetFile(new FileReference("beslut.pdf", ATTACHMENTS), "Beslut"));
+		assertThat(older.files()).endsWith(new FileReference("22222222.rtf", DOCUMENTS));
+
+		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule).containsExactly(CERTIFICATE_MISSING);
+		assertThat(candidates.get(2).assetFiles()).extracting(AssetFile::category).containsOnly("Beslut");
+	}
+
+	@Test
+	void theFilesOfEventsWithoutAnErrandGoToTheirNotificationOrElseToThePermit() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, true, false, false))
+			.place(place(2, 10).withFlags(true, false, true, false))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", null, LocalDate.of(2019, 7, 1), null))
+			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null))
+			.event(new EventRow(300, 1, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "folkol-1.pdf"))
+			.event(new EventRow(301, 1, null, "016", LocalDateTime.of(2020, 1, 2, 9, 0), null, "22222222.rtf", "handling-1.pdf"))
+			// E-cigarettes are not notified on place 1, so the event is one of the place's own
+			.event(new EventRow(302, 1, null, "105", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, "ecig-1.pdf"))
+			.event(new EventRow(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "folkol-2.pdf"))
+			.event(new EventRow(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, "ecig-2.pdf"))
+			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, "egentillsyn-2.pdf"));
+
+		final var permit = data.factory().permits().candidates().getFirst();
+		final var notifications = data.factory().notifications().candidates();
+
+		assertThat(permit.files()).containsExactly(
+			new FileReference("11111111.rtf", DOCUMENTS),
+			new FileReference("22222222.rtf", DOCUMENTS),
+			new FileReference("handling-1.pdf", ATTACHMENTS),
+			new FileReference("ecig-1.pdf", ATTACHMENTS));
+		assertThat(permit.assetFiles()).extracting(AssetFile::category).containsExactly("Tillståndsbevis");
+		assertThat(notifications).extracting(Candidate::key, Candidate::files).containsExactly(
+			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new FileReference("folkol-1.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))));
+		assertThat(notifications).allSatisfy(notification -> assertThat(notification.assetFiles()).isEmpty());
 	}
 
 	@Test
@@ -136,9 +219,9 @@ class AlkolCandidateFactoryTest {
 			.view(new PermitViewRow(1, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
 			.errand(new ErrandRow(101, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, "bilaga.pdf"))
-			.decision(new DecisionRow(201, null, "GTDE", null, null, null, "Bilaga.pdf"))
-			.decision(new DecisionRow(202, 100, "BESOVR", LocalDateTime.of(2019, 7, 3, 10, 0), null, null, "protokoll.pdf"))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null, "bilaga.pdf"))
+			.decision(new DecisionRow(201, null, "GTDE", null, null, null, null, "Bilaga.pdf"))
+			.decision(new DecisionRow(202, 100, "BESOVR", LocalDateTime.of(2019, 7, 3, 10, 0), null, null, null, "protokoll.pdf"))
 			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), null, "22222222.rtf", "ansokan.pdf"))
 			.event(new EventRow(301, null, 100, "001", LocalDateTime.of(2019, 6, 2, 9, 0), null, null, "intyg.pdf"))
 			.event(new EventRow(302, 1, 101, "001", LocalDateTime.of(2021, 1, 2, 9, 0), null, null, "intyg.pdf"))
@@ -163,8 +246,8 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "556677-8899"))
 			.view(new PermitViewRow(1, false, false, false))
 			.errand(new ErrandRow(100, 1, "WAPH", null, null, null, 50))
-			.decision(new DecisionRow(200, 100, "GTPH", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null))
-			.decision(new DecisionRow(201, 100, "GTDEÅ", LocalDateTime.of(2022, 1, 1, 10, 0), null, null, null))
+			.decision(new DecisionRow(200, 100, "GTPH", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(201, 100, "GTDEÅ", LocalDateTime.of(2022, 1, 1, 10, 0), null, null, null, null))
 			.applicant(new ContactRow(50, "5599887766", "Annan", null, null, null, null, null, null, null));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
@@ -174,7 +257,8 @@ class AlkolCandidateFactoryTest {
 			tuple(PERMIT_ENDED, "GTDEÅ 2022-01-01"),
 			tuple(DIARY_NUMBER_MISSING, "det beviljande ärendet saknar diarienummer"),
 			tuple(APPLICANT_NOT_OWNER, null),
-			tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100"));
+			tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100"),
+			tuple(CERTIFICATE_MISSING, null));
 		assertThat(parameters(candidate)).containsEntry("tillstandstyp", List.of("Partihandel")).containsEntry("utfardat", List.of("2019-07-01"));
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("partihandel");
 	}
@@ -190,8 +274,9 @@ class AlkolCandidateFactoryTest {
 
 		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactlyInAnyOrder(
 			tuple(OWNER_MISSING, "AgarID 99 finns inte"),
-			tuple(DIARY_NUMBER_MISSING, "inget beviljande beslut hittades"));
-		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, DIARY_NUMBER_MISSING);
+			tuple(DIARY_NUMBER_MISSING, "inget beviljande beslut hittades"),
+			tuple(CERTIFICATE_MISSING, null));
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, DIARY_NUMBER_MISSING, CERTIFICATE_MISSING);
 		assertThat(candidates.get(1).title()).isEqualTo("Tobakstillstånd – okänt försäljningsställe");
 	}
 
@@ -211,13 +296,13 @@ class AlkolCandidateFactoryTest {
 			.view(new PermitViewRow(4, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), null))
 			.errand(new ErrandRow(101, 2, "WADE", "ian 1", null, LocalDate.of(2019, 7, 1), null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null))
-			.decision(new DecisionRow(201, 101, "GTDE", null, null, null, null));
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(201, 101, "GTDE", null, null, null, null, null));
 
 		final var candidates = data.factory().permits().candidates();
 
-		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(OWNER_COPY_DIFFERS, LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL);
-		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL, ISSUE_DATE_MISSING);
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(OWNER_COPY_DIFFERS, LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL, CERTIFICATE_MISSING);
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL, ISSUE_DATE_MISSING, CERTIFICATE_MISSING);
 		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_INVALID);
 		assertThat(candidates.get(3).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(OWNER_MISSING, "ingen ägare kopplad"));
 	}
@@ -247,7 +332,7 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "121212+1212"))
 			.view(new PermitViewRow(1, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), 50))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), "TILLSTT", "bevis.rtf", null))
 			.applicant(new ContactRow(50, "191212121212", "Tolvan", null, null, null, null, null, null, null));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
@@ -356,12 +441,12 @@ class AlkolCandidateFactoryTest {
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), null, null))
 			.errand(new ErrandRow(101, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null))
 			.errand(new ErrandRow(102, 1, "SÖL", null, LocalDate.of(2015, 1, 1), null, null))
-			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null));
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null));
 
 		final var permit = data.factory().permits().candidates().get(0);
 		final var notification = data.factory().notifications().candidates().get(0);
 
-		assertThat(permit.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-2019-100"));
+		assertThat(permit.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-2019-100"), tuple(CERTIFICATE_MISSING, null));
 		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 102"));
 	}
 
@@ -374,7 +459,7 @@ class AlkolCandidateFactoryTest {
 			.errand(new ErrandRow(400, 1, "Tills", "TIL-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), 50))
 			.errand(new ErrandRow(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
 			.errand(new ErrandRow(402, 2, "IT", null, LocalDate.of(2020, 1, 1), null, null))
-			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, "varning.pdf", null))
+			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, null, "varning.pdf", null))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null));
 
 		final var candidates = data.factory().inspections().candidates();

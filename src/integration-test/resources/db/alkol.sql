@@ -21,7 +21,7 @@ CREATE TABLE dbo.[Ärende] (
 GO
 CREATE TABLE dbo.Beslut (
     BeslutsID int NOT NULL PRIMARY KEY, ArendeID int NULL, BeslutsTyp varchar(8) NULL, BeslutsDatumTid datetime NULL, GiltigtFROM_Datum datetime NULL,
-    GiltigtTOM_Datum datetime NULL, Worddokument varchar(12) NULL, Bifogadfil varchar(200) NULL
+    GiltigtTOM_Datum datetime NULL, Worddokument varchar(12) NULL, Bifogadfil varchar(200) NULL, Dokument varchar(8) NULL
 )
 GO
 CREATE TABLE dbo.[Händelser] (
@@ -56,7 +56,7 @@ INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, Po
     VALUES (2, 'Timråkiosken', 'Storgatan 2', '86130', 'Timrå', '13', 'KIO', '556677-8899', NULL, 1, 0, 0, 10)
 INSERT INTO dbo.FS_GT_Tobak VALUES (1, 1, 0, 0)
 INSERT INTO dbo.[Ärende] VALUES (100, 1, 'WADE', 'IAN-2019-100', '2019-06-01', '2019-07-01', NULL)
-INSERT INTO dbo.Beslut VALUES (200, 100, 'GTDE', '2019-07-01T10:00:00', '2019-07-02', NULL, NULL, NULL)
+INSERT INTO dbo.Beslut VALUES (200, 100, 'GTDE', '2019-07-01T10:00:00', '2019-07-02', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Händelser] VALUES (300, 1, 100, '001', '2019-06-01T09:00:00', 'IAN-2019-100', '33333333.rtf', NULL)
 INSERT INTO dbo.[Händelser] VALUES (301, 1, NULL, '014', '2015-03-01T09:00:00', 'IAN-2015-5', NULL, NULL)
 INSERT INTO dbo.[Händelser] VALUES (302, 2, NULL, '014', '2020-03-01T09:00:00', 'IAN-2020-7', NULL, NULL)

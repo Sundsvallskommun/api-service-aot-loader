@@ -12,6 +12,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettin
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.service.model.AssetData;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -114,6 +115,17 @@ public final class TestData {
 	 */
 	public static Candidate permit(final String objektId, final RuleHit... hits) {
 		return permitBuilder(objektId, "City").ruleHits(List.of(hits)).build();
+	}
+
+	/**
+	 * @return a permit whose certificate, beslut.rtf, also goes on the post in PartyAssets, with the rule hits the source
+	 *         showed
+	 */
+	public static Candidate permitWithCertificate(final String objektId, final RuleHit... hits) {
+		return permitBuilder(objektId, "City")
+			.ruleHits(List.of(hits))
+			.assetFiles(List.of(new AssetFile(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS), "Tillståndsbevis")))
+			.build();
 	}
 
 	private static Candidate.Builder permitBuilder(final String objektId, final String area) {

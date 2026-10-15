@@ -1,26 +1,33 @@
 package se.sundsvall.aotloader.integration.partyassets;
 
 import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetAttachment;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.dept44.problem.Problem;
 import se.sundsvall.dept44.problem.ThrowableProblem;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.CONTENT_TOO_LARGE;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @ExtendWith(MockitoExtension.class)
@@ -78,5 +85,33 @@ class PartyAssetsIntegrationTest {
 		assertThat(integration.createAsset(MUNICIPALITY_ID, "ref", request)).contains("internal");
 		assertThat(integration.createAsset(MUNICIPALITY_ID, "ref", request)).isEmpty();
 		assertThatThrownBy(() -> integration.createAsset(MUNICIPALITY_ID, "ref", request)).isInstanceOf(ThrowableProblem.class);
+	}
+
+	@Test
+	void getAttachments() {
+		final var integration = new PartyAssetsIntegration(client);
+		when(client.getAttachments(MUNICIPALITY_ID, "1")).thenReturn(List.of(new AssetAttachment().fileName("bevis.rtf")));
+		when(client.getAttachments(MUNICIPALITY_ID, "2")).thenReturn(null);
+
+		assertThat(integration.getAttachments(MUNICIPALITY_ID, "1")).extracting(AssetAttachment::getFileName).containsExactly("bevis.rtf");
+		assertThat(integration.getAttachments(MUNICIPALITY_ID, "2")).isEmpty();
+	}
+
+	@Test
+	void createAttachmentSendsTheFileAndItsCategoryAndTellsARefusedFileApart() throws IOException {
+		final var integration = new PartyAssetsIntegration(client);
+		final var file = ArgumentCaptor.forClass(MultipartFile.class);
+		when(client.createAttachment(eq(MUNICIPALITY_ID), eq("1"), file.capture(), eq("Tillståndsbevis")))
+			.thenReturn(ResponseEntity.created(URI.create("/2281/assets/1/attachments/a")).build())
+			.thenThrow(Problem.valueOf(CONTENT_TOO_LARGE, "För stor"))
+			.thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		final var content = "bevis".getBytes(StandardCharsets.UTF_8);
+
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isTrue();
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isFalse();
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isInstanceOf(ThrowableProblem.class);
+		assertThat(file.getValue().getName()).isEqualTo("attachment");
+		assertThat(file.getValue().getOriginalFilename()).isEqualTo("bevis.rtf");
+		assertThat(file.getValue().getBytes()).isEqualTo(content);
 	}
 }

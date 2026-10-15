@@ -1,10 +1,14 @@
 package se.sundsvall.aotloader.integration.partyassets;
 
 import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetAttachment;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import se.sundsvall.aotloader.integration.FileRefusal;
+import se.sundsvall.aotloader.support.ByteArrayMultipartFile;
 import se.sundsvall.aotloader.support.Locations;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.dept44.problem.ThrowableProblem;
@@ -71,5 +75,32 @@ public class PartyAssetsIntegration {
 	 */
 	public void updateAsset(final String municipalityId, final String id, final AssetUpdateRequest request) {
 		client.updateAsset(municipalityId, id, request);
+	}
+
+	/**
+	 * @return the attachments of the post
+	 */
+	public List<AssetAttachment> getAttachments(final String municipalityId, final String id) {
+		return Optional.ofNullable(client.getAttachments(municipalityId, id)).orElse(emptyList());
+	}
+
+	/**
+	 * Uploads a file to the post, which gives the post a new revision. PartyAssets takes no file on an EXPIRED post.
+	 *
+	 * @param  fileName the name the file gets on the post
+	 * @param  content  the content of the file
+	 * @param  category what the file depicts
+	 * @return          true when PartyAssets took the file, false when it refused the file itself
+	 */
+	public boolean createAttachment(final String municipalityId, final String id, final String fileName, final byte[] content, final String category) {
+		try {
+			client.createAttachment(municipalityId, id, new ByteArrayMultipartFile(PartyAssetsClient.ATTACHMENT_PART, fileName, content), category);
+			return true;
+		} catch (final ThrowableProblem problem) {
+			if (FileRefusal.isRefusal(problem)) {
+				return false;
+			}
+			throw problem;
+		}
 	}
 }
