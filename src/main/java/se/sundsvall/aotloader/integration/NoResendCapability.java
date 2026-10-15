@@ -21,9 +21,9 @@ import se.sundsvall.dept44.security.Truststore;
  * <ul>
  * <li>OkHttp sends a request again after a connection failure, whatever its method. The client is replaced by one built
  * as dept44 builds it, with the same trust store, that does not.</li>
- * <li>Feign makes every IO error, a read timeout included, retryable, and the retryer of dept44 then sends the request
- * again. Only a request that changes nothing is let through to it; a request refused with 401 still is, since it
- * changed nothing.</li>
+ * <li>Feign makes every IO error, a read timeout included, retryable. The retryer of dept44 sends again only a
+ * request refused with 401, which changed nothing, and the capability keeps any retryer from sending a request
+ * that may have changed something again after an IO error.</li>
  * </ul>
  */
 @Component

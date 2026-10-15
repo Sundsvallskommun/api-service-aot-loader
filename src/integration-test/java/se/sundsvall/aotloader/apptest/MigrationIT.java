@@ -34,8 +34,8 @@ import se.sundsvall.dept44.test.annotation.wiremock.WireMockAppTestSuite;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.havingExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.havingExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
@@ -255,12 +255,17 @@ class MigrationIT extends AbstractAppTest {
 
 	@Test
 	void test11_aRealRunIsRefusedWhileAnActionIsActive() {
-		setupCall()
+		final var call = setupCall()
 			.withServicePath(PATH + "/items/ALKOL/ANMALAN/1-FOLKOL?dryRun=false")
 			.withHttpMethod(POST)
 			.withExpectedResponseStatus(UNPROCESSABLE_CONTENT)
-			.withExpectedResponse("response.json")
-			.sendRequest();
+			.withExpectedResponse("response.json");
+		// The action configuration of the test, with an action that is active, takes the place of the common one
+		wiremock.getStubMappings().stream()
+			.filter(stub -> "support-management-action-config-2281".equals(stub.getName()))
+			.toList()
+			.forEach(wiremock::removeStubMapping);
+		call.sendRequest();
 		verifyStubs();
 	}
 

@@ -20,10 +20,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.zalando.logbook.Logbook;
-import org.zalando.logbook.openfeign.FeignLogbookLogger;
 import se.sundsvall.aotloader.Application;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsClient;
 import se.sundsvall.aotloader.service.MigrationService;
+import se.sundsvall.dept44.configuration.feign.logbook.BodyCaptureFeignLogger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -99,7 +99,8 @@ class PayloadLoggingTest {
 	@Test
 	void theClientsUseTheSameLogbook() {
 		assertThat(context.getBeansOfType(Logbook.class)).containsOnlyKeys("logbook");
-		assertThat(context.getBean(Logger.class)).isInstanceOf(FeignLogbookLogger.class);
+		assertThat(context.getBean(Logger.class)).isInstanceOf(BodyCaptureFeignLogger.class)
+			.extracting("logbook").isSameAs(context.getBean(Logbook.class));
 	}
 
 	/**

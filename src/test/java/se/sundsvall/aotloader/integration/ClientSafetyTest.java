@@ -7,6 +7,7 @@ import feign.Feign;
 import feign.RequestLine;
 import feign.Response;
 import feign.RetryableException;
+import feign.Retryer;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -64,7 +65,7 @@ class ClientSafetyTest {
 	}
 
 	@Test
-	void aWriteIsSentOnceWhenTheConnectionBreaksAndAReadIsSentAgainOnce() {
+	void aRequestIsSentOnceWhenTheConnectionBreaks() {
 		server = new WireMockServer(options().dynamicPort());
 		server.start();
 		server.stubFor(any(anyUrl()).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
@@ -79,8 +80,9 @@ class ClientSafetyTest {
 		assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);
 
 		assertThat(server.findAll(postRequestedFor(urlEqualTo("/errands")))).hasSize(1);
-		assertThat(server.findAll(getRequestedFor(urlEqualTo("/errands")))).hasSize(2);
-		assertThat(evictedTokens).hasValue(1);
+		// The retryer of dept44 sends again only a request refused with 401
+		assertThat(server.findAll(getRequestedFor(urlEqualTo("/errands")))).hasSize(1);
+		assertThat(evictedTokens).hasValue(0);
 	}
 
 	@Test
@@ -94,12 +96,25 @@ class ClientSafetyTest {
 	}
 
 	@Test
-	void aReadIsSentAgainOnceAfterAnIoError() {
+	void theCapabilityKeepsAnyRetryerFromSendingAWriteAgain() {
+		final var api = Feign.builder()
+			.client(timingOut())
+			.retryer(new NoResendCapability.NoResendRetryer(new Retryer.Default(1, 1, 3)))
+			.target(TestApi.class, "http://localhost");
+
+		assertThatThrownBy(() -> api.create("{}")).isInstanceOf(RetryableException.class);
+		assertThat(calls).hasValue(1);
+		assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);
+		assertThat(calls).hasValue(4);
+	}
+
+	@Test
+	void aReadIsNotSentAgainAfterAnIoErrorEither() {
 		final var api = api(timingOut());
 
 		assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);
 
-		assertThat(calls).hasValue(2);
+		assertThat(calls).hasValue(1);
 	}
 
 	@Test
