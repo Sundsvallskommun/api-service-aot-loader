@@ -121,7 +121,7 @@ public final class InspectionCandidates {
 		return new ParameterList()
 			.add(errand.source().name().toLowerCase(Locale.ROOT) + "ArendeId", "Id för ärendet i " + sourceName, String.valueOf(errand.arendeId()))
 			.add("arendetyp", "Ärendetyp i " + sourceName, errand.typeText())
-			.add("diarienummer", "Diarienummer i " + sourceName, errand.diaryNumber())
+			.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i " + sourceName, errand.diaryNumber())
 			.add("oppnat", "Öppnat", SourceValues.format(errand.opened()))
 			.add("avslutat", "Avslutat", SourceValues.format(errand.closed()))
 			.add("beslut", "Beslut i " + sourceName, decisions)

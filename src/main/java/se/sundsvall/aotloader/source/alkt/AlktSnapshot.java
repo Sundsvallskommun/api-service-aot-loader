@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.source.alkt;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import se.sundsvall.aotloader.service.model.FileDetails;
@@ -164,17 +165,25 @@ public record AlktSnapshot(
 	/**
 	 * A row of Ärende_Beslut.
 	 *
-	 * @param mall the code of the document template the decision document was made from, null when none
+	 * @param beslutad when the decision was made, null when unknown
+	 * @param mall     the code of the document template the decision document was made from, null when none
 	 */
 	public record DecisionRow(
 		Integer beslutsId,
 		Integer arendeId,
 		String beslutsTyp,
-		LocalDate beslutsDatum,
+		LocalDateTime beslutad,
 		LocalDate giltigtTom,
 		String mall,
 		String worddokument,
 		String bifogadFil) {
+
+		/**
+		 * @return the date the decision was made, null when unknown
+		 */
+		public LocalDate beslutsDatum() {
+			return beslutad == null ? null : beslutad.toLocalDate();
+		}
 	}
 
 	/**
@@ -219,10 +228,10 @@ public record AlktSnapshot(
 	 * @param arendeId   the errand of the event, null when it has none
 	 * @param objektId   the place of the event itself, which an event without an errand belongs to
 	 * @param mall       the code of the document template, null when none
-	 * @param datum      the date of the event, null when unknown
+	 * @param tidpunkt   when the event was, null when unknown
 	 * @param name       the file name
 	 */
-	public record DocumentRow(Integer handelseId, Integer arendeId, Integer objektId, String mall, LocalDate datum, String name) {
+	public record DocumentRow(Integer handelseId, Integer arendeId, Integer objektId, String mall, LocalDateTime tidpunkt, String name) {
 	}
 
 }

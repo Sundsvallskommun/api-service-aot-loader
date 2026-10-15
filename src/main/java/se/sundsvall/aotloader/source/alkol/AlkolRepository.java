@@ -33,9 +33,9 @@ import static se.sundsvall.aotloader.source.Rows.isSet;
 import static se.sundsvall.aotloader.source.Rows.text;
 
 /**
- * Reads AlkOL2, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
- * queries only select. The view FS_GT_Tobak is read as the system's own list of current tobacco permits (section
- * 7.8.1); its columns are read whatever their type, since its definition is not visible to the account.
+ * Reads AlkOL, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
+ * queries only select. The view FS_GT_Tobak is read as the system's own list of current tobacco permits (sections 7.4
+ * and 7.7); its columns are read whatever their type, since its definition is not visible to the account.
  */
 @Repository
 public class AlkolRepository {
@@ -106,7 +106,8 @@ public class AlkolRepository {
 		ORDER BY f.ID
 		""";
 
-	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c";
+	// Kod is no key: an active row of a code gives its text before a passive one
+	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c ORDER BY c.Kod, ISNULL(c.Passiv, 0), c.Klartext";
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String TILLSYNSTILLFALLE_NR = "TillsynsTillfalleNr";

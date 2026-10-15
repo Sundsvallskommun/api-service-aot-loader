@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.source.alkt;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -30,6 +31,7 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.AssetParameters;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionCandidates;
@@ -107,7 +109,7 @@ public final class AlktCandidateFactory {
 	/** The templates of the permit decision: of Sundsvall and of Timrå (decision 39). */
 	private static final Set<String> DECISION_TEMPLATES = Set.of("TDB", "TBT");
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
-		.comparing(PlaceDocument::datum, Comparator.nullsFirst(Comparator.<LocalDate>naturalOrder()))
+		.comparing(PlaceDocument::tidpunkt, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
 		.thenComparing(PlaceDocument::order, Comparator.nullsFirst(Comparator.<Integer>naturalOrder()));
 
 	private final AlktSnapshot snapshot;
@@ -224,9 +226,9 @@ public final class AlktCandidateFactory {
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
 			.parameters(new ParameterList()
-				.add("alktObjektId", "AlkT-id", String.valueOf(permit.objektId()))
-				.add("utfardat", "Utfärdat", SourceValues.format(permit.utfardandeDatum()))
-				.add("diarienummer", "Diarienummer i AlkT", permit.utfardandeDiarienr())
+				.add("alktObjektId", "Id i AlkT", String.valueOf(permit.objektId()))
+				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(permit.utfardandeDatum()))
+				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkT", permit.utfardandeDiarienr())
 				.add("ersatter", "Ersätter", Texts.join(", ", Arrays.asList(SourceValues.format(permit.ersatterDatum()), permit.ersatterDiarienr())))
 				.add("drycker", "Drycker", content.drinks())
 				.add("serveringTill", "Servering till", content.servingTo())
@@ -239,16 +241,14 @@ public final class AlktCandidateFactory {
 				.add("sittplatser", "Sittplatser", permit.sittplatser())
 				.add("serveringslokal", "Serveringslokal", permit.serveringslokal())
 				.add("villkor", "Villkor", content.conditions())
-				.add("noteringar", "Noteringar i AlkT", permit.notes())
-				.add("senasteBeslut", "Senaste beslut i AlkT", decisionText(decision, true))
+				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
+				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", decisionText(decision, true))
 				.add(CandidateTexts.migrated(today, ALKT))
 				.build())
 			.asset(new AssetData(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(),
 				!permit.aretRunt() && periods.hasDatePeriod() ? periods.periodEnd() : null,
 				assetParameters(content, holder, premises, restaurantNumber)))
-			.files(files.build())
-			.assetFiles(files.assetFiles())
-			.fileDetails(files.details());
+			.files(files.build(), files.assetFiles(), files.details());
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -268,8 +268,7 @@ public final class AlktCandidateFactory {
 		final var files = errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions)
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
-			.files(files.build())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -279,8 +278,7 @@ public final class AlktCandidateFactory {
 		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.detailsOf(ALKT, folder, name, SourceValues.startOfDay(visit.datum()))));
 		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
-			.files(files.build())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -393,7 +391,7 @@ public final class AlktCandidateFactory {
 			.add(PARAMETER_RESTAURANT_NUMBER, "Serveringsställenummer", place.restaurangBeteckning())
 			.add("typAvServeringsstalle", "Typ av serveringsställe", marking ? null : snapshot.codeText(CODE_TYPE_PLACE_GROUP, group))
 			.add("markering", "Markering", marking ? snapshot.codeText(CODE_TYPE_PLACE_GROUP, group) : null)
-			.add("omrade", "Område", area)
+			.add(ErrandParameters.AREA, "Område", area)
 			.build());
 	}
 
@@ -487,6 +485,7 @@ public final class AlktCandidateFactory {
 		snapshot.placeFilesOf(permit.objektId()).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
 
 		latestDocument(permit.objektId(), CERTIFICATE_TEMPLATES).ifPresentOrElse(certificate -> {
+			files.add(certificate.name(), DOCUMENTS, certificate.details());
 			if (isCurrent(certificate, permit)) {
 				files.add(certificate.name(), DOCUMENTS, ASSET_CATEGORY_CERTIFICATE);
 			} else {
@@ -497,10 +496,10 @@ public final class AlktCandidateFactory {
 		}, () -> hits.add(RuleHit.of(CERTIFICATE_MISSING)));
 		latestDocument(permit.objektId(), ANNEX_TEMPLATES)
 			.filter(annex -> isCurrent(annex, permit))
-			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
+			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, annex.details()).add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
 		latestDocument(permit.objektId(), CATERING_ANNEX_TEMPLATES)
 			.filter(annex -> permit.catering() && isCurrent(annex, permit))
-			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
+			.ifPresent(annex -> files.add(annex.name(), DOCUMENTS, annex.details()).add(annex.name(), DOCUMENTS, ASSET_CATEGORY_ANNEX));
 
 		for (final var arendeId : issuingErrands) {
 			snapshot.filesOf(arendeId).stream()
@@ -565,20 +564,20 @@ public final class AlktCandidateFactory {
 			.map(ErrandRow::objektId)
 			.or(() -> Optional.ofNullable(document.objektId()))
 			.ifPresent(objektId -> documentsByPlace.computeIfAbsent(objektId, _ -> new ArrayList<>())
-				.add(new PlaceDocument(document.name(), document.mall(), document.datum(), document.handelseId()))));
+				.add(new PlaceDocument(document.name(), document.mall(), document.tidpunkt(), document.handelseId()))));
 		snapshot.decisions().values().stream()
 			.filter(decision -> decision.worddokument() != null && decision.arendeId() != null)
 			.forEach(decision -> Optional.ofNullable(snapshot.errands().get(decision.arendeId()))
 				.map(ErrandRow::objektId)
 				.ifPresent(objektId -> documentsByPlace.computeIfAbsent(objektId, _ -> new ArrayList<>())
-					.add(new PlaceDocument(decision.worddokument(), decision.mall(), decision.beslutsDatum(), decision.beslutsId()))));
+					.add(new PlaceDocument(decision.worddokument(), decision.mall(), decision.beslutad(), decision.beslutsId()))));
 	}
 
 	private FileList errandFiles(final Collection<Integer> arendeIds, final FileList files) {
 		for (final var arendeId : arendeIds) {
 			snapshot.filesOf(arendeId).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
 			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> {
-				final var received = SourceValues.startOfDay(decision.beslutsDatum());
+				final var received = decision.beslutad();
 				files.add(decision.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKT, decision.mall()), received))
 					.add(decision.bifogadFil(), ATTACHMENTS, FilePurposes.detailsOf(ALKT, ATTACHMENTS, decision.bifogadFil(), received));
 			});
@@ -688,9 +687,18 @@ public final class AlktCandidateFactory {
 	/**
 	 * A document of a place, from an event or a decision.
 	 *
-	 * @param order the id of the event or decision, which orders documents of the same date
+	 * @param tidpunkt when the event or decision was, null when unknown
+	 * @param order    the id of the event or decision, which orders documents of the same time
 	 */
-	private record PlaceDocument(String name, String mall, LocalDate datum, Integer order) {
+	private record PlaceDocument(String name, String mall, LocalDateTime tidpunkt, Integer order) {
+
+		LocalDate datum() {
+			return tidpunkt == null ? null : tidpunkt.toLocalDate();
+		}
+
+		FileDetails details() {
+			return new FileDetails(FilePurposes.ofDocument(ALKT, mall), tidpunkt);
+		}
 	}
 
 	/**

@@ -59,7 +59,7 @@ public class PartyAssetsIntegration {
 	 */
 	public Optional<String> createAsset(final String municipalityId, final String sourceReference, final AssetCreateRequest request) {
 		try {
-			return Optional.of(Locations.idOf(client.createAsset(municipalityId, sourceReference, request), "tillståndet"));
+			return Optional.of(Locations.idOf(client.createAsset(municipalityId, sourceReference, request), "posten i PartyAssets"));
 		} catch (final ThrowableProblem problem) {
 			if (problem.getStatus() == CONFLICT) {
 				return Optional.empty();

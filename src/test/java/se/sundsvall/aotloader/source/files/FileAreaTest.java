@@ -33,7 +33,11 @@ class FileAreaTest {
 		final var found = fileArea.find(new FileReference("12345678.rtf", DOCUMENTS));
 		assertThat(found.result()).isEqualTo(LookupResult.FOUND);
 		assertThat(found.size()).isEqualTo(8);
-		assertThat(FileArea.read(found.path())).isEqualTo("dokument".getBytes());
+		assertThat(FileArea.read(found.path(), 10)).hasValue("dokument".getBytes());
+		assertThat(FileArea.read(found.path(), 8)).hasValue("dokument".getBytes());
+		// A file that has grown since it was found
+		assertThat(FileArea.read(found.path(), 7)).isEmpty();
+		assertThat(FileArea.read(found.path(), Long.MAX_VALUE)).hasValue("dokument".getBytes());
 
 		final var otherCase = fileArea.find(new FileReference("C:\\gammal\\sökväg\\ansokan.pdf", ATTACHMENTS));
 		assertThat(otherCase.result()).isEqualTo(LookupResult.FOUND);

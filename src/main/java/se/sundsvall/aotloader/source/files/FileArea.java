@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Locale;
@@ -25,6 +26,8 @@ import se.sundsvall.aotloader.support.Texts;
 public final class FileArea {
 
 	private static final String LINK_EXTENSION = ".url";
+	// The largest array the JVM allocates
+	private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 
 	private final Map<FileFolder, String> directories = new EnumMap<>(FileFolder.class);
 	private final Map<FileFolder, DirectoryIndex> indexes = new EnumMap<>(FileFolder.class);
@@ -54,6 +57,8 @@ public final class FileArea {
 		}
 		final var index = indexes.computeIfAbsent(reference.folder(), this::buildIndex);
 		if (index.error() != null) {
+			// Listed again at the next lookup, since the share may be back by then
+			indexes.remove(reference.folder());
 			return new Lookup(LookupResult.DIRECTORY_UNAVAILABLE, name, null, 0);
 		}
 		final var path = index.files().get(name.toLowerCase(Locale.ROOT));
@@ -72,10 +77,16 @@ public final class FileArea {
 	}
 
 	/**
-	 * Reads a file the index found. The file is opened for reading only.
+	 * Reads a file the index found, no more than the largest size a file may have. The file is opened for reading only.
+	 *
+	 * @param  maxSize the largest size a file may have, in bytes
+	 * @return         the content, empty when the file has grown larger than that since it was found
 	 */
-	public static byte[] read(final Path path) throws IOException {
-		return Files.readAllBytes(path);
+	public static Optional<byte[]> read(final Path path, final long maxSize) throws IOException {
+		try (var input = Files.newInputStream(path, StandardOpenOption.READ)) {
+			final var content = input.readNBytes((int) (Math.min(MAX_ARRAY_SIZE - 1L, maxSize) + 1));
+			return content.length > maxSize ? Optional.empty() : Optional.of(content);
+		}
 	}
 
 	/**

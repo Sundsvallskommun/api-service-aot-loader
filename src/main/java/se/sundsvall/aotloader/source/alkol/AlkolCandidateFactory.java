@@ -33,6 +33,7 @@ import se.sundsvall.aotloader.source.AssetParameters;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionCandidates;
@@ -243,21 +244,19 @@ public final class AlkolCandidateFactory {
 			.labelPaths(properties.errandType(ErrandType.TOBACCO_PERMIT).labels())
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
 			.parameters(new ParameterList()
-				.add("alkolFsId", "Id i AlkOL", String.valueOf(fsId))
+				.add(ErrandParameters.ALKOL_FS_ID, "Id i AlkOL", String.valueOf(fsId))
 				.add("tillstandstyp", "Tillståndstyp", kindsText)
-				.add("utfardat", "Utfärdat", SourceValues.format(issued))
-				.add("diarienummer", "Diarienummer i AlkOL", diaryNumber)
+				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(issued))
+				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
 				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
-				.add("senasteBeslut", "Senaste beslut", latestDecisionText(fsId, grant))
+				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
 				.add("anmaldaProdukter", "Anmälda produkter", products)
-				.add("noteringar", "Noteringar", place == null ? null : place.notering())
+				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", place == null ? null : place.notering())
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
 				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber)))
-			.files(files.build())
-			.assetFiles(files.assetFiles())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -276,6 +275,7 @@ public final class AlkolCandidateFactory {
 			.forEach(event -> addEventFiles(files, event));
 
 		certificate(fsId).ifPresentOrElse(certificate -> {
+			files.add(certificate.name(), certificate.folder(), certificate.details());
 			if (grant != null && DECISION_ORDER.compare(certificate.decision(), grant) < 0) {
 				files.addToErrandOnly(certificate.name(), certificate.folder());
 				hits.add(RuleHit.of(CERTIFICATE_OLDER, "beviset hör till beslutet %s, det senaste beviljandet är %s"
@@ -388,17 +388,15 @@ public final class AlkolCandidateFactory {
 			.externalTag(TAG_NOTIFICATION, notificationId(place, product.code()))
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
 			.parameters(new ParameterList()
-				.add("alkolFsId", "Id i AlkOL", String.valueOf(place.fsId()))
+				.add(ErrandParameters.ALKOL_FS_ID, "Id i AlkOL", String.valueOf(place.fsId()))
 				.add("produkt", "Produkt", product.parameterText())
 				.add("anmald", "Anmäld", SourceValues.format(notified.date()))
 				.add("anmaldUppskattat", "Datumet är uppskattat", notified.estimated() ? "Ja" : null)
-				.add("diarienummer", "Diarienummer i AlkOL", diaryNumber)
+				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
-			.files(files.build())
-			.assetFiles(files.assetFiles())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -406,9 +404,10 @@ public final class AlkolCandidateFactory {
 	 * The files of the notification: those of its errands and of its own events without an errand, and, when the place
 	 * has no tobacco permit, those of the place's events without an errand that register no notification (decision 37).
 	 * The drawings, the notification itself, which is an attachment of an event that registers the product, and the
-	 * letters that confirm it also go on the post in PartyAssets: the drawings in their category, the others without one,
-	 * as pw-alkt puts a file without a purpose there (decision 38). Anything else, such as an investigation or a referral
-	 * answer, stays on the errand only.
+	 * letters that confirm it, from its errands and the events that register the product, also go on the post in
+	 * PartyAssets: the drawings in the category of their purpose, the others without one, as pw-alkt puts a file without a
+	 * purpose there (decisions 38 and 40). Anything else, such as an investigation, a referral answer or a file of the
+	 * place's other events, stays on the errand only.
 	 */
 	private FileList notificationFiles(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands) {
 		final var arendeIds = errands.stream().map(ErrandRow::arendeId).toList();
@@ -418,7 +417,9 @@ public final class AlkolCandidateFactory {
 			.toList();
 		ownEvents.forEach(event -> addEventFiles(files, event));
 
-		final var events = Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()), ownEvents.stream()).toList();
+		// The place's other events without an errand follow the errand only, since they may concern another product
+		final var events = Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()),
+			ownEvents.stream().filter(event -> product.isEventType(event.handelseTyp()))).toList();
 		final var decisions = arendeIds.stream().flatMap(arendeId -> decisionsByErrand.getOrDefault(arendeId, List.of()).stream()).toList();
 		// The drawings first, since a file keeps the category it is first marked with
 		Stream.concat(events.stream().filter(event -> FilePurposes.isDrawing(attachmentPurpose(event))).map(EventRow::bifogadfil),
@@ -450,8 +451,7 @@ public final class AlkolCandidateFactory {
 
 		final var files = addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions)
-			.files(files.build())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -460,8 +460,7 @@ public final class AlkolCandidateFactory {
 		final var files = new FileList(sharedFileNames);
 		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.detailsOf(ALKOL, folder, name, SourceValues.startOfDay(visit.datum()))));
 		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
-			.files(files.build())
-			.fileDetails(files.details())
+			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
@@ -613,7 +612,7 @@ public final class AlkolCandidateFactory {
 		final var area = CodeTexts.textOf(snapshot.areas(), place.omrade());
 		return new Place(place.namn(), place.gatuadress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
 			.add("kategori", "Kategori", CodeTexts.textOf(snapshot.categories(), place.kategori()))
-			.add("omrade", "Område", area)
+			.add(ErrandParameters.AREA, "Område", area)
 			.build());
 	}
 
@@ -674,7 +673,7 @@ public final class AlkolCandidateFactory {
 
 	/**
 	 * Whether a notification of folköl is about serving: the latest notification of folköl decides, otherwise the category
-	 * of the sales place (section 7.8.5).
+	 * of the sales place (section 7.4).
 	 */
 	private boolean isServing(final SalesPlaceRow place, final List<ErrandRow> errands, final List<EventRow> events) {
 		record Registration(LocalDateTime when, boolean serving) {
@@ -840,6 +839,12 @@ public final class AlkolCandidateFactory {
 	 * @param folder   the directory of the file area
 	 */
 	private record Certificate(DecisionRow decision, String name, FileFolder folder) {
+
+		FileDetails details() {
+			return folder == DOCUMENTS
+				? new FileDetails(FilePurposes.ofDocument(ALKOL, decision.mall()), decision.beslutad())
+				: FilePurposes.detailsOf(ALKOL, folder, name, decision.beslutad());
+		}
 	}
 
 	/**
@@ -862,8 +867,8 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * The products that are notified, with the errand types and event types that register a notification (section
-	 * 7.8.5).
+	 * The products that are notified, with the errand types and event types that register a notification (section 7.4,
+	 * decisions 21 and 38).
 	 */
 	enum Product {
 

@@ -22,4 +22,11 @@ public enum Step {
 	public String getDisplayName() {
 		return displayName;
 	}
+
+	/**
+	 * @return the name of the step for an item of the kind, whose post in PartyAssets is a permit or a notification
+	 */
+	public String getDisplayName(final Kind kind) {
+		return this == TILLSTAND && kind == Kind.ANMALAN ? "Anmälan i PartyAssets" : displayName;
+	}
 }

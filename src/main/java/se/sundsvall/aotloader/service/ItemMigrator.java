@@ -234,9 +234,14 @@ public class ItemMigrator {
 					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
 				} else if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) > 0) {
 					// An EXPIRED post takes no files, so it is ACTIVE while it gets those it lacks
-					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, notes);
-					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, notes);
+					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
+					try {
+						fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+					} catch (final RuntimeException e) {
+						restoreExpired(municipalityId, partyAssetsId, e);
+						throw e;
+					}
+					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
 				}
 				saveAs(TILLSTAND_SKAPAT);
 			}
@@ -293,7 +298,7 @@ public class ItemMigrator {
 		 */
 		private void forgetGoneErrand() {
 			notes.line("Ärendet %s fanns inte längre i SupportManagement och ersattes".formatted(entity.getErrandId()));
-			Optional.ofNullable(entity.getPartyAssetsId()).ifPresent(id -> notes.line("Tillståndet %s i PartyAssets hör till det gamla ärendet och ska tas bort".formatted(id)));
+			Optional.ofNullable(entity.getPartyAssetsId()).ifPresent(id -> notes.line("%s %s i PartyAssets hör till det gamla ärendet och ska tas bort".formatted(words().capitalized(), id)));
 			Optional.ofNullable(entity.getRelationId()).ifPresent(id -> notes.line("Relationen %s hör till det gamla ärendet och ska tas bort".formatted(id)));
 			entity.setAssetId(null);
 			entity.setPartyAssetsId(null);
@@ -315,6 +320,23 @@ public class ItemMigrator {
 			return notes.result(outcome, errandNumber());
 		}
 
+		private AssetWords words() {
+			return AssetWords.of(candidate.key().kind());
+		}
+
+		/**
+		 * Gives the post in PartyAssets EXPIRED back after its files failed, so that it does not show as valid until the next
+		 * run. When that fails too, the report says the post is left ACTIVE.
+		 */
+		private void restoreExpired(final String municipalityId, final String partyAssetsId, final RuntimeException failure) {
+			try {
+				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
+			} catch (final RuntimeException e) {
+				failure.addSuppressed(e);
+				notes.line("%s i PartyAssets är ACTIVE, fast %s ska vara EXPIRED, tills nästa körning ger %s sina filer".formatted(words().capitalized(), words().pronoun(), words().pronoun()));
+			}
+		}
+
 		/**
 		 * @return what an earlier run of the item wrote to the target systems, which stays there while the item is stopped
 		 */
@@ -323,7 +345,7 @@ public class ItemMigrator {
 				return Optional.empty();
 			}
 			return Optional.of("Ärendet %s från en tidigare körning finns kvar i SupportManagement%s. Det slutförs om ärendet får migreras, annars hanteras det enligt avsnitt 10.3"
-				.formatted(Optional.ofNullable(entity.getErrandNumber()).orElse(entity.getErrandId()), entity.getPartyAssetsId() == null ? "" : ", och tillståndet i PartyAssets"));
+				.formatted(Optional.ofNullable(entity.getErrandNumber()).orElse(entity.getErrandId()), entity.getPartyAssetsId() == null ? "" : ", och %s i PartyAssets".formatted(words().definite())));
 		}
 
 		private ItemResult fail(final RuntimeException e) {
@@ -332,7 +354,7 @@ public class ItemMigrator {
 			if (!context.dryRun()) {
 				saveFailure(message);
 			}
-			notes.lineFirst("Steg " + step.getDisplayName() + ": " + message);
+			notes.lineFirst("Steg " + step.getDisplayName(candidate.key().kind()) + ": " + message);
 			return notes.result(Outcome.FEL, errandNumber());
 		}
 

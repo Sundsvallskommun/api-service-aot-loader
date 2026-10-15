@@ -39,15 +39,15 @@ CREATE TABLE dbo.[PBI_ägare] (
     Befattningskod2 varchar(6) NULL, Befattningskod3 varchar(6) NULL, PASSIV bit NULL, UtlandskPerson bit NOT NULL DEFAULT 0
 )
 GO
-CREATE TABLE dbo.Beslutskoder (ID int IDENTITY(1, 1) NOT NULL, Kod varchar(8) NULL, Klartext varchar(50) NULL)
+CREATE TABLE dbo.Beslutskoder (ID int IDENTITY(1, 1) NOT NULL, Kod varchar(8) NULL, Klartext varchar(50) NULL, Passiv bit NULL)
 GO
-CREATE TABLE dbo.[Ärendetyper] (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+CREATE TABLE dbo.[Ärendetyper] (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL, Passiv bit NULL)
 GO
-CREATE TABLE dbo.Kategorier (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+CREATE TABLE dbo.Kategorier (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL, Passiv bit NULL)
 GO
-CREATE TABLE dbo.[Områden] (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+CREATE TABLE dbo.[Områden] (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL, Passiv bit NULL)
 GO
-CREATE TABLE dbo.PBI_Roller (ID int IDENTITY(1, 1) NOT NULL, Kod varchar(8) NULL, Klartext varchar(50) NULL)
+CREATE TABLE dbo.PBI_Roller (ID int IDENTITY(1, 1) NOT NULL, Kod varchar(8) NULL, Klartext varchar(50) NULL, Passiv bit NULL)
 GO
 INSERT INTO dbo.[Ägare] VALUES (10, '556677-8899', 'Testbolaget AB', NULL, 'Box 1', NULL, '85230', 'Sundsvall', NULL, NULL)
 INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, PostOrt, [Område], Kategori, [ÄgareOrgNr], Notering, OLTYP, TOBAKTYP, Upphort, Agarid)
@@ -67,9 +67,11 @@ INSERT INTO dbo.PBI_Roller (Kod, Klartext) VALUES ('VD', 'VD')
 INSERT INTO dbo.Beslutskoder (Kod, Klartext) VALUES ('GTDE', 'Tillstånd tobaksförsäljning – detaljhandel')
 INSERT INTO dbo.Beslutskoder (Kod, Klartext) VALUES (NULL, 'Utan kod')
 INSERT INTO dbo.Beslutskoder (Kod, Klartext) VALUES ('UTAN', NULL)
-INSERT INTO dbo.Kategorier VALUES ('KIO', 'Kiosk')
-INSERT INTO dbo.[Områden] VALUES ('12', 'City')
-INSERT INTO dbo.[Områden] VALUES ('13', 'Timrå')
+INSERT INTO dbo.Kategorier (Kod, Klartext) VALUES ('KIO', 'Kiosk')
+-- Kod is no key: a passive row of a code, inserted first, gives way to the active one
+INSERT INTO dbo.[Områden] (Kod, Klartext, Passiv) VALUES ('12', 'Gamla city', 1)
+INSERT INTO dbo.[Områden] (Kod, Klartext) VALUES ('12', 'City')
+INSERT INTO dbo.[Områden] (Kod, Klartext) VALUES ('13', 'Timrå')
 GO
 -- An inspection visit of the sales place with a tobacco permit (section 7.7.2). AlkOL keeps the times as datetime.
 CREATE TABLE dbo.[Tillsyn_Tillfälle] (
@@ -81,12 +83,12 @@ CREATE TABLE dbo.[Tillsyn_Anmärkningar] (TillsynsTillfalleNr int NULL, Anmarkni
 GO
 CREATE TABLE dbo.[Tillsyn_Tillfälle_Filer] (ID int IDENTITY(1, 1) NOT NULL, TillsynsTillfalleNr int NULL, Bifogadfil varchar(255) NULL)
 GO
-CREATE TABLE dbo.TillsynsArt (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+CREATE TABLE dbo.TillsynsArt (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL, Passiv bit NULL)
 GO
-CREATE TABLE dbo.Anmarkningar (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL)
+CREATE TABLE dbo.Anmarkningar (Kod nvarchar(8) NULL, Klartext nvarchar(50) NULL, Passiv bit NULL)
 GO
 INSERT INTO dbo.[Tillsyn_Tillfälle] VALUES (950, 1, '2024-05-03', '1899-12-30T14:00:00', '1899-12-30T14:20:00', 'Kontr', N'Köpet nekades.', NULL, NULL)
 INSERT INTO dbo.[Tillsyn_Anmärkningar] VALUES (950, 'Rekl I')
-INSERT INTO dbo.TillsynsArt VALUES ('Kontr', 'Kontrollköp')
-INSERT INTO dbo.Anmarkningar VALUES ('Rekl I', N'Påträngande reklam i butik')
+INSERT INTO dbo.TillsynsArt (Kod, Klartext) VALUES ('Kontr', 'Kontrollköp')
+INSERT INTO dbo.Anmarkningar (Kod, Klartext) VALUES ('Rekl I', N'Påträngande reklam i butik')
 GO

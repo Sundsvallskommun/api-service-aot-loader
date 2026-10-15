@@ -34,6 +34,9 @@ class SupportTest {
 		assertThat(PiiScrubber.scrub(null)).isNull();
 		assertThat(PiiScrubber.scrub("x".repeat(5000))).hasSize(5000);
 		assertThat(PiiScrubber.scrub("Mejla a.b@sub.example.se. Eller c@d.se")).isEqualTo("Mejla [e-post]. Eller [e-post]");
+		assertThat(PiiScrubber.scrub("Beslut_19700101_1234.pdf, 700101.1234, 19700101–1234, 700101 - 1234"))
+			.isEqualTo("Beslut_[nummer].pdf, [nummer], [nummer], [nummer]");
+		assertThat(PiiScrubber.scrub("Ärende 2026-10-12 klockan 14.30, telefon 060-123 456")).isEqualTo("Ärende 2026-10-12 klockan 14.30, telefon 060-123 456");
 		assertThat(PiiScrubber.scrub("Domän a@" + "b.".repeat(50_000) + "se")).isEqualTo("Domän [e-post]");
 	}
 

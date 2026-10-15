@@ -52,6 +52,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -119,6 +120,49 @@ class FileUploaderTest {
 		final var result = notes.result(Outcome.MIGRERAD, null);
 		assertThat(result.rules()).containsExactly("G14");
 		assertThat(result.detail()).isEqualTo("G14 2 filer togs inte emot av SupportManagement (beslut.rtf, ansokan.pdf)");
+	}
+
+	@Test
+	void aFileThatCannotBeReadFailsTheStepSoThatTheNextRunUploadsItAndOneThatHasGrownIsListed() throws IOException {
+		Files.writeString(attachments.resolve("stor.pdf"), "x".repeat(101));
+		final var gone = new FileReference("borta.pdf", ATTACHMENTS);
+		final var grown = new FileReference("stor.pdf", ATTACHMENTS);
+		final var readable = new FileReference("ansokan.pdf", ATTACHMENTS);
+		final var fileArea = mock(FileArea.class);
+		// Found before the file was removed or had grown
+		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "borta.pdf", attachments.resolve("borta.pdf"), 6));
+		when(fileArea.find(grown)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "stor.pdf", attachments.resolve("stor.pdf"), 6));
+		when(fileArea.find(readable)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "ansokan.pdf", attachments.resolve("ansokan.pdf"), 6));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of(ATTACHMENT_ID));
+		final var notes = new ReportNotes();
+
+		assertThatThrownBy(() -> uploader.upload(withFiles(gone, grown, readable), context(fileArea), MUNICIPALITY_ID, ERRAND_ID, notes))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
+
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
+		verify(supportManagement, times(1)).createAttachment(anyString(), anyString(), anyString(), any(), any());
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail())
+			.isEqualTo("G14 1 fil är större än 0 MB och laddas inte upp (stor.pdf); G14 1 fil gick inte att läsa (borta.pdf)");
+	}
+
+	@Test
+	void aFileOfThePostThatCannotBeReadFailsTheStep() {
+		final var gone = new FileReference("borta.pdf", ATTACHMENTS);
+		final var readable = new FileReference("ansokan.pdf", ATTACHMENTS);
+		final var fileArea = mock(FileArea.class);
+		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.UNREADABLE, "borta.pdf", attachments.resolve("borta.pdf"), 0));
+		when(fileArea.find(readable)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "ansokan.pdf", attachments.resolve("ansokan.pdf"), 6));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
+		final var candidate = withAssetFiles(new AssetFile(gone, "Ritning"), new AssetFile(readable, "Beslut"));
+
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(fileArea), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
+
+		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), "Beslut");
 	}
 
 	@Test
@@ -272,6 +316,26 @@ class FileUploaderTest {
 
 		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "serving_area_drawing");
 		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 1 av 1 filer: serving_area_drawing 1");
+	}
+
+	@Test
+	void theReportOfANotificationSpeaksOfTheNotification() {
+		final var reference = new FileReference("ansokan.pdf", ATTACHMENTS);
+		final var notification = Candidate.builder(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
+			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.files(List.of(reference), List.of(new AssetFile(reference, null)), Map.of())
+			.build();
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), isNull())).thenReturn(false);
+		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
+		final var dryRun = new ReportNotes();
+
+		uploader.check(notification, context(), dryRun);
+
+		assertThat(dryRun.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till anmälan i PartyAssets: utan kategori 1");
+		assertThatThrownBy(() -> uploader.uploadToAsset(notification, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Anmälan " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
 	}
 
 	@Test
@@ -454,6 +518,10 @@ class FileUploaderTest {
 			.files(List.copyOf(details.keySet()))
 			.fileDetails(details)
 			.build();
+	}
+
+	private RunContext context(final FileArea fileArea) {
+		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(MUNICIPALITY_ID, TestData.purposes()), null, new AtomicBoolean(), _ -> fileArea);
 	}
 
 	private RunContext context() {

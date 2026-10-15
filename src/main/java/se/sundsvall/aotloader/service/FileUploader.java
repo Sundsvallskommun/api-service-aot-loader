@@ -61,7 +61,7 @@ class FileUploader {
 	 * errand, with the same name and content, is not uploaded again, but gets the purpose and date it lacks. A file that
 	 * cannot be uploaded for good is listed in the report.
 	 *
-	 * @throws MigrationException when the file area cannot be read, or a purpose of a file was not read for the
+	 * @throws MigrationException when the file area or a file cannot be read, or a purpose of a file was not read for the
 	 *                            municipality, so that the step is made again in the next run
 	 */
 	void upload(final Candidate candidate, final RunContext context, final String municipalityId, final String errandId, final ReportNotes notes) {
@@ -77,7 +77,7 @@ class FileUploader {
 				problem -> problems.add(problem, lookup.name()),
 				() -> uploadFile(municipalityId, errandId, lookup, wanted(candidate.detailsOf(reference), context, municipalityId), attached, problems));
 		}
-		problems.report(notes, maxFileSizeText());
+		reportAndFailOnUnreadable(problems, notes, candidate);
 	}
 
 	/**
@@ -95,20 +95,19 @@ class FileUploader {
 			problemOf(reference, lookup).ifPresent(problem -> problems.add(problem, lookup.name()));
 		}
 		if (candidate.asset() != null && !candidate.assetFiles().isEmpty()) {
-			notes.line("Till tillståndet i PartyAssets: " + categoryCounts(candidate, context, context.municipalityId()));
+			notes.line("Till %s i PartyAssets: %s".formatted(AssetWords.of(candidate.key().kind()).definite(), categoryCounts(candidate, context, context.municipalityId())));
 		}
 		problems.report(notes, maxFileSizeText());
 	}
 
 	/**
 	 * Puts the files that belong on the post in PartyAssets there, each in its category if it has one (see
-	 * {@link #categoryOf}). A file already on
-	 * the post, with the same name and size, is not put there again. A file that the errand does not get either, since it
-	 * cannot be found or is not to be uploaded, is skipped without a note: every such file is one of the errand's, whose
-	 * step lists it (G14). A file PartyAssets refuses is listed.
+	 * {@link #categoryOf}). A file already on the post, with the same name and size, is not put there again. A file that
+	 * the errand does not get either, since it cannot be found or is not to be uploaded, is skipped without a note: every
+	 * such file is one of the errand's, whose step lists it (G14). A file PartyAssets refuses is listed.
 	 *
-	 * @throws MigrationException when the file area cannot be read, or when PartyAssets refuses a file because the post is
-	 *                            not ACTIVE, so that the step is made again in the next run
+	 * @throws MigrationException when the file area or a file cannot be read, or when PartyAssets refuses a file because
+	 *                            the post is not ACTIVE, so that the step is made again in the next run
 	 */
 	void uploadToAsset(final Candidate candidate, final RunContext context, final String municipalityId, final String partyAssetsId, final ReportNotes notes) {
 		if (candidate.assetFiles().isEmpty()) {
@@ -117,32 +116,34 @@ class FileUploader {
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var attached = new ArrayList<>(partyAssets.getAttachments(municipalityId, partyAssetsId).stream().map(AttachedFile::of).toList());
 		final var problems = new FileProblems();
+		final var words = AssetWords.of(candidate.key().kind());
 		var onPost = 0;
 		for (final var file : candidate.assetFiles()) {
 			final var lookup = readableLookup(fileArea, file.reference(), candidate);
-			if (problemOf(file.reference(), lookup).isPresent()) {
+			final var problem = problemOf(file.reference(), lookup);
+			if (problem.isPresent()) {
+				// Also the errand's step lists it, but one that cannot be read may be readable in the next run
+				problem.filter(FileProblem.UNREADABLE::equals).ifPresent(unreadable -> problems.add(unreadable, lookup.name()));
 				continue;
 			}
-			if (uploadToAsset(municipalityId, partyAssetsId, lookup, categoryOf(candidate, file, context, municipalityId), attached, problems)) {
+			if (uploadToAsset(municipalityId, partyAssetsId, lookup, categoryOf(candidate, file, context, municipalityId), attached, words, problems)) {
 				onPost++;
 			}
 		}
-		notes.line("Tillståndet i PartyAssets har %d av %d filer: %s".formatted(onPost, candidate.assetFiles().size(), categoryCounts(candidate, context, municipalityId)));
-		problems.report(notes, maxFileSizeText());
+		notes.line("%s i PartyAssets har %d av %d filer: %s".formatted(words.capitalized(), onPost, candidate.assetFiles().size(), categoryCounts(candidate, context, municipalityId)));
+		reportAndFailOnUnreadable(problems, notes, candidate);
 	}
 
 	/**
 	 * @return true when the file is on the post, put there now or by an earlier run
 	 */
 	private boolean uploadToAsset(final String municipalityId, final String partyAssetsId, final FileArea.Lookup lookup, final String category, final List<AttachedFile> attached,
-		final FileProblems problems) {
-		final byte[] content;
-		try {
-			content = FileArea.read(lookup.path());
-		} catch (final IOException e) {
-			problems.add(FileProblem.UNREADABLE, lookup.name());
+		final AssetWords words, final FileProblems problems) {
+		final var read = readContent(lookup, problems);
+		if (read.isEmpty()) {
 			return false;
 		}
+		final var content = read.get();
 		// PartyAssets gives no hash, so the size tells the content apart
 		final var file = new AttachedFile(lookup.name(), null, content.length);
 		if (attached.stream().anyMatch(file::isSameAs)) {
@@ -155,7 +156,7 @@ class FileUploader {
 		// PartyAssets answers the same when the post takes no files, as after the nightly job has made it EXPIRED
 		final var status = partyAssets.getAsset(municipalityId, partyAssetsId).map(Asset::getStatus).orElse(null);
 		if (status != Status.ACTIVE) {
-			throw new MigrationException("Tillståndet %s i PartyAssets har status %s och tar inte emot filer".formatted(partyAssetsId, status));
+			throw new MigrationException("%s %s i PartyAssets har status %s och tar inte emot filer".formatted(words.capitalized(), partyAssetsId, status));
 		}
 		problems.add(FileProblem.REFUSED_BY_PARTY_ASSETS, lookup.name());
 		return false;
@@ -233,13 +234,11 @@ class FileUploader {
 
 	private void uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final Wanted wanted, final List<AttachedFile> attached,
 		final FileProblems problems) {
-		final byte[] content;
-		try {
-			content = FileArea.read(lookup.path());
-		} catch (final IOException e) {
-			problems.add(FileProblem.UNREADABLE, lookup.name());
+		final var read = readContent(lookup, problems);
+		if (read.isEmpty()) {
 			return;
 		}
+		final var content = read.get();
 		final var file = new AttachedFile(lookup.name(), sha256(content), content.length);
 		final var existing = attached.stream().filter(file::isSameAs).findFirst();
 		if (existing.isPresent()) {
@@ -292,6 +291,36 @@ class FileUploader {
 	 * @param received  when the file came in, null for the time of upload
 	 */
 	private record Wanted(String purposeId, OffsetDateTime received) {
+	}
+
+	/**
+	 * @return the content of the file, empty when it cannot be read or has grown larger than the largest size since it was
+	 *         found, which the problems then list
+	 */
+	private Optional<byte[]> readContent(final FileArea.Lookup lookup, final FileProblems problems) {
+		try {
+			final var content = FileArea.read(lookup.path(), properties.maxFileSize().toBytes());
+			if (content.isEmpty()) {
+				problems.add(FileProblem.TOO_LARGE, lookup.name());
+			}
+			return content;
+		} catch (final IOException e) {
+			problems.add(FileProblem.UNREADABLE, lookup.name());
+			return Optional.empty();
+		}
+	}
+
+	/**
+	 * Lists the files that are not uploaded. A file that cannot be read, often only for a while, as when the share is busy
+	 * or the file is open, fails the step, so that the next run uploads it.
+	 *
+	 * @throws MigrationException when a file could not be read
+	 */
+	private void reportAndFailOnUnreadable(final FileProblems problems, final ReportNotes notes, final Candidate candidate) {
+		problems.report(notes, maxFileSizeText());
+		if (problems.has(FileProblem.UNREADABLE)) {
+			throw new MigrationException("Filer på filarean för %s gick inte att läsa och laddas upp i nästa körning".formatted(candidate.key().source().getDisplayName()));
+		}
 	}
 
 	private String maxFileSizeText() {
@@ -402,6 +431,10 @@ class FileUploader {
 
 		void add(final FileProblem problem, final String name) {
 			names.computeIfAbsent(problem, _ -> new ArrayList<>()).add(name);
+		}
+
+		boolean has(final FileProblem problem) {
+			return names.containsKey(problem);
 		}
 
 		void report(final ReportNotes notes, final String maxFileSize) {

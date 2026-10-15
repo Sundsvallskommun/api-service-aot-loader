@@ -66,7 +66,8 @@ in the root of the repository. The repository is public, so they must never be w
 **Keys and passwords never go in `.env`, or in any other file (section 12 of the solution document).** The only secret
 is `AOT_LOADER_CLIENT_SECRET`, the secret of the client in the API gateway; it is typed in each time the service is
 started, as shown under [Run](#run). The source databases are read with your own Windows account, so they have no
-password.
+password. The account may only read them: before a run the service checks that it cannot change anything in them, and
+a real run does not start when it can (section 9 of the solution document).
 
 1. Copy the template: `Copy-Item .env.example .env`
 2. Fill in the values: one `NAME=value` per line, without quotes. Lines starting with `#` are comments.

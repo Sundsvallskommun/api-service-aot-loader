@@ -201,6 +201,13 @@ public record Candidate(
 			return this;
 		}
 
+		/**
+		 * Adds the files of the item, those of them that also go on the post in PartyAssets, and their purposes and dates.
+		 */
+		public Builder files(final List<FileReference> references, final List<AssetFile> onPost, final Map<FileReference, FileDetails> details) {
+			return files(references).assetFiles(onPost).fileDetails(details);
+		}
+
 		public Builder investigation(final InvestigationData value) {
 			this.investigation = value;
 			return this;

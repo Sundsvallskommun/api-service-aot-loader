@@ -6,18 +6,25 @@ import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 import org.testcontainers.mssqlserver.MSSQLServerContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
  * A SQL Server with the two source databases, their tables and made up rows, at the compatibility levels of the real
  * ones: below 110 for AlkT and 110 for AlkOL. The tests log in with SQL Server authentication, since the
- * container has no Windows authentication; only the connection string differs from a real run.
+ * container has no Windows authentication; only the connection string differs from a real run. The application logs in
+ * with an account that may only read, as the checks before a real run demand, and the databases are created with the
+ * administrator of the server.
  */
-final class SourceDatabaseContainer {
+public final class SourceDatabaseContainer {
 
-	static final String ALKT_DATABASE = "AlkTSundsvall";
-	static final String ALKOL_DATABASE = "AlkOL2Sundsvall";
+	public static final String ALKT_DATABASE = "AlkTSundsvall";
+	public static final String ALKOL_DATABASE = "AlkOL2Sundsvall";
+
+	private static final String READER = "aot_reader";
+	private static final String READER_PASSWORD = "Aa1!" + UUID.randomUUID();
 
 	// Runs for all the tests and is removed by the Ryuk container of Testcontainers when the JVM ends
 	@SuppressWarnings("resource")
@@ -30,7 +37,7 @@ final class SourceDatabaseContainer {
 	/**
 	 * Starts the container and creates the databases, once for all the tests.
 	 */
-	static synchronized void start() {
+	public static synchronized void start() {
 		if (created) {
 			return;
 		}
@@ -42,21 +49,40 @@ final class SourceDatabaseContainer {
 			execute("master", "ALTER DATABASE " + ALKOL_DATABASE + " SET COMPATIBILITY_LEVEL = 110");
 			executeScript(ALKT_DATABASE, "/db/alkt.sql");
 			executeScript(ALKOL_DATABASE, "/db/alkol.sql");
+			execute("master", "CREATE LOGIN " + READER + " WITH PASSWORD = '" + READER_PASSWORD + "'");
+			for (final var database : List.of(ALKT_DATABASE, ALKOL_DATABASE)) {
+				execute(database, "CREATE USER " + READER + " FOR LOGIN " + READER);
+				execute(database, "EXEC sp_addrolemember 'db_datareader', '" + READER + "'");
+			}
 		} catch (final SQLException | IOException e) {
 			throw new IllegalStateException("The source databases could not be created", e);
 		}
 		created = true;
 	}
 
-	static String url(final String database) {
+	public static String url(final String database) {
 		return CONTAINER.getJdbcUrl() + ";databaseName=" + database + ";trustServerCertificate=true";
 	}
 
-	static String username() {
+	/**
+	 * @return the account that may only read
+	 */
+	public static String username() {
+		return READER;
+	}
+
+	public static String password() {
+		return READER_PASSWORD;
+	}
+
+	/**
+	 * @return the administrator of the server, who may do anything
+	 */
+	public static String adminUsername() {
 		return CONTAINER.getUsername();
 	}
 
-	static String password() {
+	public static String adminPassword() {
 		return CONTAINER.getPassword();
 	}
 
@@ -74,7 +100,7 @@ final class SourceDatabaseContainer {
 	}
 
 	private static void execute(final String database, final String sql) throws SQLException {
-		try (var connection = DriverManager.getConnection(url(database), username(), password()); var statement = connection.createStatement()) {
+		try (var connection = DriverManager.getConnection(url(database), adminUsername(), adminPassword()); var statement = connection.createStatement()) {
 			statement.execute(sql);
 		}
 	}

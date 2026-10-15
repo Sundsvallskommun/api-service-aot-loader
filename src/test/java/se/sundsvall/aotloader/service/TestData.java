@@ -144,7 +144,7 @@ public final class TestData {
 			.description("Beskrivning")
 			.labelPath("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING")
 			.externalTag("diarienummer", "IAN-2019-" + objektId)
-			.parameters(List.of(new Parameter("alktObjektId", "AlkT-id", List.of(objektId))))
+			.parameters(List.of(new Parameter("alktObjektId", "Id i AlkT", List.of(objektId))))
 			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, Map.of("migreradFran", "AlkT")))
 			.files(List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS), new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS)));
 	}

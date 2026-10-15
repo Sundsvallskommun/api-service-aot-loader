@@ -53,9 +53,13 @@ public final class Constants {
 	public static final String ASSET_CATEGORY_CERTIFICATE = "Tillståndsbevis";
 	/** The category of the annex of the permit decision on a permit in PartyAssets. */
 	public static final String ASSET_CATEGORY_ANNEX = "Beslutsbilaga";
-	/** The category of a drawing of the premises on a permit in PartyAssets. */
+	/**
+	 * The category of a drawing of the premises in PartyAssets when it has no purpose, whose name shown it gets otherwise.
+	 */
 	public static final String ASSET_CATEGORY_DRAWING = "Ritning";
-	/** The category of the documents and attachments of the decisions of the issuing errand on a permit in PartyAssets. */
+	/**
+	 * The category of the permit decisions of the issuing errand, documents and attachments, on a permit in PartyAssets.
+	 */
 	public static final String ASSET_CATEGORY_DECISION = "Beslut";
 
 	/** The longest value of an errand parameter in SupportManagement. */

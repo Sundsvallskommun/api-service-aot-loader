@@ -99,17 +99,18 @@ class TargetWriter {
 	 */
 	String ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties, final boolean expired,
 		final ReportNotes notes) {
-		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, notes))
+		final var words = AssetWords.of(candidate.key().kind());
+		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, words, notes))
 			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId));
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
 			final var wanted = mapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
-			return bringUpToDate(municipalityId, found.get(), wanted, notes);
+			return bringUpToDate(municipalityId, found.get(), wanted, words, notes);
 		}
 		final var wanted = mapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), expired);
 		return partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId)
-				.orElseThrow(() -> new MigrationException("PartyAssets svarade att tillståndet redan finns, men det gick inte att hitta")), wanted, notes));
+				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes));
 	}
 
 	/**
@@ -118,26 +119,26 @@ class TargetWriter {
 	 *
 	 * @throws MigrationException when the post does not get the status, or is gone
 	 */
-	void changeAssetStatus(final String municipalityId, final String partyAssetsId, final Status status, final ReportNotes notes) {
+	void changeAssetStatus(final String municipalityId, final String partyAssetsId, final Status status, final AssetWords words, final ReportNotes notes) {
 		partyAssets.updateAsset(municipalityId, partyAssetsId, new AssetUpdateRequest().status(status));
 		final var updated = partyAssets.getAsset(municipalityId, partyAssetsId)
-			.orElseThrow(() -> new MigrationException("Tillståndet %s fanns inte i PartyAssets efter ändringen".formatted(partyAssetsId)));
+			.orElseThrow(() -> new MigrationException("%s %s fanns inte i PartyAssets efter ändringen".formatted(words.capitalized(), partyAssetsId)));
 		if (updated.getStatus() != status) {
-			throw new MigrationException("Tillståndet %s i PartyAssets fick inte status %s".formatted(partyAssetsId, status));
+			throw new MigrationException("%s %s i PartyAssets fick inte status %s".formatted(words.capitalized(), partyAssetsId, status));
 		}
 		notes.line(status == Status.ACTIVE
-			? "Tillståndet i PartyAssets hade status ACTIVE medan det fick sina filer, eftersom ett EXPIRED tillstånd inte tar emot filer"
-			: "Tillståndet i PartyAssets fick status EXPIRED igen när det hade fått sina filer");
+			? "%s i PartyAssets hade status ACTIVE medan %s fick sina filer, eftersom %s med status EXPIRED inte tar emot filer".formatted(words.capitalized(), words.pronoun(), words.indefinite())
+			: "%s i PartyAssets fick status EXPIRED igen när %s hade fått sina filer".formatted(words.capitalized(), words.pronoun()));
 	}
 
 	private static String holderPartyId(final PartyIds parties) {
 		return parties.holderPartyId().orElseThrow(() -> new MigrationException("Tillståndshavaren saknar partyId"));
 	}
 
-	private Optional<Asset> assetInStatusTable(final String municipalityId, final String partyAssetsId, final ReportNotes notes) {
+	private Optional<Asset> assetInStatusTable(final String municipalityId, final String partyAssetsId, final AssetWords words, final ReportNotes notes) {
 		final var asset = partyAssets.getAsset(municipalityId, partyAssetsId);
 		if (asset.isEmpty()) {
-			notes.line("Tillståndet %s fanns inte längre i PartyAssets".formatted(partyAssetsId));
+			notes.line("%s %s fanns inte längre i PartyAssets".formatted(words.capitalized(), partyAssetsId));
 		}
 		return asset;
 	}
@@ -152,15 +153,15 @@ class TargetWriter {
 	 *                            the item now gives, which is then left as it is; and when PartyAssets does not make the
 	 *                            change
 	 */
-	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final ReportNotes notes) {
+	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final AssetWords words, final ReportNotes notes) {
 		final var from = asset.getStatus();
 		final var to = wanted.getStatus();
 		if (from != Status.ACTIVE && from != Status.EXPIRED) {
-			throw new MigrationException("Tillståndet %s i PartyAssets har status %s, som migreringen aldrig ger, och ändras inte".formatted(asset.getId(), from));
+			throw new MigrationException("%s %s i PartyAssets har status %s, som migreringen aldrig ger, och ändras inte".formatted(words.capitalized(), asset.getId(), from));
 		}
 		// The content describes the holder, so another party's post must not get it
 		if (!Objects.equals(asset.getPartyId(), wanted.getPartyId())) {
-			throw new MigrationException("Tillståndet %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(asset.getId()));
+			throw new MigrationException("%s %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(words.capitalized(), asset.getId()));
 		}
 		final var content = mapper.toContentUpdate(asset, wanted);
 		final var statusChanges = from != to;
@@ -169,27 +170,27 @@ class TargetWriter {
 			// Checked before the status changes, since an EXPIRED post can no longer get the content
 			if (content.isPresent()) {
 				partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
-				verifyUpdated(municipalityId, asset.getId(), wanted, from);
+				verifyUpdated(municipalityId, asset.getId(), wanted, from, words);
 			}
 			if (statusChanges) {
 				partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
-				verifyUpdated(municipalityId, asset.getId(), wanted, to);
+				verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
 			}
 		} else if (statusChanges) {
 			partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
 			content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
-			verifyUpdated(municipalityId, asset.getId(), wanted, to);
+			verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
 		}
 
 		if (statusChanges) {
-			notes.line("Tillståndet i PartyAssets hade status %s från en tidigare körning och fick status %s".formatted(from, to));
+			notes.line("%s i PartyAssets hade status %s från en tidigare körning och fick status %s".formatted(words.capitalized(), from, to));
 		}
 		if (contentChanges) {
-			notes.line("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
+			notes.line("%s i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu".formatted(words.capitalized()));
 		} else if (content.isPresent()) {
-			notes.line("Tillståndet i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu");
+			notes.line("%s i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu".formatted(words.capitalized()));
 		}
-		unchangeable(asset, wanted).ifPresent(notes::line);
+		unchangeable(asset, wanted, words).ifPresent(notes::line);
 		return asset.getId();
 	}
 
@@ -198,12 +199,12 @@ class TargetWriter {
 	 *
 	 * @throws MigrationException when it does not, or when it is gone
 	 */
-	private void verifyUpdated(final String municipalityId, final String id, final AssetCreateRequest wanted, final Status status) {
+	private void verifyUpdated(final String municipalityId, final String id, final AssetCreateRequest wanted, final Status status, final AssetWords words) {
 		final var updated = partyAssets.getAsset(municipalityId, id)
-			.orElseThrow(() -> new MigrationException("Tillståndet %s fanns inte i PartyAssets efter ändringen".formatted(id)));
+			.orElseThrow(() -> new MigrationException("%s %s fanns inte i PartyAssets efter ändringen".formatted(words.capitalized(), id)));
 		// PartyAssets before 6.8 answers a change of the content with 204 and leaves the content as it was
 		if (updated.getStatus() != status || mapper.toContentUpdate(updated, wanted).isPresent()) {
-			throw new MigrationException("PartyAssets gjorde inte hela ändringen av tillståndet %s, vilket kräver PartyAssets 6.8 eller senare".formatted(id));
+			throw new MigrationException("PartyAssets gjorde inte hela ändringen av %s %s, vilket kräver PartyAssets 6.8 eller senare".formatted(words.definite(), id));
 		}
 	}
 
@@ -211,7 +212,7 @@ class TargetWriter {
 	 * @return a note on what differs from what the item gives now but cannot be changed in PartyAssets, empty when nothing
 	 *         does
 	 */
-	private static Optional<String> unchangeable(final Asset asset, final AssetCreateRequest wanted) {
+	private static Optional<String> unchangeable(final Asset asset, final AssetCreateRequest wanted, final AssetWords words) {
 		final var differs = new ArrayList<String>();
 		if (!Objects.equals(asset.getType(), wanted.getType())) {
 			differs.add("typ");
@@ -223,7 +224,7 @@ class TargetWriter {
 			differs.add("beskrivning");
 		}
 		return differs.isEmpty() ? Optional.empty()
-			: Optional.of("Tillståndets %s i PartyAssets skiljer sig från det källan ger nu och kan inte ändras där (avsnitt 10.3)".formatted(String.join(", ", differs)));
+			: Optional.of("%s %s i PartyAssets skiljer sig från det källan ger nu och kan inte ändras där (avsnitt 10.3)".formatted(words.capitalizedGenitive(), String.join(", ", differs)));
 	}
 
 	/**

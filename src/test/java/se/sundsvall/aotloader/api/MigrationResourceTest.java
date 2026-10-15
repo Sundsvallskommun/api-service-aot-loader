@@ -72,6 +72,19 @@ class MigrationResourceTest {
 	}
 
 	@Test
+	void aRequestThatAnotherSiteSentIsRefused() {
+		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.header("Origin", "https://example.com")
+			.header("Sec-Fetch-Site", "cross-site")
+			.contentType(APPLICATION_JSON)
+			.bodyValue(new RunRequest(false, null, null, null))
+			.exchange()
+			.expectStatus().isForbidden();
+
+		verifyNoInteractions(service);
+	}
+
+	@Test
 	void startRunWithInvalidLimitAndMunicipality() {
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)

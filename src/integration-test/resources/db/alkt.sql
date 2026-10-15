@@ -44,7 +44,7 @@ CREATE TABLE dbo.[Ärende_Händelser] (HandelseID int NOT NULL PRIMARY KEY, Aren
 GO
 CREATE TABLE dbo.[Ärende_Händelser_Filer] (ID int IDENTITY(1, 1) NOT NULL, HandelseID int NULL, Bifogadfil varchar(255) NULL)
 GO
-CREATE TABLE dbo.[Ärende_Bilder] (BildID int IDENTITY(1, 1) NOT NULL, ArendeID int NULL, Bildfilnamn varchar(100) NULL)
+CREATE TABLE dbo.[Ärende_Bilder] (BildID int IDENTITY(1, 1) NOT NULL, ArendeID int NULL, BildDatumTid datetime NULL, Bildfilnamn varchar(100) NULL)
 GO
 CREATE TABLE dbo.[PBI_ägare] (
     PBIAGID int IDENTITY(1, 1) NOT NULL, AgarID int NULL, Namn varchar(50) NULL, Personnr varchar(12) NULL, Befattningskod1 varchar(6) NULL,
@@ -74,7 +74,7 @@ INSERT INTO dbo.[Ärende_Beslut] VALUES (100, 500, 'GT', '2019-04-30', NULL, '22
 INSERT INTO dbo.[Ärende_Händelser] VALUES (1, 500, '11111111.rtf', 'ansokan.pdf', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Ärende_Händelser] VALUES (2, 500, NULL, 'saknas.pdf', NULL, NULL, NULL, NULL)
 -- The certificate of permit 1, which also goes on the permit in PartyAssets, and an event of the place without an errand (decisions 34 and 37)
-INSERT INTO dbo.[Ärende_Händelser] VALUES (4, 500, '55555555.rtf', NULL, NULL, 'TDBV2', '2019-05-02', NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (4, 500, '55555555.rtf', NULL, NULL, 'TDBV2', '2019-05-02T13:45:00', NULL)
 INSERT INTO dbo.[Ärende_Händelser] VALUES (5, NULL, NULL, 'serveringsansvarig.pdf', 1, NULL, '2020-01-01', NULL)
 INSERT INTO dbo.[Sökande] VALUES (70, '5566778899', 'Testbolaget AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvan Tolvansson', '191212121212', 'VD', 0, 0)
@@ -94,7 +94,7 @@ INSERT INTO dbo.[Ärende] VALUES (503, 3, '01', 'IAN-2021-3', '2020-12-01', '202
 INSERT INTO dbo.[Ärende_Beslut] VALUES (101, 503, 'GT', '2021-01-31', NULL, '44444444.rtf', NULL, 'TDB')
 INSERT INTO dbo.[Ärende_Händelser] VALUES (3, 503, NULL, 'ansökan räkenskaper.pdf', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Ärende_Händelser_Filer] (HandelseID, Bifogadfil) VALUES (3, 'ritning våning 2.pdf')
-INSERT INTO dbo.[Ärende_Bilder] (ArendeID, Bildfilnamn) VALUES (503, 'fasad.jpg')
+INSERT INTO dbo.[Ärende_Bilder] (ArendeID, BildDatumTid, Bildfilnamn) VALUES (503, '2019-06-10T10:00:00', 'fasad.jpg')
 -- A place in the area Timrå of AlkT, which belongs to another municipality (decision 19)
 INSERT INTO dbo.Objekt VALUES (4, 10, '12345681', '12', 'Timråkrogen', 'Köpmangatan 4', '86130', 'Timrå', NULL, NULL, 'G15', NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, AretRunt, ServeringAllmanhet, Utfardande_Datum, Utfardande_Diarienr, GTRestaurangBeteckning)

@@ -12,6 +12,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.springframework.boot.context.properties.bind.PropertySourcesPlacehold
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
@@ -37,6 +39,7 @@ import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.SourceDatabases;
 import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,6 +60,9 @@ class PreflightTest {
 
 	@Mock
 	private SupportManagementIntegration supportManagement;
+
+	@Mock
+	private SourceDatabases sourceDatabases;
 
 	@TempDir
 	private Path directory;
@@ -80,7 +86,7 @@ class PreflightTest {
 				new AttachmentPurpose().id("id-budget").name("BUDGET"),
 				new AttachmentPurpose().name(FilePurposes.STATEMENT_REQUEST)))
 			.toList());
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
 
@@ -93,10 +99,24 @@ class PreflightTest {
 	}
 
 	@Test
+	void aSourceAccountThatMayWriteStopsARealRun() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		when(sourceDatabases.writeAccess(Source.ALKT)).thenReturn(Optional.of("kan ändra innehållet i 3 tabeller eller vyer och ändra databasens struktur"));
+		when(sourceDatabases.writeAccess(Source.ALKOL)).thenThrow(new CannotGetJdbcConnectionException("Login failed"));
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
+
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND), Source.ALKOL, Set.of(TILLSTAND)));
+
+		assertThat(result.problems()).containsExactlyInAnyOrder(
+			"Kontot för källdatabasen för AlkT kan ändra innehållet i 3 tabeller eller vyer och ändra databasens struktur, men källan får bara läsas (K7)",
+			"Kontots behörigheter i källdatabasen för AlkOL gick inte att kontrollera: CannotGetJdbcConnectionException: Login failed");
+	}
+
+	@Test
 	void purposesThatCannotBeRead() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
 		when(supportManagement.getAttachmentPurposes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
 
@@ -107,7 +127,7 @@ class PreflightTest {
 	@Test
 	void everythingInPlace() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN)));
 
@@ -122,7 +142,7 @@ class PreflightTest {
 	@Test
 	void onlyTheMunicipalityOfTheRunIsChecked() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(false)).thenReturn(List.of());
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems())
 			.containsExactly("Etiketten TAGROOT/MIGRATED_ERRAND saknar attributet processBlocked=true, som spärrar processer (beslut 17)");
@@ -138,7 +158,7 @@ class PreflightTest {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
 		when(supportManagement.getActionConfigs(MUNICIPALITY_ID)).thenReturn(List.of(new Config().name("ADD_LABEL").active(false), new Config().name("SEND_EMAIL").active(true),
 			new Config().active(true)));
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems())
 			.containsExactly("Åtgärder är aktiva i namespace AOT och körs när ett migrerat ärende aktiveras: SEND_EMAIL, utan namn. De stängs av under körningen (R6, avsnitt 10.2)");
@@ -157,7 +177,7 @@ class PreflightTest {
 		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null),
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection), Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
 			Map.of("Timrå", "22620"));
-		final var preflight = new Preflight(properties, supportManagement);
+		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(TILLSTAND, TILLSYN)));
 
@@ -187,7 +207,7 @@ class PreflightTest {
 		final var properties = new Binder(ConfigurationPropertySources.from(sources), new PropertySourcesPlaceholdersResolver(sources))
 			.bind("aot-loader", AotLoaderProperties.class).get();
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
-		final var preflight = new Preflight(properties, supportManagement);
+		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, ANMALAN, TILLSYN, TILLSYNSBESOK)));
 
@@ -205,7 +225,7 @@ class PreflightTest {
 	@Test
 	void labelsThatCannotBeRead() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
 

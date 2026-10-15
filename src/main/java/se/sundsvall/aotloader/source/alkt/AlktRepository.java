@@ -2,7 +2,7 @@ package se.sundsvall.aotloader.source.alkt;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +36,7 @@ import static java.util.stream.Collectors.groupingBy;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.Rows.byKey;
 import static se.sundsvall.aotloader.source.Rows.date;
+import static se.sundsvall.aotloader.source.Rows.dateTime;
 import static se.sundsvall.aotloader.source.Rows.flag;
 import static se.sundsvall.aotloader.source.Rows.integer;
 import static se.sundsvall.aotloader.source.Rows.text;
@@ -53,6 +54,7 @@ public class AlktRepository {
 	private static final String HANDELSE_TYP = "HandelseTyp";
 	private static final String HANDELSE_DATUM = "HandelseDatumTid";
 
+	// The table has no key: the order numbers the permits without ObjektID the same way in every run
 	private static final String SELECT_PERMITS = """
 		SELECT g.ObjektID, g.GTAgarID, g.Starkol, g.Vin, g.Spritdrycker, g.AJADrycker, g.ALP, g.AretRunt,
 		       g.ArligPeriodStart, g.ArligPeriodSlut, g.PeriodStart, g.PeriodSlut,
@@ -68,6 +70,7 @@ public class AlktRepository {
 		       g.Ersatter_Datum, g.Ersatter_Diarienr, g.Utfardande_Datum, g.Utfardande_Diarienr, g.GTRestaurangBeteckning,
 		       g.BeslutsID
 		FROM dbo.[Gällande_Tillstånd] g
+		ORDER BY g.ObjektID, g.Utfardande_Diarienr, g.Utfardande_Datum, g.BeslutsID
 		""";
 
 	private static final String SELECT_PLACES = """
@@ -86,6 +89,7 @@ public class AlktRepository {
 		SELECT v.ObjID, v.Villkor, v.Notering, v.FR_OM, v.T_OM
 		FROM dbo.ObjVillkor v
 		WHERE v.ObjID IS NOT NULL
+		ORDER BY v.ObjID, v.ID
 		""";
 
 	private static final String SELECT_DECISIONS = """
@@ -113,7 +117,7 @@ public class AlktRepository {
 		""";
 
 	private static final String SELECT_PICTURES = """
-		SELECT bi.ArendeID, bi.Bildfilnamn
+		SELECT bi.ArendeID, bi.Bildfilnamn, bi.BildDatumTid
 		FROM dbo.[Ärende_Bilder] bi
 		WHERE bi.ArendeID IS NOT NULL
 		  AND bi.Bildfilnamn IS NOT NULL
@@ -290,7 +294,7 @@ public class AlktRepository {
 			integer(rs, "BeslutsID"),
 			integer(rs, ARENDE_ID),
 			text(rs, "BeslutsTyp"),
-			date(rs, "BeslutsDatumTid"),
+			dateTime(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtTOM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
@@ -336,38 +340,34 @@ public class AlktRepository {
 			integer(rs, OBJEKT_ID),
 			text(rs, HANDELSE_TYP),
 			text(rs, "Dokument"),
-			date(rs, HANDELSE_DATUM),
+			dateTime(rs, HANDELSE_DATUM),
 			text(rs, "Worddokument"),
 			text(rs, BIFOGADFIL));
 	}
 
 	static EventFile toEventExtraFile(final ResultSet rs) throws SQLException {
-		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), text(rs, HANDELSE_TYP), null, date(rs, HANDELSE_DATUM), null, text(rs, BIFOGADFIL));
+		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), text(rs, HANDELSE_TYP), null, dateTime(rs, HANDELSE_DATUM), null, text(rs, BIFOGADFIL));
 	}
 
 	/**
 	 * The files of an event of AlkT, from the event itself or from Ärende_Händelser_Filer.
 	 */
-	record EventFile(Integer handelseId, Integer arendeId, Integer objektId, String handelseTyp, String mall, LocalDate datum, String worddokument, String bifogadfil) {
+	record EventFile(Integer handelseId, Integer arendeId, Integer objektId, String handelseTyp, String mall, LocalDateTime tidpunkt, String worddokument, String bifogadfil) {
 
 		/**
-		 * @return the document and the attachment of the event, each with its purpose and the date of the event
+		 * @return the document and the attachment of the event, each with its purpose and the time of the event
 		 */
 		private Stream<FileRow> files(final Integer errand) {
-			final var received = datum == null ? null : datum.atStartOfDay();
 			return Stream.of(
-				new FileRow(errand, worddokument, true, new FileDetails(FilePurposes.ofDocument(ALKT, mall), received)),
-				new FileRow(errand, bifogadfil, false, new FileDetails(FilePurposes.ofAttachment(ALKT, handelseTyp, bifogadfil), received)))
+				new FileRow(errand, worddokument, true, new FileDetails(FilePurposes.ofDocument(ALKT, mall), tidpunkt)),
+				new FileRow(errand, bifogadfil, false, new FileDetails(FilePurposes.ofAttachment(ALKT, handelseTyp, bifogadfil), tidpunkt)))
 				.filter(row -> row.name() != null);
 		}
 	}
 
-	/**
-	 * Reads a row of Ärende_Bilder, which has no date.
-	 */
 	static FileRow toPicture(final ResultSet rs) throws SQLException {
 		final var name = text(rs, "Bildfilnamn");
-		return new FileRow(integer(rs, ARENDE_ID), name, false, new FileDetails(FilePurposes.ofAttachment(ALKT, null, name), null));
+		return new FileRow(integer(rs, ARENDE_ID), name, false, new FileDetails(FilePurposes.ofAttachment(ALKT, null, name), dateTime(rs, "BildDatumTid")));
 	}
 
 	/**
@@ -396,7 +396,7 @@ public class AlktRepository {
 					: placeFiles.computeIfAbsent(event.objektId(), _ -> new ArrayList<>())).add(row)));
 			final var documents = events.stream()
 				.filter(event -> event.worddokument() != null)
-				.map(event -> new DocumentRow(event.handelseId(), event.arendeId(), event.objektId(), event.mall(), event.datum(), event.worddokument()))
+				.map(event -> new DocumentRow(event.handelseId(), event.arendeId(), event.objektId(), event.mall(), event.tidpunkt(), event.worddokument()))
 				.toList();
 			return new EventFiles(errandFiles, placeFiles, unplacedFiles, documents);
 		}

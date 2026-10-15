@@ -11,6 +11,8 @@ import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -33,6 +35,7 @@ import se.sundsvall.aotloader.support.MigrationException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 
@@ -41,7 +44,9 @@ class TargetMapperTest {
 	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
 	private static final String MUNICIPALITY_ID = "2281";
 
-	private final TargetMapper mapper = new TargetMapper(TestData.properties());
+	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T10:00:00Z"), SWEDISH_TIME);
+
+	private final TargetMapper mapper = new TargetMapper(TestData.properties(), CLOCK);
 
 	@Test
 	void toNewDraft() {
@@ -63,7 +68,7 @@ class TargetMapperTest {
 			.containsExactly(tuple("migreringsid", "ALKT-TILLSTAND-1"), tuple("diarienummer", "IAN-2019-1"));
 		// The place is in the parameters of the errand, under the keys pw-alkt reads
 		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(
-			tuple("alktObjektId", "AlkT-id", List.of("1")),
+			tuple("alktObjektId", "Id i AlkT", List.of("1")),
 			tuple("premisesName", "Ställets namn", List.of("Restaurang 1")),
 			tuple("premisesStreetAddress", "Ställets gatuadress", List.of("Storgatan 1")),
 			tuple("premisesPostalCode", "Ställets postnummer", List.of("85230")),
@@ -272,6 +277,18 @@ class TargetMapperTest {
 		assertThat(notCompleted.getTitle()).hasSize(255);
 		assertThat(notCompleted.getStartedAt()).isNull();
 		assertThat(notCompleted.getCompletedAt()).isNull();
+	}
+
+	@Test
+	void anInvestigationThatEndsLaterThanNowIsActiveWithoutAnEnd() {
+		final var now = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 0)));
+		final var later = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 1)));
+
+		assertThat(now.getStatus()).isEqualTo("COMPLETED");
+		assertThat(now.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2026-10-15T12:00+02:00"));
+		assertThat(later.getStatus()).isEqualTo("ACTIVE");
+		assertThat(later.getStartedAt()).isEqualTo(OffsetDateTime.parse("2026-10-15T09:00+02:00"));
+		assertThat(later.getCompletedAt()).isNull();
 	}
 
 	@Test

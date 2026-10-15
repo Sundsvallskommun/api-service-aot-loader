@@ -26,6 +26,7 @@ import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.SourceDatabases;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.Texts;
@@ -37,9 +38,9 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 
 /**
  * The checks before a run (section 9): what the configuration still waits for, that the file area and the source
- * databases are configured, and in the namespace of the municipality of the run that the labels exist, with the label
- * for migrated errands blocking processes, and that no action is active (R6). A real run does not start when a check
- * fails; a dry run lists the problems and goes on.
+ * databases are configured, that the account of each source database may only read, and in the namespace of the
+ * municipality of the run that the labels exist, with the label for migrated errands blocking processes, and that no
+ * action is active (R6). A real run does not start when a check fails; a dry run lists the problems and goes on.
  */
 @Component
 public class Preflight {
@@ -48,18 +49,19 @@ public class Preflight {
 
 	private final AotLoaderProperties properties;
 	private final SupportManagementIntegration supportManagement;
+	private final SourceDatabases sourceDatabases;
 
-	Preflight(final AotLoaderProperties properties, final SupportManagementIntegration supportManagement) {
+	Preflight(final AotLoaderProperties properties, final SupportManagementIntegration supportManagement, final SourceDatabases sourceDatabases) {
 		this.properties = properties;
 		this.supportManagement = supportManagement;
+		this.sourceDatabases = sourceDatabases;
 	}
 
 	/**
 	 * @param  municipalityId the municipality the run is started for
 	 * @param  scope          the sources and kinds of the run
-	 * @return                the problems found, and the ids of the labels and the attachment purposes of the namespace in
-	 *                        the
-	 *                        municipality of the run
+	 * @return                the problems found, and the ids of the labels and the attachment purposes of the namespace
+	 *                        in the municipality of the run
 	 */
 	public Result check(final String municipalityId, final Map<Source, Set<Kind>> scope) {
 		final var problems = new ArrayList<String>();
@@ -140,10 +142,20 @@ public class Preflight {
 	private void checkSource(final Source source, final List<String> problems) {
 		if (properties.database(source).isEmpty()) {
 			problems.add("Källdatabasen för %s är inte konfigurerad".formatted(source.getDisplayName()));
+		} else {
+			checkReadOnly(source, problems);
 		}
 		final var fileArea = properties.fileArea(source);
 		FileArea.checkDirectory(fileArea.documents()).ifPresent(problem -> problems.add("Filarean för %s, dokument: %s".formatted(source.getDisplayName(), problem)));
 		FileArea.checkDirectory(fileArea.attachments()).ifPresent(problem -> problems.add("Filarean för %s, bilagor: %s".formatted(source.getDisplayName(), problem)));
+	}
+
+	private void checkReadOnly(final Source source, final List<String> problems) {
+		try {
+			sourceDatabases.writeAccess(source).ifPresent(access -> problems.add("Kontot för källdatabasen för %s %s, men källan får bara läsas (K7)".formatted(source.getDisplayName(), access)));
+		} catch (final RuntimeException e) {
+			problems.add("Kontots behörigheter i källdatabasen för %s gick inte att kontrollera: %s".formatted(source.getDisplayName(), ErrorTexts.describe(e)));
+		}
 	}
 
 	/**

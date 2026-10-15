@@ -15,6 +15,7 @@ import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -77,9 +78,11 @@ public class TargetMapper {
 	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
 
 	private final AotLoaderProperties properties;
+	private final Clock clock;
 
-	public TargetMapper(final AotLoaderProperties properties) {
+	public TargetMapper(final AotLoaderProperties properties, final Clock clock) {
 		this.properties = properties;
+		this.clock = clock;
 	}
 
 	/**
@@ -221,14 +224,18 @@ public class TargetMapper {
 
 	/**
 	 * @return the investigation of an inspection errand or visit, completed when the source tells when the inspection was,
-	 *         with the times in Swedish time (decision 41)
+	 *         with the times in Swedish time (decision 41); an end later than now, which the source has in error or for a
+	 *         planned inspection, leaves it active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
+		final var completedAt = Optional.ofNullable(inSwedishTime(investigation.completedAt()))
+			.filter(time -> !time.toInstant().isAfter(clock.instant()))
+			.orElse(null);
 		return new Investigation()
-			.status(investigation.completed() ? INVESTIGATION_COMPLETED : INVESTIGATION_ACTIVE)
+			.status(completedAt == null ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
 			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
 			.startedAt(inSwedishTime(investigation.startedAt()))
-			.completedAt(inSwedishTime(investigation.completedAt()));
+			.completedAt(completedAt);
 	}
 
 	private static OffsetDateTime inSwedishTime(final LocalDateTime time) {

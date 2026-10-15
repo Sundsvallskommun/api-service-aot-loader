@@ -9,8 +9,9 @@ import java.util.regex.Pattern;
  */
 public final class PiiScrubber {
 
-	// Bounded by anything but a digit, so that a number written next to a word or a hyphen, as in a file name, is found
-	private static final Pattern LEGAL_ID = Pattern.compile("(?<!\\d)(\\d{2})?\\d{6}[-+ ]?\\d{4}(?!\\d)");
+	// Bounded by anything but a digit, so that a number written next to a word or a hyphen, as in a file name, is found,
+	// and with up to three characters of any kind between its parts, as in 700101_1234 or "700101 - 1234"
+	private static final Pattern LEGAL_ID = Pattern.compile("(?<!\\d)(\\d{2})?\\d{6}[^\\p{Alnum}]{0,3}\\d{4}(?!\\d)");
 	private static final Pattern UUID = Pattern.compile("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}");
 	// A domain with at least one dot, matched without a repeated group, whose recursion could overflow the stack. It
 	// does not end with a dot, which is the full stop of a sentence

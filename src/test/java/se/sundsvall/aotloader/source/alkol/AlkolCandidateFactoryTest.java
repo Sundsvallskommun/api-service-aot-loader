@@ -173,6 +173,9 @@ class AlkolCandidateFactoryTest {
 		// letter, which is no permit decision
 		assertThat(older.assetFiles()).containsExactly(new AssetFile(new FileReference("beslut.pdf", ATTACHMENTS), "Beslut"));
 		assertThat(older.files()).endsWith(new FileReference("22222222.rtf", DOCUMENTS));
+		assertThat(older.detailsOf(new FileReference("22222222.rtf", DOCUMENTS)))
+			.as("A certificate of another errand than that of the latest grant gets its purpose and time too")
+			.isEqualTo(new FileDetails(FilePurposes.ofDocument(ALKOL, "TILLTT"), LocalDateTime.of(2019, 7, 1, 10, 0)));
 
 		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule).containsExactly(CERTIFICATE_MISSING);
 		assertThat(candidates.get(2).assetFiles()).as("a receipt letter and a receipt are no permit decisions").isEmpty();
@@ -194,7 +197,10 @@ class AlkolCandidateFactoryTest {
 			.event(new EventRow(302, 1, null, "105", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "ecig-1.pdf"))
 			.event(new EventRow(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-2.pdf"))
 			.event(new EventRow(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, null, "ecig-2.pdf"))
-			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "egentillsyn-2.pdf"));
+			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "egentillsyn-2.pdf"))
+			// A drawing and a letter among the place's other events follow its notifications' errands, not their posts
+			.event(new EventRow(306, 2, null, "016", LocalDateTime.of(2020, 1, 4, 9, 0), null, null, null, "Planritning butik.pdf"))
+			.event(new EventRow(307, 2, null, "023", LocalDateTime.of(2020, 1, 5, 9, 0), null, "BekEci", "77777777.rtf", null));
 
 		final var permit = data.factory().permits().candidates().getFirst();
 		final var notifications = data.factory().notifications().candidates();
@@ -207,8 +213,10 @@ class AlkolCandidateFactoryTest {
 		assertThat(permit.assetFiles()).extracting(AssetFile::category).containsExactly("Tillståndsbevis");
 		assertThat(notifications).extracting(Candidate::key, Candidate::files).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new FileReference("folkol-1.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))));
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
+				new FileReference("Planritning butik.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
+				new FileReference("Planritning butik.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))));
 		// The notifications get the attachments of the events that register their product on their post too
 		assertThat(notifications).extracting(Candidate::key, Candidate::assetFiles).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-1.pdf", ATTACHMENTS), null))),

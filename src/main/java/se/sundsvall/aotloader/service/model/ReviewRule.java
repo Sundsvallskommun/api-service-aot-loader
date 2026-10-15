@@ -11,7 +11,7 @@ import static se.sundsvall.aotloader.service.model.Severity.NOT_MIGRATED;
  */
 public enum ReviewRule {
 
-	PLACE_MISSING("G1", "Tillståndet saknar serveringsställe", BLOCKING, false),
+	PLACE_MISSING("G1", "Serverings- eller försäljningsstället saknas", BLOCKING, false),
 	OWNER_DIFFERS("G2", "Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare", BLOCKING, true),
 	DECISION_EXPIRED("G3", "Det kopplade beslutet har passerat sitt sista giltighetsdatum", BLOCKING, true),
 	PERIOD_PASSED("G4", "Datumperioden har passerat", BLOCKING, true),

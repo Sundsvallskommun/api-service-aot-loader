@@ -163,8 +163,8 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(uploads).filteredOn(request -> "55555555.rtf".equals(request.getPart("errandAttachment").getFileName()))
 			.singleElement()
 			.extracting(request -> request.queryParameter("received").firstValue())
-			.as("The file came in on the day of its event, the start of which is the evening before in UTC (decision 40)")
-			.isEqualTo("2019-05-01T22:00:00Z");
+			.as("The file came in at the time of its event, in UTC (decision 40)")
+			.isEqualTo("2019-05-02T11:45:00Z");
 		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-1/attachments"))))
 			.as("The certificate and the decision of the issuing errand also go on the permit (decision 34)")
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
@@ -306,6 +306,11 @@ class MigrationIT extends AbstractAppTest {
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			.containsExactlyInAnyOrder("44444444.rtf", "ansökan räkenskaper.pdf", "ritning våning 2.pdf", "fasad.jpg", "Översiktskarta.pdf");
+		assertThat(uploads).filteredOn(request -> "fasad.jpg".equals(request.getPart("errandAttachment").getFileName()))
+			.singleElement()
+			.extracting(request -> request.queryParameter("received").firstValue())
+			.as("A picture came in at the time AlkT has for it")
+			.isEqualTo("2019-06-10T08:00:00Z");
 		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-6/attachments"))))
 			.as("The drawing and the decision of the issuing errand also go on the permit (decisions 34 and 35), the drawing with the name shown of its purpose (decision 40)")
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())

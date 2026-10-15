@@ -21,6 +21,13 @@ class ModelTest {
 	}
 
 	@Test
+	void theStepOfThePostIsNamedAfterThePermitOrTheNotification() {
+		assertThat(Step.TILLSTAND.getDisplayName(Kind.TILLSTAND)).isEqualTo("Tillstånd i PartyAssets");
+		assertThat(Step.TILLSTAND.getDisplayName(Kind.ANMALAN)).isEqualTo("Anmälan i PartyAssets");
+		assertThat(Step.ARENDE.getDisplayName(Kind.ANMALAN)).isEqualTo("Ärende");
+	}
+
+	@Test
 	void theStepsOfTheFlowAreProgress() {
 		assertThat(Arrays.stream(ItemStatus.values()).filter(ItemStatus::isProgress).toList()).isEqualTo(List.of(
 			ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.TILLSTAND_SKAPAT, ItemStatus.RELATION_KLAR, ItemStatus.KLAR));
