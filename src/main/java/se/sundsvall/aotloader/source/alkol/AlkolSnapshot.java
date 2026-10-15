@@ -105,8 +105,11 @@ public record AlkolSnapshot(
 
 	/**
 	 * A row of Händelser.
+	 *
+	 * @param mall the code of the document template the event's document was made from, null when none
 	 */
-	public record EventRow(Integer handelseId, Integer fsId, Integer arendeId, String handelseTyp, LocalDateTime tidpunkt, String diarieNr, String worddokument, String bifogadfil) {
+	public record EventRow(Integer handelseId, Integer fsId, Integer arendeId, String handelseTyp, LocalDateTime tidpunkt, String diarieNr, String mall, String worddokument,
+		String bifogadfil) {
 	}
 
 }

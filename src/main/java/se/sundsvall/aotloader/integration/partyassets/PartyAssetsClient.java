@@ -66,5 +66,5 @@ public interface PartyAssetsClient {
 		@PathVariable String municipalityId,
 		@PathVariable String id,
 		@RequestPart(ATTACHMENT_PART) MultipartFile attachment,
-		@RequestPart(CATEGORY_PART) String category);
+		@RequestPart(name = CATEGORY_PART, required = false) String category);
 }

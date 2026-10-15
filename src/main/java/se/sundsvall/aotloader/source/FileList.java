@@ -37,14 +37,14 @@ public final class FileList {
 	}
 
 	/**
-	 * Adds the file, which also goes on the post in PartyAssets in the category, unless an earlier call gave it another or
-	 * kept it on the errand only.
+	 * Adds the file, which also goes on the post in PartyAssets in the category, or without one for null, unless an
+	 * earlier call marked it for the post or kept it on the errand only.
 	 */
 	public FileList add(final String name, final FileFolder folder, final String assetCategory) {
 		add(name, folder);
 		final var trimmed = Texts.trimToNull(name);
-		if (trimmed != null && !errandOnly.contains(keyOf(trimmed, folder))) {
-			assetCategories.putIfAbsent(keyOf(trimmed, folder), assetCategory);
+		if (trimmed != null && !errandOnly.contains(keyOf(trimmed, folder)) && !assetCategories.containsKey(keyOf(trimmed, folder))) {
+			assetCategories.put(keyOf(trimmed, folder), assetCategory);
 		}
 		return this;
 	}

@@ -20,7 +20,6 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
-import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
@@ -98,6 +97,11 @@ public final class AlkolCandidateFactory {
 	 * 34).
 	 */
 	private static final Set<String> CERTIFICATE_TEMPLATES = Set.of("TILLSTT", "TILLTT");
+	/**
+	 * The templates of the letters that confirm a notification: of folköl and of e-cigarettes, and the receipts of folköl
+	 * and of tobacco-free nicotine products (decision 38).
+	 */
+	private static final Set<String> NOTIFICATION_TEMPLATES = Set.of("BEKFOL", "BEKECI", "MOTFOL", "MTN");
 	private static final Set<String> ENDING_DECISIONS = Set.of("GTDEU", "GTDEÅ");
 	private static final String SERVING_PLACE_CATEGORY_PREFIX = "serveringsställe";
 	// The product part of the id of the notice for a sales place without any notified product
@@ -257,9 +261,9 @@ public final class AlkolCandidateFactory {
 	/**
 	 * The files of the tobacco permit: those of the errand of the latest granting decision (decision 7), and those of the
 	 * place's events without an errand that register no notification (decision 37). The certificate, and the drawings and
-	 * the decisions of that errand, also go on the post in PartyAssets, in that order of precedence (decisions 34 and 35).
-	 * A certificate of an earlier grant than the latest may be a former holder's: it goes on the errand only and hits G29,
-	 * as does a permit without a certificate.
+	 * the permit decisions of that errand, also go on the post in PartyAssets, in that order of precedence (decisions 34,
+	 * 35 and 39). A certificate of an earlier grant than the latest may be a former holder's: it goes on the errand only
+	 * and hits G29, as does a permit without a certificate.
 	 */
 	private FileList permitFiles(final SalesPlaceRow place, final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final List<RuleHit> hits) {
 		final var arendeIds = grantErrand == null ? List.<Integer>of() : List.of(grantErrand.arendeId());
@@ -284,11 +288,23 @@ public final class AlkolCandidateFactory {
 			decisionsByErrand.getOrDefault(arendeId, List.of()).stream()
 				.filter(decision -> PermitFiles.isDrawing(decision.bifogadfil()))
 				.forEach(decision -> files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
-			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files
-				.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION)
-				.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DECISION));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> addDecisionFiles(files, decision));
 		});
 		return files;
+	}
+
+	/**
+	 * Marks the files of a decision that are the permit decision for the post: the document made from the template of the
+	 * certificate, which is the decision document of AlkOL, and an attachment whose name tells it is a permit, a decision
+	 * or a certificate (decision 39). The others, such as a receipt letter, stay on the errand only.
+	 */
+	private static void addDecisionFiles(final FileList files, final DecisionRow decision) {
+		if (PermitFiles.isTemplate(decision.mall(), CERTIFICATE_TEMPLATES)) {
+			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
+		}
+		if (PermitFiles.isDecision(decision.bifogadfil())) {
+			files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DECISION);
+		}
 	}
 
 	/**
@@ -346,6 +362,7 @@ public final class AlkolCandidateFactory {
 		final var name = Optional.ofNullable(place.namn()).orElse(UNKNOWN_SALES_PLACE);
 		final var subject = "Anmälan om " + productText(type);
 		final var premises = place(place);
+		final var files = notificationFiles(place, product, errands);
 		final var assetParameters = new AssetParameters()
 			.premises(premises, null)
 			.text(AssetParameters.PRODUCT, product.parameterText())
@@ -376,20 +393,43 @@ public final class AlkolCandidateFactory {
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
-			.files(notificationFiles(place, product, errands))
+			.files(files.build())
+			.assetFiles(files.assetFiles())
 			.build();
 	}
 
 	/**
 	 * The files of the notification: those of its errands and of its own events without an errand, and, when the place
 	 * has no tobacco permit, those of the place's events without an errand that register no notification (decision 37).
+	 * The drawings, the notification itself, which is an attachment of an event that registers the product, and the
+	 * letters that confirm it also go on the post in PartyAssets: the drawings in their category, the others without one,
+	 * as pw-alkt puts a file without a purpose there (decision 38). Anything else, such as an investigation or a referral
+	 * answer, stays on the errand only.
 	 */
-	private List<FileReference> notificationFiles(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands) {
-		final var files = addErrandFiles(errands.stream().map(ErrandRow::arendeId).toList(), new FileList(sharedFileNames));
-		eventsWithoutErrand(place.fsId())
+	private FileList notificationFiles(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands) {
+		final var arendeIds = errands.stream().map(ErrandRow::arendeId).toList();
+		final var files = addErrandFiles(arendeIds, new FileList(sharedFileNames));
+		final var ownEvents = eventsWithoutErrand(place.fsId())
 			.filter(event -> product.isEventType(event.handelseTyp()) || (!hasPermit(place.fsId()) && !registersNotification(place, event)))
-			.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
-		return files.build();
+			.toList();
+		ownEvents.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
+
+		final var events = Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()), ownEvents.stream()).toList();
+		final var decisions = arendeIds.stream().flatMap(arendeId -> decisionsByErrand.getOrDefault(arendeId, List.of()).stream()).toList();
+		// The drawings first, since a file keeps the category it is first marked with
+		Stream.concat(events.stream().map(EventRow::bifogadfil), decisions.stream().map(DecisionRow::bifogadfil))
+			.filter(PermitFiles::isDrawing)
+			.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
+		events.stream()
+			.filter(event -> product.isEventType(event.handelseTyp()))
+			.forEach(event -> files.add(event.bifogadfil(), ATTACHMENTS, null));
+		events.stream()
+			.filter(event -> PermitFiles.isTemplate(event.mall(), NOTIFICATION_TEMPLATES))
+			.forEach(event -> files.add(event.worddokument(), DOCUMENTS, null));
+		decisions.stream()
+			.filter(decision -> PermitFiles.isTemplate(decision.mall(), NOTIFICATION_TEMPLATES))
+			.forEach(decision -> files.add(decision.worddokument(), DOCUMENTS, null));
+		return files;
 	}
 
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {

@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Database;
@@ -92,6 +94,12 @@ class SourceSupportTest {
 			.addToErrandOnly("bevis.rtf", DOCUMENTS);
 		assertThat(errandOnly.build()).extracting(FileReference::name).containsExactly("gammalt-bevis.rtf", "bevis.rtf");
 		assertThat(errandOnly.assetFiles()).containsExactly(new AssetFile(new FileReference("bevis.rtf", DOCUMENTS), "Tillståndsbevis"));
+
+		final var withoutCategory = new FileList(shared)
+			.add("anmalan.pdf", ATTACHMENTS, null)
+			.add("ANMALAN.pdf", ATTACHMENTS, "Ritning");
+		assertThat(withoutCategory.assetFiles()).as("being marked without a category is a first mark too")
+			.containsExactly(new AssetFile(new FileReference("anmalan.pdf", ATTACHMENTS), null));
 	}
 
 	@Test
@@ -108,6 +116,34 @@ class SourceSupportTest {
 		assertThat(PermitFiles.isCertificate("Mottagningsbevis.pdf")).isFalse();
 		assertThat(PermitFiles.isCertificate("Delgivningsbevis tillstånd.pdf")).isFalse();
 		assertThat(PermitFiles.isCertificate(null)).isFalse();
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', textBlock = """
+		Beslut 2019.pdf                  | true
+		BESLUTSBILAGA.pdf                | true
+		Tillstånd serveringen.pdf        | true
+		tillstandsbevis.pdf              | true
+		Beslutsunderlag.pdf              | false
+		Tillståndsutredning.pdf          | false
+		Remiss tillstånd.pdf             | false
+		Yttrande beslut.pdf              | false
+		Kommunicering beslut.pdf         | false
+		Ansökan om tillstånd.pdf         | false
+		ansokan tillstand.pdf            | false
+		Begäran om komplettering beslut  | false
+		Mottagningsbevis.pdf             | false
+		Registreringsbevis.pdf           | false
+		Registerutdrag tillstånd.pdf     | false
+		bilaga.pdf                       | false
+		""")
+	void aDecisionIsKnownByItsName(final String name, final boolean decision) {
+		assertThat(PermitFiles.isDecision(name)).isEqualTo(decision);
+	}
+
+	@Test
+	void aFileWithoutANameIsNoDecision() {
+		assertThat(PermitFiles.isDecision(null)).isFalse();
 	}
 
 	@Test

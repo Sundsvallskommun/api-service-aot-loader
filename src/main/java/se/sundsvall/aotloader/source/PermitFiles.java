@@ -5,12 +5,16 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Tells which files of a permit go on its post in PartyAssets besides the certificate (decisions 34 and 35).
+ * Tells which files of a permit or a notification go on its post in PartyAssets besides the certificate (decisions 34,
+ * 35, 38 and 39).
  */
 public final class PermitFiles {
 
 	private static final String DRAWING_WORD = "ritning";
 	private static final Pattern CERTIFICATE_NAME = Pattern.compile("tillst[aå]nds[\\s_-]*bevis");
+	private static final Pattern DECISION_NAME = Pattern.compile("tillst[aå]nd|beslut|bevis");
+	// Words of documents about a permit rather than of the permit, such as a registration certificate from Bolagsverket
+	private static final Pattern OTHER_DOCUMENT_NAME = Pattern.compile("underlag|utredning|remiss|yttrande|kommunicering|ans[oö]kan|beg[aä]ran|komplettering|mottagning|registrering|utdrag");
 
 	private PermitFiles() {}
 
@@ -20,6 +24,19 @@ public final class PermitFiles {
 	 */
 	public static boolean isCertificate(final String name) {
 		return name != null && CERTIFICATE_NAME.matcher(name.toLowerCase(Locale.ROOT)).find();
+	}
+
+	/**
+	 * @return true for an attachment whose name tells it is a permit, a decision or a certificate, e.g. "Beslut 2019.pdf"
+	 *         or Tillståndsbevis.pdf, and not a document about one, e.g. Beslutsunderlag.pdf, "Remiss tillstånd.pdf" or
+	 *         Registreringsbevis.pdf
+	 */
+	public static boolean isDecision(final String name) {
+		if (name == null) {
+			return false;
+		}
+		final var lowerCase = name.toLowerCase(Locale.ROOT);
+		return DECISION_NAME.matcher(lowerCase).find() && !OTHER_DOCUMENT_NAME.matcher(lowerCase).find();
 	}
 
 	/**

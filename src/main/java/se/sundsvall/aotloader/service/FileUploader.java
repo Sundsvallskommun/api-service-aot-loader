@@ -36,6 +36,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.FILE_NOT_UPLOADED;
 class FileUploader {
 
 	static final int MAX_FILE_NAMES_IN_REPORT = 20;
+	private static final String NO_CATEGORY = "utan kategori";
 
 	private final SupportManagementIntegration supportManagement;
 	private final PartyAssetsIntegration partyAssets;
@@ -90,10 +91,10 @@ class FileUploader {
 	}
 
 	/**
-	 * Puts the files that belong on the post in PartyAssets there, each in its category. A file already on the post, with
-	 * the same name and size, is not put there again. A file that the errand does not get either, since it cannot be found
-	 * or is not to be uploaded, is skipped without a note: every such file is one of the errand's, whose step lists it
-	 * (G14). A file PartyAssets refuses is listed.
+	 * Puts the files that belong on the post in PartyAssets there, each in its category if it has one. A file already on
+	 * the post, with the same name and size, is not put there again. A file that the errand does not get either, since it
+	 * cannot be found or is not to be uploaded, is skipped without a note: every such file is one of the errand's, whose
+	 * step lists it (G14). A file PartyAssets refuses is listed.
 	 *
 	 * @throws MigrationException when the file area cannot be read, or when PartyAssets refuses a file because the post is
 	 *                            not ACTIVE, so that the step is made again in the next run
@@ -185,11 +186,12 @@ class FileUploader {
 	}
 
 	/**
-	 * @return the number of files per category, e.g. "Tillståndsbevis 1, Ritning 2"
+	 * @return the number of files per category, e.g. "Tillståndsbevis 1, Ritning 2", with those without a category as
+	 *         "utan kategori"
 	 */
 	private static String categoryCounts(final List<AssetFile> files) {
 		final var counts = new LinkedHashMap<String, Integer>();
-		files.forEach(file -> counts.merge(file.category(), 1, Integer::sum));
+		files.forEach(file -> counts.merge(Optional.ofNullable(file.category()).orElse(NO_CATEGORY), 1, Integer::sum));
 		return counts.entrySet().stream().map(entry -> entry.getKey() + " " + entry.getValue()).collect(joining(", "));
 	}
 

@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -179,6 +180,22 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void aFileWithoutACategoryGoesOnThePostWithoutOne() {
+		final var candidate = withAssetFiles(
+			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), null),
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), null));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), isNull())).thenReturn(true);
+		final var notes = new ReportNotes();
+
+		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
+
+		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), null);
+		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 2 av 2 filer: utan kategori 2");
+	}
+
+	@Test
 	void aFileRefusedSinceThePostIsNoLongerActiveFailsTheStep() {
 		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
@@ -231,13 +248,15 @@ class FileUploaderTest {
 	}
 
 	@Test
-	void aDryRunTellsWhichFilesWouldGoOnThePost() {
+	void aDryRunTellsWhichFilesWouldGoOnThePost() throws IOException {
+		Files.writeString(attachments.resolve("anmalan.pdf"), "anmälan");
 		final var notes = new ReportNotes();
 
 		uploader.check(withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
-			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Ritning")), context(), notes);
+			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("anmalan.pdf", ATTACHMENTS), null)), context(), notes);
 
-		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till tillståndet i PartyAssets: Tillståndsbevis 1, Ritning 1");
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till tillståndet i PartyAssets: Tillståndsbevis 1, Ritning 1, utan kategori 1");
 		verifyNoInteractions(supportManagement, partyAssets);
 	}
 

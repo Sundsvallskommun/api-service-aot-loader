@@ -451,6 +451,7 @@ class MigrationIT extends AbstractAppTest {
 			Files.writeString(root.resolve("alkt-bilder").resolve("foto.jpg"), "foto");
 			Files.writeString(root.resolve("alkt-bilder").resolve("serveringsansvarig.pdf"), "%PDF-1.4 serveringsansvarig");
 			Files.writeString(root.resolve("alkol").resolve("33333333.rtf"), "{\\rtf1 Tobak}");
+			Files.writeString(root.resolve("alkol").resolve("folkol-anmalan.pdf"), "%PDF-1.4 anmälan folköl");
 			root.toFile().deleteOnExit();
 			return root;
 		} catch (final IOException e) {

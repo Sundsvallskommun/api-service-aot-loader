@@ -178,8 +178,7 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.assetFiles()).containsExactly(
 			new AssetFile(new FileReference("33333333.rtf", DOCUMENTS), "Tillståndsbevis"),
 			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
-			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Beslut"),
-			new AssetFile(new FileReference("bilaga.pdf", ATTACHMENTS), "Beslut"));
+			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Beslut"));
 	}
 
 	/**
@@ -190,7 +189,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
 			.place(place(1, 10, "12345678"))
 			.owner(owner(10, "556677-8899"))
-			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, null, "11111111.rtf", "bilaga.pdf"))
+			.decision(new DecisionRow(100, 500, "GT", LocalDate.of(2019, 4, 20), null, "TDB", "11111111.rtf", "bilaga.pdf"))
 			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(new ErrandRow(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(new ErrandRow(502, 2, "01", "IAN-2019-1", null, null, null))
@@ -320,6 +319,28 @@ class AlktCandidateFactoryTest {
 		final var withoutCatering = candidates.get(1);
 		assertThat(withoutCatering.assetFiles()).extracting(AssetFile::category).containsExactly("Tillståndsbevis", "Ritning");
 		assertThat(withoutCatering.files()).extracting(FileReference::name).doesNotContain("14141414.rtf", "15151515.rtf");
+	}
+
+	@Test
+	void onlyThePermitDecisionsOfTheIssuingErrandGoOnThePost() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			.decision(new DecisionRow(100, 500, "0100", LocalDate.of(2019, 4, 20), null, "tbt", "11111111.rtf", "Beslut 2019.pdf"))
+			.decision(new DecisionRow(101, 500, "0200", LocalDate.of(2019, 4, 20), null, "TDU", "22222222.rtf", "remissvar räddningstjänsten.pdf"))
+			.decision(new DecisionRow(102, 500, "D 02", LocalDate.of(2019, 4, 21), null, null, null, "Registreringsbevis.pdf"))
+			.decision(new DecisionRow(103, 500, "Deleg", LocalDate.of(2019, 4, 22), null, null, null, "Beslutsunderlag.pdf"))
+			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.files()).extracting(FileReference::name).contains(
+			"11111111.rtf", "Beslut 2019.pdf", "22222222.rtf", "remissvar räddningstjänsten.pdf", "Registreringsbevis.pdf", "Beslutsunderlag.pdf");
+		// An investigation, a referral answer, a registration certificate and the basis of a decision go on the errand only
+		assertThat(candidate.assetFiles()).filteredOn(file -> "Beslut".equals(file.category())).extracting(file -> file.reference().name())
+			.containsExactly("11111111.rtf", "Beslut 2019.pdf");
 	}
 
 	@Test

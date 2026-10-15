@@ -26,7 +26,7 @@ CREATE TABLE dbo.Beslut (
 GO
 CREATE TABLE dbo.[Händelser] (
     HandelseID int NOT NULL PRIMARY KEY, FSID int NULL, ArendeID int NULL, HandelseTyp nvarchar(8) NULL, HandelseDatumTid datetime NULL, DiarieNr varchar(30) NULL,
-    Worddokument varchar(50) NULL, Bifogadfil varchar(200) NULL
+    Worddokument varchar(50) NULL, Bifogadfil varchar(200) NULL, Dokument nvarchar(8) NULL
 )
 GO
 CREATE TABLE dbo.[Sökande] (
@@ -57,9 +57,9 @@ INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, Po
 INSERT INTO dbo.FS_GT_Tobak VALUES (1, 1, 0, 0)
 INSERT INTO dbo.[Ärende] VALUES (100, 1, 'WADE', 'IAN-2019-100', '2019-06-01', '2019-07-01', NULL)
 INSERT INTO dbo.Beslut VALUES (200, 100, 'GTDE', '2019-07-01T10:00:00', '2019-07-02', NULL, NULL, NULL, NULL)
-INSERT INTO dbo.[Händelser] VALUES (300, 1, 100, '001', '2019-06-01T09:00:00', 'IAN-2019-100', '33333333.rtf', NULL)
-INSERT INTO dbo.[Händelser] VALUES (301, 1, NULL, '014', '2015-03-01T09:00:00', 'IAN-2015-5', NULL, NULL)
-INSERT INTO dbo.[Händelser] VALUES (302, 2, NULL, '014', '2020-03-01T09:00:00', 'IAN-2020-7', NULL, NULL)
+INSERT INTO dbo.[Händelser] VALUES (300, 1, 100, '001', '2019-06-01T09:00:00', 'IAN-2019-100', '33333333.rtf', NULL, NULL)
+INSERT INTO dbo.[Händelser] VALUES (301, 1, NULL, '014', '2015-03-01T09:00:00', 'IAN-2015-5', NULL, NULL, NULL)
+INSERT INTO dbo.[Händelser] VALUES (302, 2, NULL, '014', '2020-03-01T09:00:00', 'IAN-2020-7', NULL, 'folkol-anmalan.pdf', NULL)
 INSERT INTO dbo.[Sökande] VALUES (50, '5566778899', 'Testbolaget AB', NULL, 'Box 1', NULL, '85230', 'Sundsvall', NULL, NULL)
 UPDATE dbo.[Ärende] SET Sokandeid = 50 WHERE ArendeID = 100
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvan Tolvansson', '191212121212', 'VD', NULL, 0)

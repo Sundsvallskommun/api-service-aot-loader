@@ -89,7 +89,7 @@ public class PartyAssetsIntegration {
 	 *
 	 * @param  fileName the name the file gets on the post
 	 * @param  content  the content of the file
-	 * @param  category what the file depicts
+	 * @param  category what the file depicts, null for a file without a category
 	 * @return          true when PartyAssets took the file, false when it refused the file itself
 	 */
 	public boolean createAttachment(final String municipalityId, final String id, final String fileName, final byte[] content, final String category) {

@@ -77,7 +77,7 @@ class AlkolCandidateFactoryTest {
 			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2015, 2, 1, 10, 0), null, null, null, null))
 			.decision(new DecisionRow(202, 102, "AÄDE", LocalDateTime.of(2021, 2, 1, 10, 0), null, null, null, null))
 			.decision(new DecisionRow(203, 101, "GTDEU", LocalDateTime.of(2016, 1, 1, 10, 0), null, null, null, null))
-			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), "IAN-2019-100", "22222222.rtf", "ansokan.pdf"))
+			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), "IAN-2019-100", null, "22222222.rtf", "ansokan.pdf"))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null))
 			.person(new PersonRow(10, "Person", "8001011234", List.of("VD"), false));
 
@@ -129,9 +129,8 @@ class AlkolCandidateFactoryTest {
 			new FileReference("ansokan.pdf", ATTACHMENTS),
 			new FileReference("11111111.rtf", DOCUMENTS),
 			new FileReference("bilaga.pdf", ATTACHMENTS));
-		assertThat(candidate.assetFiles()).containsExactly(
-			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Tillståndsbevis"),
-			new AssetFile(new FileReference("bilaga.pdf", ATTACHMENTS), "Beslut"));
+		// An attachment whose name does not tell it is a decision goes on the errand only
+		assertThat(candidate.assetFiles()).containsExactly(new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Tillståndsbevis"));
 	}
 
 	@Test
@@ -154,7 +153,7 @@ class AlkolCandidateFactoryTest {
 			.decision(new DecisionRow(2000, 200, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TILLTT", "22222222.rtf", null))
 			.decision(new DecisionRow(2001, 201, "GTDE", LocalDateTime.of(2022, 1, 1, 10, 0), null, "MotTob", "33333333.rtf", "beslut.pdf"))
 			.decision(new DecisionRow(3000, 300, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "MotTob", "44444444.rtf", "Mottagningsbevis.pdf"))
-			.event(new EventRow(400, 1, 101, "016", LocalDateTime.of(2023, 2, 1, 9, 0), null, null, "Planritning.pdf"));
+			.event(new EventRow(400, 1, 101, "016", LocalDateTime.of(2023, 2, 1, 9, 0), null, null, null, "Planritning.pdf"));
 
 		final var candidates = data.factory().permits().candidates();
 
@@ -168,14 +167,14 @@ class AlkolCandidateFactoryTest {
 		final var older = candidates.get(1);
 		assertThat(older.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
 			.containsExactly(tuple(CERTIFICATE_OLDER, "beviset hör till beslutet 2019-07-01, det senaste beviljandet är 2022-01-01"));
-		// The certificate of the earlier grant may be a former holder's, so it goes on the errand only
-		assertThat(older.assetFiles()).containsExactly(
-			new AssetFile(new FileReference("33333333.rtf", DOCUMENTS), "Beslut"),
-			new AssetFile(new FileReference("beslut.pdf", ATTACHMENTS), "Beslut"));
+		// The certificate of the earlier grant may be a former holder's, so it goes on the errand only, as does a receipt
+		// letter, which is no permit decision
+		assertThat(older.assetFiles()).containsExactly(new AssetFile(new FileReference("beslut.pdf", ATTACHMENTS), "Beslut"));
 		assertThat(older.files()).endsWith(new FileReference("22222222.rtf", DOCUMENTS));
 
 		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule).containsExactly(CERTIFICATE_MISSING);
-		assertThat(candidates.get(2).assetFiles()).extracting(AssetFile::category).containsOnly("Beslut");
+		assertThat(candidates.get(2).assetFiles()).as("a receipt letter and a receipt are no permit decisions").isEmpty();
+		assertThat(candidates.get(2).files()).containsExactly(new FileReference("44444444.rtf", DOCUMENTS), new FileReference("Mottagningsbevis.pdf", ATTACHMENTS));
 	}
 
 	@Test
@@ -187,13 +186,13 @@ class AlkolCandidateFactoryTest {
 			.view(new PermitViewRow(1, true, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", null, LocalDate.of(2019, 7, 1), null))
 			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null))
-			.event(new EventRow(300, 1, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "folkol-1.pdf"))
-			.event(new EventRow(301, 1, null, "016", LocalDateTime.of(2020, 1, 2, 9, 0), null, "22222222.rtf", "handling-1.pdf"))
+			.event(new EventRow(300, 1, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-1.pdf"))
+			.event(new EventRow(301, 1, null, "016", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, "22222222.rtf", "handling-1.pdf"))
 			// E-cigarettes are not notified on place 1, so the event is one of the place's own
-			.event(new EventRow(302, 1, null, "105", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, "ecig-1.pdf"))
-			.event(new EventRow(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "folkol-2.pdf"))
-			.event(new EventRow(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, "ecig-2.pdf"))
-			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, "egentillsyn-2.pdf"));
+			.event(new EventRow(302, 1, null, "105", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "ecig-1.pdf"))
+			.event(new EventRow(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-2.pdf"))
+			.event(new EventRow(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, null, "ecig-2.pdf"))
+			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "egentillsyn-2.pdf"));
 
 		final var permit = data.factory().permits().candidates().getFirst();
 		final var notifications = data.factory().notifications().candidates();
@@ -208,7 +207,40 @@ class AlkolCandidateFactoryTest {
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new FileReference("folkol-1.pdf", ATTACHMENTS))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS))));
-		assertThat(notifications).allSatisfy(notification -> assertThat(notification.assetFiles()).isEmpty());
+		// The notifications get the attachments of the events that register their product on their post too
+		assertThat(notifications).extracting(Candidate::key, Candidate::assetFiles).containsExactly(
+			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-1.pdf", ATTACHMENTS), null))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-2.pdf", ATTACHMENTS), null))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new AssetFile(new FileReference("ecig-2.pdf", ATTACHMENTS), null))));
+	}
+
+	@Test
+	void onlyTheNotificationItsConfirmationsAndDrawingsGoOnItsPost() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			.errand(new ErrandRow(100, 1, "SÖL", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
+			.decision(new DecisionRow(200, 100, "AÄDE", LocalDateTime.of(2015, 1, 20, 10, 0), null, "BekFol", "44444444.rtf", null))
+			.event(new EventRow(300, 1, 100, "015", LocalDateTime.of(2015, 1, 2, 9, 0), "IAN-2015-1", null, null, "anmalan.pdf"))
+			.event(new EventRow(301, 1, 100, "023", LocalDateTime.of(2015, 1, 3, 9, 0), null, "MotFol", "11111111.rtf", null))
+			.event(new EventRow(302, 1, 100, "UTSKR", LocalDateTime.of(2015, 1, 4, 9, 0), null, "UtrTob", "22222222.rtf", null))
+			.event(new EventRow(303, 1, 100, "029", LocalDateTime.of(2015, 1, 5, 9, 0), null, null, null, "remissvar polisen.pdf"))
+			.event(new EventRow(304, 1, 100, "016", LocalDateTime.of(2015, 1, 6, 9, 0), null, null, null, "Planritning.pdf"))
+			.event(new EventRow(305, 1, 100, "015", LocalDateTime.of(2015, 1, 7, 9, 0), null, null, null, "ritning bar.pdf"))
+			.event(new EventRow(306, 1, null, "014", LocalDateTime.of(2016, 3, 4, 9, 0), null, "UtrTob", "33333333.rtf", "anmalan 2016.pdf"));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(notification.files()).hasSize(9);
+		// An investigation, made from UtrTob, and a referral answer go on the errand only; a drawing keeps its category on
+		// an event that registers the product
+		assertThat(notification.assetFiles()).containsExactly(
+			new AssetFile(new FileReference("Planritning.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("ritning bar.pdf", ATTACHMENTS), "Ritning"),
+			new AssetFile(new FileReference("anmalan.pdf", ATTACHMENTS), null),
+			new AssetFile(new FileReference("anmalan 2016.pdf", ATTACHMENTS), null),
+			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), null),
+			new AssetFile(new FileReference("44444444.rtf", DOCUMENTS), null));
 	}
 
 	@Test
@@ -222,12 +254,12 @@ class AlkolCandidateFactoryTest {
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null, "bilaga.pdf"))
 			.decision(new DecisionRow(201, null, "GTDE", null, null, null, null, "Bilaga.pdf"))
 			.decision(new DecisionRow(202, 100, "BESOVR", LocalDateTime.of(2019, 7, 3, 10, 0), null, null, null, "protokoll.pdf"))
-			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), null, "22222222.rtf", "ansokan.pdf"))
-			.event(new EventRow(301, null, 100, "001", LocalDateTime.of(2019, 6, 2, 9, 0), null, null, "intyg.pdf"))
-			.event(new EventRow(302, 1, 101, "001", LocalDateTime.of(2021, 1, 2, 9, 0), null, null, "intyg.pdf"))
+			.event(new EventRow(300, 1, 100, "001", LocalDateTime.of(2019, 6, 1, 9, 0), null, null, "22222222.rtf", "ansokan.pdf"))
+			.event(new EventRow(301, null, 100, "001", LocalDateTime.of(2019, 6, 2, 9, 0), null, null, null, "intyg.pdf"))
+			.event(new EventRow(302, 1, 101, "001", LocalDateTime.of(2021, 1, 2, 9, 0), null, null, null, "intyg.pdf"))
 			// Registered on another place than its errand's, whose files it goes to
-			.event(new EventRow(303, 2, 100, "001", LocalDateTime.of(2019, 7, 3, 9, 0), null, null, "protokoll.pdf"))
-			.event(new EventRow(400, 2, null, "001", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, "ANSOKAN.PDF"));
+			.event(new EventRow(303, 2, 100, "001", LocalDateTime.of(2019, 7, 3, 9, 0), null, null, null, "protokoll.pdf"))
+			.event(new EventRow(400, 2, null, "001", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "ANSOKAN.PDF"));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
 
@@ -364,9 +396,9 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "5566778899"))
 			.errand(new ErrandRow(100, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null))
 			.errand(new ErrandRow(101, 1, "SÖL", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
-			.event(new EventRow(300, 1, 101, "015", LocalDateTime.of(2015, 1, 2, 9, 0), "IAN-2015-1", "33333333.rtf", null))
-			.event(new EventRow(301, 2, null, "014", LocalDateTime.of(2012, 3, 4, 9, 0), "IAN-2012-1", null, null))
-			.event(new EventRow(302, 3, null, "999", LocalDateTime.of(2009, 3, 4, 9, 0), null, null, null));
+			.event(new EventRow(300, 1, 101, "015", LocalDateTime.of(2015, 1, 2, 9, 0), "IAN-2015-1", null, "33333333.rtf", null))
+			.event(new EventRow(301, 2, null, "014", LocalDateTime.of(2012, 3, 4, 9, 0), "IAN-2012-1", null, null, null))
+			.event(new EventRow(302, 3, null, "999", LocalDateTime.of(2009, 3, 4, 9, 0), null, null, null, null));
 
 		final var candidates = data.factory().notifications().candidates();
 
@@ -414,7 +446,7 @@ class AlkolCandidateFactoryTest {
 			.place(place(4, 10).withFlags(false, true, false, false))
 			.owner(owner(10, "5566778899"))
 			.errand(new ErrandRow(100, 1, "ec", "IAN-1", null, null, null))
-			.event(new EventRow(300, 1, null, "047", LocalDateTime.of(2022, 3, 4, 9, 0), null, null, null));
+			.event(new EventRow(300, 1, null, "047", LocalDateTime.of(2022, 3, 4, 9, 0), null, null, null, null));
 
 		final var result = data.factory().notifications();
 

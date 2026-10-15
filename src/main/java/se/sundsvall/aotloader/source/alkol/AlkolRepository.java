@@ -69,7 +69,7 @@ public class AlkolRepository {
 		""";
 
 	private static final String SELECT_EVENTS = """
-		SELECT h.HandelseID, h.FSID, h.ArendeID, h.HandelseTyp, h.HandelseDatumTid, h.DiarieNr, h.Worddokument, h.Bifogadfil
+		SELECT h.HandelseID, h.FSID, h.ArendeID, h.HandelseTyp, h.HandelseDatumTid, h.DiarieNr, h.Dokument, h.Worddokument, h.Bifogadfil
 		FROM dbo.[Händelser] h
 		""";
 
@@ -240,6 +240,7 @@ public class AlkolRepository {
 			text(rs, "HandelseTyp"),
 			dateTime(rs, "HandelseDatumTid"),
 			text(rs, "DiarieNr"),
+			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
 			text(rs, BIFOGADFIL));
 	}

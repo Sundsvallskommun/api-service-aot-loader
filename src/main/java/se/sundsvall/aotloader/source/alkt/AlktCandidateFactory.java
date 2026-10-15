@@ -102,6 +102,8 @@ public final class AlktCandidateFactory {
 	private static final Set<String> ANNEX_TEMPLATES = Set.of("TDBBS", "TBBT", "TDBB");
 	/** The template of the annex for catering, which a permit with catering gets besides the other (decision 34). */
 	private static final Set<String> CATERING_ANNEX_TEMPLATES = Set.of("TDBBC");
+	/** The templates of the permit decision: of Sundsvall and of Timrå (decision 39). */
+	private static final Set<String> DECISION_TEMPLATES = Set.of("TDB", "TBT");
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
 		.comparing(PlaceDocument::datum, Comparator.nullsFirst(Comparator.<LocalDate>naturalOrder()))
 		.thenComparing(PlaceDocument::order, Comparator.nullsFirst(Comparator.<Integer>naturalOrder()));
@@ -466,10 +468,10 @@ public final class AlktCandidateFactory {
 	/**
 	 * The files of the permit: those of the errands that issued it and of the place (decision 7), and those of the place's
 	 * events without an errand (decision 37). The latest certificate and annexes of the place, and the drawings and the
-	 * decisions of the issuing errands, also go on the post in PartyAssets, in that order of precedence (decisions 34 and
-	 * 35). A certificate older than the permit, or without a date, may be a former holder's: it goes on the errand only and
-	 * hits G29, as does a permit without a certificate. An annex older than the permit, or of catering on a permit without
-	 * catering, is left out.
+	 * permit decisions of the issuing errands, also go on the post in PartyAssets, in that order of precedence (decisions
+	 * 34, 35 and 39). A certificate older than the permit, or without a date, may be a former holder's: it goes on the
+	 * errand only and hits G29, as does a permit without a certificate. An annex older than the permit, or of catering on a
+	 * permit without catering, is left out.
 	 */
 	private FileList permitFiles(final PermitRow permit, final PlaceRow place, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
 		final var files = errandFiles(issuingErrands, new FileList(sharedFileNames));
@@ -507,10 +509,22 @@ public final class AlktCandidateFactory {
 				.filter(PermitFiles::isDrawing)
 				.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 		}
-		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> files
-			.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION)
-			.add(decision.bifogadFil(), ATTACHMENTS, ASSET_CATEGORY_DECISION)));
+		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> addDecisionFiles(files, decision)));
 		return files;
+	}
+
+	/**
+	 * Marks the files of a decision that are the permit decision for the post: the document made from the template of the
+	 * decision, and an attachment whose name tells it is a permit, a decision or a certificate (decision 39). The others,
+	 * such as an investigation or a referral answer, stay on the errand only.
+	 */
+	private static void addDecisionFiles(final FileList files, final DecisionRow decision) {
+		if (PermitFiles.isTemplate(decision.mall(), DECISION_TEMPLATES)) {
+			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
+		}
+		if (PermitFiles.isDecision(decision.bifogadFil())) {
+			files.add(decision.bifogadFil(), ATTACHMENTS, ASSET_CATEGORY_DECISION);
+		}
 	}
 
 	/**
