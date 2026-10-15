@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.service;
 
+import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
@@ -9,8 +10,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,12 +32,15 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirector
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +61,49 @@ class PreflightTest {
 	@TempDir
 	private Path directory;
 
+	@BeforeEach
+	void namespaceHasEveryPurpose() {
+		lenient().when(supportManagement.getAttachmentPurposes(MUNICIPALITY_ID)).thenReturn(FilePurposes.ALL.stream()
+			.map(name -> new AttachmentPurpose().id("id-" + name).name(name).displayName(name.toLowerCase(Locale.ROOT)))
+			.toList());
+	}
+
+	@Test
+	void purposesThatAreMissingOrDeprecatedStopARealRun() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		when(supportManagement.getAttachmentPurposes(MUNICIPALITY_ID)).thenReturn(Stream.concat(
+			FilePurposes.ALL.stream()
+				.filter(name -> !FilePurposes.STATEMENT_REQUEST.equals(name) && !FilePurposes.POLICE_REQUEST.equals(name))
+				.map(name -> new AttachmentPurpose().id("id-" + name).name(name)),
+			Stream.of(
+				new AttachmentPurpose().id("id-old").name(FilePurposes.POLICE_REQUEST).deprecated(true),
+				new AttachmentPurpose().id("id-budget").name("BUDGET"),
+				new AttachmentPurpose().name(FilePurposes.STATEMENT_REQUEST)))
+			.toList());
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
+
+		assertThat(result.problems()).containsExactly(
+			"Syftet REFERRAL_POLICE_REQUEST för bilagor är inaktuellt i namnrymden (beslut 40)",
+			"Syftet STATEMENT_REQUEST för bilagor finns inte i namnrymden (beslut 40)");
+		assertThat(result.purposes().get(MUNICIPALITY_ID)).hasSize(FilePurposes.ALL.size() - 2)
+			.containsEntry(FilePurposes.SERVING_AREA_DRAWING, new FilePurpose("id-SERVING_AREA_DRAWING", FilePurposes.SERVING_AREA_DRAWING, null))
+			.doesNotContainKeys("BUDGET", FilePurposes.POLICE_REQUEST, FilePurposes.STATEMENT_REQUEST);
+	}
+
+	@Test
+	void purposesThatCannotBeRead() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		when(supportManagement.getAttachmentPurposes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement);
+
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
+
+		assertThat(result.problems()).containsExactly("Syftena för bilagor i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
+		assertThat(result.purposes().get(MUNICIPALITY_ID)).isEmpty();
+	}
+
 	@Test
 	void everythingInPlace() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
@@ -65,6 +115,8 @@ class PreflightTest {
 		assertThat(result.labelIds()).containsOnlyKeys(MUNICIPALITY_ID);
 		assertThat(result.labelIds().get(MUNICIPALITY_ID)).containsEntry("TAGROOT/MIGRATED_ERRAND", "id-TAGROOT/MIGRATED_ERRAND")
 			.containsEntry("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING", "id-CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING");
+		assertThat(result.purposes().get(MUNICIPALITY_ID)).hasSize(FilePurposes.ALL.size())
+			.containsEntry(FilePurposes.SERVING_AREA_DRAWING, new FilePurpose("id-SERVING_AREA_DRAWING", FilePurposes.SERVING_AREA_DRAWING, "serving_area_drawing"));
 	}
 
 	@Test
@@ -102,7 +154,7 @@ class PreflightTest {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(List.of(new Label().id("x").resourcePath("/TAGROOT/MIGRATED_ERRAND")
 			.attributes(List.of(new LabelAttribute().key("processBlocked").value("false")))));
 		final var inspection = new ErrandTypeSettings(null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
-		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATION", " ", new Roles("PRIMARY", "CONTACT", null),
+		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null),
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection), Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
 			Map.of("Timrå", "22620"));
 		final var preflight = new Preflight(properties, supportManagement);

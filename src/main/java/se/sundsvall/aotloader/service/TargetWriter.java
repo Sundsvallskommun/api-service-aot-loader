@@ -243,6 +243,17 @@ class TargetWriter {
 			: found.getFirst().getId());
 	}
 
+	/**
+	 * Gives an inspection errand its investigation (decision 41), unless it has one, which an earlier run then created.
+	 * An errand without an investigation in the candidate gets none.
+	 */
+	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
+		if (candidate.investigation() == null || !supportManagement.getInvestigations(municipalityId, errandId).isEmpty()) {
+			return;
+		}
+		supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(candidate.investigation()));
+	}
+
 	private Optional<Errand> findByMigrationId(final String municipalityId, final ItemKey key) {
 		final var found = supportManagement.findErrandsByExternalTag(municipalityId, TAG_MIGRATION_ID, key.migrationId());
 		if (found.size() > 1) {

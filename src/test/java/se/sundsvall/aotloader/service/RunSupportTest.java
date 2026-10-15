@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.integration.db.MigrationRunRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
+import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -45,7 +46,7 @@ class RunSupportTest {
 	void runContext() {
 		final var stop = new AtomicBoolean();
 		final var fileAreas = new AtomicInteger();
-		final var context = new RunContext("run", "2281", true, Map.of("2281", Map.of("A", "1")), 2, stop, _ -> {
+		final var context = new RunContext("run", "2281", true, Map.of("2281", Map.of("A", "1")), Map.of("2281", Map.of("SERVING_AREA_DRAWING", new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"))), 2, stop, _ -> {
 			fileAreas.incrementAndGet();
 			return new FileArea(null, 1);
 		});
@@ -56,6 +57,9 @@ class RunSupportTest {
 		assertThat(context.dryRun()).isTrue();
 		assertThat(context.labelIds("2281")).containsEntry("A", "1");
 		assertThat(context.labelIds("2262")).isEmpty();
+		assertThat(context.purpose("2281", "SERVING_AREA_DRAWING")).contains(new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"));
+		assertThat(context.purpose("2281", "BUDGET")).isEmpty();
+		assertThat(context.purpose("2262", "SERVING_AREA_DRAWING")).isEmpty();
 		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
 		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
 		// Party is asked again for another municipality

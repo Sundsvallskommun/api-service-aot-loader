@@ -54,7 +54,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.channel",
-					"equalTo": "MIGRATION"
+					"equalTo": "MIGRATED"
 				}
 			},
 			{

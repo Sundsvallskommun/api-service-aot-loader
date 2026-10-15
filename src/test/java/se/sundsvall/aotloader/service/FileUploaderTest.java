@@ -4,11 +4,16 @@ import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetAttachment;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +35,13 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.support.MigrationException;
@@ -50,6 +57,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
@@ -59,6 +67,8 @@ class FileUploaderTest {
 	private static final String MUNICIPALITY_ID = "2281";
 	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
 	private static final String ASSET_ID = "22222222-2222-2222-2222-222222222222";
+	private static final String ATTACHMENT_ID = "33333333-3333-3333-3333-333333333333";
+	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T10:00:00Z"), SWEDISH_TIME);
 
 	@Mock
 	private SupportManagementIntegration supportManagement;
@@ -78,7 +88,7 @@ class FileUploaderTest {
 	@BeforeEach
 	void setUp() throws IOException {
 		properties = TestData.properties(documents.toString(), attachments.toString());
-		uploader = new FileUploader(supportManagement, partyAssets, properties);
+		uploader = new FileUploader(supportManagement, partyAssets, properties, CLOCK);
 		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
 		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
 	}
@@ -88,20 +98,20 @@ class FileUploaderTest {
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
 			new ErrandAttachment().fileName("beslut.rtf").fileSize("dokument".length()),
 			new ErrandAttachment().fileName("ansokan.pdf").fileSize(1)));
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of(ATTACHMENT_ID));
 		final var notes = new ReportNotes();
 
 		uploader.upload(TestData.permit("1"), context(), MUNICIPALITY_ID, ERRAND_ID, notes);
 
-		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any());
-		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8));
+		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any());
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
 		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
 	}
 
 	@Test
 	void aFileThatSupportManagementRefusesIsListed() {
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(false);
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.empty());
 		final var notes = new ReportNotes();
 
 		uploader.upload(TestData.permit("1"), context(), MUNICIPALITY_ID, ERRAND_ID, notes);
@@ -132,13 +142,13 @@ class FileUploaderTest {
 			new FileReference("saknas.pdf", ATTACHMENTS, true),
 			new FileReference("delad.url", ATTACHMENTS, true));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of(ATTACHMENT_ID));
 		final var notes = new ReportNotes();
 
 		uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, notes);
 
-		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any());
-		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8));
+		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any());
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), null);
 		final var result = notes.result(Outcome.MIGRERAD, null);
 		assertThat(result.rules()).containsExactly("G14");
 		assertThat(result.detail()).isEqualTo("1 länk hoppas över (delad.url); G14 2 filer har namn som också används på andra ställen och laddas inte upp (delad.pdf, saknas.pdf)");
@@ -193,6 +203,75 @@ class FileUploaderTest {
 		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), null);
 		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
 		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 2 av 2 filer: utan kategori 2");
+	}
+
+	@Test
+	void aFileGetsItsPurposeAndTheTimeItCameInButNoTimeLaterThanNow() {
+		final var candidate = withDetails(Map.of(
+			new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(FilePurposes.POLICE_REQUEST, LocalDateTime.of(2019, 6, 1, 9, 30)),
+			new FileReference("ansokan.pdf", ATTACHMENTS), new FileDetails(null, LocalDateTime.of(2030, 1, 1, 0, 0))));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of(ATTACHMENT_ID));
+
+		uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), OffsetDateTime.parse("2019-06-01T09:30+02:00"));
+		verify(supportManagement).updateAttachment(MUNICIPALITY_ID, ERRAND_ID, ATTACHMENT_ID, "purpose-" + FilePurposes.POLICE_REQUEST, null);
+		// SupportManagement refuses a time later than now, so the file gets the time of upload
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
+		verify(supportManagement, times(1)).updateAttachment(anyString(), anyString(), anyString(), any(), any());
+	}
+
+	@Test
+	void aFileAnEarlierRunUploadedGetsThePurposeAndTimeItLacks() {
+		final var received = LocalDateTime.of(2019, 6, 1, 9, 30);
+		final var candidate = withDetails(Map.of(
+			new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(FilePurposes.POLICE_REQUEST, received),
+			new FileReference("ansokan.pdf", ATTACHMENTS), new FileDetails(FilePurposes.STATEMENT_RESPONSE, received)));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new ErrandAttachment().id("a-1").fileName("beslut.rtf").hash(FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8))).received(OffsetDateTime.parse("2026-10-14T15:04Z")),
+			new ErrandAttachment().id("a-2").fileName("ansokan.pdf").hash(FileUploader.sha256("bilaga".getBytes(StandardCharsets.UTF_8)))
+				.purpose(new ErrandAttachmentPurpose().id("purpose-" + FilePurposes.STATEMENT_RESPONSE)).received(OffsetDateTime.parse("2019-06-01T07:30Z"))));
+
+		uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+
+		verify(supportManagement).updateAttachment(MUNICIPALITY_ID, ERRAND_ID, "a-1", "purpose-" + FilePurposes.POLICE_REQUEST, OffsetDateTime.parse("2019-06-01T09:30+02:00"));
+		verify(supportManagement, times(1)).updateAttachment(anyString(), anyString(), anyString(), any(), any());
+		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any(), any());
+	}
+
+	@Test
+	void aPurposeNotReadForTheMunicipalityStopsTheFiles() {
+		final var candidate = withDetails(Map.of(new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(FilePurposes.POLICE_REQUEST, null)));
+		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(), null, new AtomicBoolean(),
+			source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		final var notes = new ReportNotes();
+
+		assertThatThrownBy(() -> uploader.upload(candidate, context, MUNICIPALITY_ID, ERRAND_ID, notes))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Syftet REFERRAL_POLICE_REQUEST för bilagor är inte läst för kommun 2281");
+		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any(), any());
+	}
+
+	@Test
+	void aFileWithAPurposeGetsTheNameShownOfThePurposeAsItsCategoryOnThePost() throws IOException {
+		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
+		final var drawing = new FileReference("ritning.pdf", ATTACHMENTS);
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.files(List.of(drawing))
+			.assetFiles(List.of(new AssetFile(drawing, "Ritning")))
+			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
+			.build();
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
+		final var notes = new ReportNotes();
+
+		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
+
+		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "serving_area_drawing");
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 1 av 1 filer: serving_area_drawing 1");
 	}
 
 	@Test
@@ -367,7 +446,17 @@ class FileUploaderTest {
 			.build();
 	}
 
+	/**
+	 * @return a permit whose files are those given, each with its purpose and time
+	 */
+	private static Candidate withDetails(final Map<FileReference, FileDetails> details) {
+		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.files(List.copyOf(details.keySet()))
+			.fileDetails(details)
+			.build();
+	}
+
 	private RunContext context() {
-		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), null, new AtomicBoolean(), source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
+		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(MUNICIPALITY_ID, TestData.purposes()), null, new AtomicBoolean(), source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
 	}
 }

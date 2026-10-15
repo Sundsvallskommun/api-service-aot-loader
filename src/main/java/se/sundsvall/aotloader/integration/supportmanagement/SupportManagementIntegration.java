@@ -1,14 +1,20 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.FileRefusal;
@@ -18,6 +24,7 @@ import se.sundsvall.aotloader.support.Locations;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.dept44.problem.ThrowableProblem;
 
+import static java.time.format.DateTimeFormatter.ISO_INSTANT;
 import static java.util.Collections.emptyList;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -110,20 +117,59 @@ public class SupportManagementIntegration {
 	/**
 	 * Uploads a file to the errand.
 	 *
-	 * @param  fileName the name the file gets on the errand
-	 * @param  content  the content of the file
-	 * @return          true when SupportManagement took the file, false when it refused the file itself
+	 * @param  fileName           the name the file gets on the errand
+	 * @param  content            the content of the file
+	 * @param  received           when the file came in, which must not be later than now; null for the time of upload
+	 * @return                    the id of the attachment, empty when SupportManagement refused the file itself
+	 * @throws MigrationException when SupportManagement took the file but gave no id
 	 */
-	public boolean createAttachment(final String municipalityId, final String errandId, final String fileName, final byte[] content) {
+	public Optional<String> createAttachment(final String municipalityId, final String errandId, final String fileName, final byte[] content, final OffsetDateTime received) {
+		final ResponseEntity<Void> response;
 		try {
-			client.createAttachment(municipalityId, namespace, errandId, new ByteArrayMultipartFile(SupportManagementClient.ATTACHMENT_PART, fileName, content));
-			return true;
+			// In UTC, whose Z needs no encoding; a + in the query would be read as a blank
+			response = client.createAttachment(municipalityId, namespace, errandId, received == null ? null : ISO_INSTANT.format(received),
+				new ByteArrayMultipartFile(SupportManagementClient.ATTACHMENT_PART, fileName, content));
 		} catch (final ThrowableProblem problem) {
 			if (FileRefusal.isRefusal(problem)) {
-				return false;
+				return Optional.empty();
 			}
 			throw problem;
 		}
+		return Optional.of(Locations.idOf(response, "bilagan"));
+	}
+
+	/**
+	 * Sets what the attachment is for and when it came in.
+	 *
+	 * @param purposeId the id of the attachment purpose of the namespace, null to leave the purpose as it is
+	 * @param received  when the file came in, which must not be later than now; null to leave it as it is
+	 */
+	public void updateAttachment(final String municipalityId, final String errandId, final String attachmentId, final String purposeId, final OffsetDateTime received) {
+		final var request = new UpdateErrandAttachmentRequest().received(received);
+		Optional.ofNullable(purposeId).ifPresent(id -> request.purpose(new ErrandAttachmentPurpose().id(id)));
+		client.updateAttachment(municipalityId, namespace, errandId, attachmentId, request);
+	}
+
+	/**
+	 * @return the investigations of the errand
+	 */
+	public List<Investigation> getInvestigations(final String municipalityId, final String errandId) {
+		return Optional.ofNullable(client.getInvestigations(municipalityId, namespace, errandId)).orElse(emptyList());
+	}
+
+	/**
+	 * @return                    the id of the investigation created for the errand
+	 * @throws MigrationException when the response has no id
+	 */
+	public String createInvestigation(final String municipalityId, final String errandId, final Investigation investigation) {
+		return Locations.idOf(client.createInvestigation(municipalityId, namespace, errandId, investigation), "utredningen");
+	}
+
+	/**
+	 * @return the attachment purposes of the namespace
+	 */
+	public List<AttachmentPurpose> getAttachmentPurposes(final String municipalityId) {
+		return Optional.ofNullable(client.getAttachmentPurposes(municipalityId, namespace)).orElse(emptyList());
 	}
 
 	private static boolean hasTag(final Errand errand, final String key, final String value) {

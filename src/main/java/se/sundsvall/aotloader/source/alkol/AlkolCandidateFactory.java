@@ -20,6 +20,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
@@ -33,6 +34,7 @@ import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
@@ -255,6 +257,7 @@ public final class AlkolCandidateFactory {
 				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber)))
 			.files(files.build())
 			.assetFiles(files.assetFiles())
+			.fileDetails(files.details())
 			.build();
 	}
 
@@ -270,7 +273,7 @@ public final class AlkolCandidateFactory {
 		final var files = addErrandFiles(arendeIds, new FileList(sharedFileNames));
 		eventsWithoutErrand(fsId)
 			.filter(event -> !registersNotification(place, event))
-			.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
+			.forEach(event -> addEventFiles(files, event));
 
 		certificate(fsId).ifPresentOrElse(certificate -> {
 			if (grant != null && DECISION_ORDER.compare(certificate.decision(), grant) < 0) {
@@ -283,12 +286,12 @@ public final class AlkolCandidateFactory {
 		}, () -> hits.add(RuleHit.of(CERTIFICATE_MISSING)));
 		arendeIds.forEach(arendeId -> {
 			eventsByErrand.getOrDefault(arendeId, List.of()).stream()
-				.filter(event -> PermitFiles.isDrawing(event.bifogadfil()))
+				.filter(event -> FilePurposes.isDrawing(attachmentPurpose(event)))
 				.forEach(event -> files.add(event.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 			decisionsByErrand.getOrDefault(arendeId, List.of()).stream()
 				.filter(decision -> PermitFiles.isDrawing(decision.bifogadfil()))
 				.forEach(decision -> files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
-			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> addDecisionFiles(files, decision));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> markPermitDecision(files, decision));
 		});
 		return files;
 	}
@@ -298,7 +301,7 @@ public final class AlkolCandidateFactory {
 	 * certificate, which is the decision document of AlkOL, and an attachment whose name tells it is a permit, a decision
 	 * or a certificate (decision 39). The others, such as a receipt letter, stay on the errand only.
 	 */
-	private static void addDecisionFiles(final FileList files, final DecisionRow decision) {
+	private static void markPermitDecision(final FileList files, final DecisionRow decision) {
 		if (PermitFiles.isTemplate(decision.mall(), CERTIFICATE_TEMPLATES)) {
 			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
 		}
@@ -395,6 +398,7 @@ public final class AlkolCandidateFactory {
 			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
 			.files(files.build())
 			.assetFiles(files.assetFiles())
+			.fileDetails(files.details())
 			.build();
 	}
 
@@ -412,23 +416,23 @@ public final class AlkolCandidateFactory {
 		final var ownEvents = eventsWithoutErrand(place.fsId())
 			.filter(event -> product.isEventType(event.handelseTyp()) || (!hasPermit(place.fsId()) && !registersNotification(place, event)))
 			.toList();
-		ownEvents.forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
+		ownEvents.forEach(event -> addEventFiles(files, event));
 
 		final var events = Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()), ownEvents.stream()).toList();
 		final var decisions = arendeIds.stream().flatMap(arendeId -> decisionsByErrand.getOrDefault(arendeId, List.of()).stream()).toList();
 		// The drawings first, since a file keeps the category it is first marked with
-		Stream.concat(events.stream().map(EventRow::bifogadfil), decisions.stream().map(DecisionRow::bifogadfil))
-			.filter(PermitFiles::isDrawing)
+		Stream.concat(events.stream().filter(event -> FilePurposes.isDrawing(attachmentPurpose(event))).map(EventRow::bifogadfil),
+			decisions.stream().map(DecisionRow::bifogadfil).filter(PermitFiles::isDrawing))
 			.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 		events.stream()
 			.filter(event -> product.isEventType(event.handelseTyp()))
-			.forEach(event -> files.add(event.bifogadfil(), ATTACHMENTS, null));
+			.forEach(event -> files.addToPost(event.bifogadfil(), ATTACHMENTS));
 		events.stream()
 			.filter(event -> PermitFiles.isTemplate(event.mall(), NOTIFICATION_TEMPLATES))
-			.forEach(event -> files.add(event.worddokument(), DOCUMENTS, null));
+			.forEach(event -> files.addToPost(event.worddokument(), DOCUMENTS));
 		decisions.stream()
 			.filter(decision -> PermitFiles.isTemplate(decision.mall(), NOTIFICATION_TEMPLATES))
-			.forEach(decision -> files.add(decision.worddokument(), DOCUMENTS, null));
+			.forEach(decision -> files.addToPost(decision.worddokument(), DOCUMENTS));
 		return files;
 	}
 
@@ -444,17 +448,20 @@ public final class AlkolCandidateFactory {
 			.filter(Objects::nonNull)
 			.toList();
 
+		final var files = addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions)
-			.files(addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames)).build())
+			.files(files.build())
+			.fileDetails(files.details())
 			.build();
 	}
 
 	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
 		final var place = visit.objektId() == null ? null : placesById.get(visit.objektId());
 		final var files = new FileList(sharedFileNames);
-		snapshot.visits().forEachFile(visit, files::add);
+		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.detailsOf(ALKOL, folder, name, SourceValues.startOfDay(visit.datum()))));
 		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
 			.files(files.build())
+			.fileDetails(files.details())
 			.build();
 	}
 
@@ -697,10 +704,25 @@ public final class AlkolCandidateFactory {
 
 	private FileList addErrandFiles(final Collection<Integer> arendeIds, final FileList files) {
 		for (final var arendeId : arendeIds) {
-			eventsByErrand.getOrDefault(arendeId, List.of()).forEach(event -> files.add(event.worddokument(), DOCUMENTS).add(event.bifogadfil(), ATTACHMENTS));
-			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files.add(decision.worddokument(), DOCUMENTS).add(decision.bifogadfil(), ATTACHMENTS));
+			eventsByErrand.getOrDefault(arendeId, List.of()).forEach(event -> addEventFiles(files, event));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files
+				.add(decision.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKOL, decision.mall()), decision.beslutad()))
+				.add(decision.bifogadfil(), ATTACHMENTS, FilePurposes.detailsOf(ALKOL, ATTACHMENTS, decision.bifogadfil(), decision.beslutad())));
 		}
 		return files;
+	}
+
+	/**
+	 * Adds the document and the attachment of the event, each with its purpose and the time of the event.
+	 */
+	private static FileList addEventFiles(final FileList files, final EventRow event) {
+		return files
+			.add(event.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKOL, event.mall()), event.tidpunkt()))
+			.add(event.bifogadfil(), ATTACHMENTS, new FileDetails(attachmentPurpose(event), event.tidpunkt()));
+	}
+
+	private static String attachmentPurpose(final EventRow event) {
+		return FilePurposes.ofAttachment(ALKOL, event.handelseTyp(), event.bifogadfil());
 	}
 
 	/**

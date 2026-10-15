@@ -215,6 +215,9 @@ public class ItemMigrator {
 			entity.setErrandNumber(errand.getErrandNumber());
 			saveAs(ARENDE_SKAPAT);
 			final var active = errand.getLifecycle() == LifecycleEnum.ACTIVE;
+			if (!active) {
+				targets.ensureInvestigation(candidate, municipalityId, errand.getId());
+			}
 
 			step = Step.BILAGOR;
 			if (!active) {

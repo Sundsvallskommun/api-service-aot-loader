@@ -1,10 +1,13 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
@@ -80,5 +83,32 @@ public interface SupportManagementClient {
 		@PathVariable String municipalityId,
 		@PathVariable String namespace,
 		@PathVariable String errandId,
+		@RequestParam(name = "received", required = false) String received,
 		@RequestPart(ATTACHMENT_PART) MultipartFile errandAttachment);
+
+	@PatchMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/attachments/{attachmentId}", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	ErrandAttachment updateAttachment(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String attachmentId,
+		@RequestBody UpdateErrandAttachmentRequest request);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations", produces = APPLICATION_JSON_VALUE)
+	List<Investigation> getInvestigations(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId);
+
+	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
+	ResponseEntity<Void> createInvestigation(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@RequestBody Investigation investigation);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/attachmentpurposes", produces = APPLICATION_JSON_VALUE)
+	List<AttachmentPurpose> getAttachmentPurposes(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace);
 }

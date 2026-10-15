@@ -9,6 +9,8 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -154,10 +156,15 @@ class MigrationIT extends AbstractAppTest {
 	void test02_aPermitIsMigrated() {
 		migrateItem("ALKT/TILLSTAND/1", false);
 
-		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
+		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26)
 			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "55555555.rtf", "serveringsansvarig.pdf");
+		assertThat(uploads).filteredOn(request -> "55555555.rtf".equals(request.getPart("errandAttachment").getFileName()))
+			.singleElement()
+			.extracting(request -> request.queryParameter("received").firstValue())
+			.as("The file came in on the day of its event, the start of which is the evening before in UTC (decision 40)")
+			.isEqualTo("2019-05-01T22:00:00Z");
 		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-1/attachments"))))
 			.as("The certificate and the decision of the issuing errand also go on the permit (decision 34)")
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
@@ -189,6 +196,9 @@ class MigrationIT extends AbstractAppTest {
 		migrateItem("ALKT/TILLSYN/700", false);
 
 		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party-assets/.*")))).as("An inspection errand has no permit").isEmpty();
+		assertThat(investigationTimes("11111111-aaaa-bbbb-cccc-000000000002"))
+			.as("The inspection started when the errand was opened and was completed when it was closed, in Swedish time (decision 41)")
+			.containsExactly(Instant.parse("2020-12-31T23:00:00Z"), Instant.parse("2021-02-28T23:00:00Z"));
 		verifyStubs();
 
 		itemIs("ALKT/TILLSYN/700");
@@ -293,13 +303,13 @@ class MigrationIT extends AbstractAppTest {
 	void test14_aPermitInterruptedAtTheActivation() {
 		migrateItem("ALKT/TILLSTAND/3", false);
 
-		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/attachments")));
+		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			.containsExactlyInAnyOrder("44444444.rtf", "ansökan räkenskaper.pdf", "ritning våning 2.pdf", "fasad.jpg", "Översiktskarta.pdf");
 		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-6/attachments"))))
-			.as("The drawing and the decision of the issuing errand also go on the permit (decisions 34 and 35)")
+			.as("The drawing and the decision of the issuing errand also go on the permit (decisions 34 and 35), the drawing with the name shown of its purpose (decision 40)")
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
-			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Ritning"), tuple("44444444.rtf", "Beslut"));
+			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Ritning på lokalen med serveringsytan markerad"), tuple("44444444.rtf", "Beslut"));
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
 		verifyStubs();
 
@@ -349,11 +359,13 @@ class MigrationIT extends AbstractAppTest {
 	void test18_anInspectionVisitIsMigrated() {
 		migrateItem("ALKT/TILLSYNSBESOK/900", false);
 
-		final var uploads = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + VISIT_ERRAND_ID + "/attachments")));
+		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + VISIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName()).containsExactlyInAnyOrder("besöksrapport.pdf", "foto.jpg");
 		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*"))))
 			.as("A visit has no holder to look up, no permit and no relation")
 			.isEmpty();
+		assertThat(investigationTimes(VISIT_ERRAND_ID)).as("The visit from 21.30 to 23:00 in winter time")
+			.containsExactly(Instant.parse("2023-11-04T20:30:00Z"), Instant.parse("2023-11-04T22:00:00Z"));
 		verifyStubs();
 
 		itemIs("ALKT/TILLSYNSBESOK/900");
@@ -365,6 +377,8 @@ class MigrationIT extends AbstractAppTest {
 		migrateItem("ALKOL/TILLSYNSBESOK/950", false);
 
 		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*")))).isEmpty();
+		assertThat(investigationTimes("11111111-aaaa-bbbb-cccc-000000000011")).as("The visit from 14:00 to 14:20 in summer time")
+			.containsExactly(Instant.parse("2024-05-03T12:00:00Z"), Instant.parse("2024-05-03T12:20:00Z"));
 		verifyStubs();
 
 		itemIs("ALKOL/TILLSYNSBESOK/950");
@@ -473,5 +487,13 @@ class MigrationIT extends AbstractAppTest {
 		} catch (final IOException e) {
 			throw new UncheckedIOException(e);
 		}
+	}
+
+	/**
+	 * @return the start and the end of the investigation created for the errand
+	 */
+	private List<Instant> investigationTimes(final String errandId) {
+		final var body = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + errandId + "/investigations"))).getFirst().getBodyAsString();
+		return Stream.of("$.startedAt", "$.completedAt").map(path -> OffsetDateTime.parse(JsonPath.<String>read(body, path)).toInstant()).toList();
 	}
 }

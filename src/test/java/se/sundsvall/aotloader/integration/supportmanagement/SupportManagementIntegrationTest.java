@@ -1,13 +1,18 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
+import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.net.URI;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -28,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
@@ -103,13 +109,47 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getLabelTree(MUNICIPALITY_ID)).isEmpty();
 		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).extracting(Config::getName).containsExactly("SEND_EMAIL");
 		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).isEmpty();
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isTrue();
-		verify(client).createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), argThat(file -> "errandAttachment".equals(file.getName()) && "beslut.pdf".equals(file.getOriginalFilename())));
+	}
+
+	@Test
+	void attachmentsAreUploadedWithTheTimeTheyCameInAndGetTheirPurpose() {
+		when(client.createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), any(), any()))
+			.thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/a/attachments/att-1")).build(), ResponseEntity.ok().build());
+		when(client.getAttachmentPurposes(MUNICIPALITY_ID, NAMESPACE)).thenReturn(List.of(new AttachmentPurpose().id("p").name("BUDGET")), null);
+
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, OffsetDateTime.parse("2019-06-01T09:30+02:00"))).contains("att-1");
+		// In UTC, since a + in the query would be read as a blank
+		verify(client).createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), eq("2019-06-01T07:30:00Z"),
+			argThat(file -> "errandAttachment".equals(file.getName()) && "beslut.pdf".equals(file.getOriginalFilename())));
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Svaret när bilagan skapades saknade id i Location");
+		verify(client).createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), isNull(), any());
+
+		integration.updateAttachment(MUNICIPALITY_ID, "a", "att-1", "purpose-1", null);
+		integration.updateAttachment(MUNICIPALITY_ID, "a", "att-2", null, OffsetDateTime.parse("2019-06-01T09:30+02:00"));
+		verify(client).updateAttachment(MUNICIPALITY_ID, NAMESPACE, "a", "att-1", new UpdateErrandAttachmentRequest().purpose(new ErrandAttachmentPurpose().id("purpose-1")));
+		verify(client).updateAttachment(MUNICIPALITY_ID, NAMESPACE, "a", "att-2", new UpdateErrandAttachmentRequest().received(OffsetDateTime.parse("2019-06-01T09:30+02:00")));
+
+		assertThat(integration.getAttachmentPurposes(MUNICIPALITY_ID)).extracting(AttachmentPurpose::getName).containsExactly("BUDGET");
+		assertThat(integration.getAttachmentPurposes(MUNICIPALITY_ID)).isEmpty();
+	}
+
+	@Test
+	void investigations() {
+		final var investigation = new Investigation().status("COMPLETED");
+		when(client.getInvestigations(MUNICIPALITY_ID, NAMESPACE, "a")).thenReturn(List.of(new Investigation().id("i")), null);
+		when(client.createInvestigation(MUNICIPALITY_ID, NAMESPACE, "a", investigation))
+			.thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/a/investigations/i-1")).build());
+
+		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).extracting(Investigation::getId).containsExactly("i");
+		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).isEmpty();
+		assertThat(integration.createInvestigation(MUNICIPALITY_ID, "a", investigation)).isEqualTo("i-1");
 	}
 
 	@Test
 	void aFileRefusedBySupportManagementIsToldApartFromOtherFailures() {
-		when(client.createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), any())).thenThrow(
+		when(client.createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), any(), any())).thenThrow(
 			Problem.valueOf(BAD_REQUEST, "Ogiltig fil"),
 			Problem.valueOf(CONTENT_TOO_LARGE, "För stor"),
 			Problem.valueOf(UNSUPPORTED_MEDIA_TYPE, "Filtypen tas inte emot"),
@@ -117,11 +157,11 @@ class SupportManagementIntegrationTest {
 			Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte"),
 			Problem.valueOf(FORBIDDEN, "Ingen behörighet"));
 
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isFalse();
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isFalse();
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isFalse();
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isFalse();
-		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Tjänsten svarar inte");
-		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Ingen behörighet");
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Tjänsten svarar inte");
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Ingen behörighet");
 	}
 }

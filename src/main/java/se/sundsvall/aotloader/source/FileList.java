@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.source;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,10 +8,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import se.sundsvall.aotloader.service.model.AssetFile;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.Texts;
+
+import static java.util.stream.Collectors.toUnmodifiableMap;
 
 /**
  * Collects the file references of an item, each file once, in the order they are found, and marks the names that
@@ -21,6 +25,7 @@ public final class FileList {
 
 	private final Map<String, FileReference> files = new LinkedHashMap<>();
 	private final Map<String, String> assetCategories = new LinkedHashMap<>();
+	private final Map<String, FileDetails> details = new HashMap<>();
 	private final Set<String> errandOnly = new HashSet<>();
 	private final SharedFileNames sharedNames;
 
@@ -34,6 +39,27 @@ public final class FileList {
 			files.putIfAbsent(keyOf(trimmed, folder), new FileReference(trimmed, folder, sharedNames.isShared(trimmed, folder)));
 		}
 		return this;
+	}
+
+	/**
+	 * Adds the file with its purpose and date. A file added more than once keeps the purpose and date it was first added
+	 * with, and gets those it lacks from the later ones.
+	 */
+	public FileList add(final String name, final FileFolder folder, final FileDetails fileDetails) {
+		add(name, folder);
+		final var trimmed = Texts.trimToNull(name);
+		if (trimmed != null && fileDetails != null) {
+			details.merge(keyOf(trimmed, folder), fileDetails, FileDetails::orElse);
+		}
+		return this;
+	}
+
+	/**
+	 * Adds the file, which also goes on the post in PartyAssets without a category, unless an earlier call marked it for
+	 * the post or kept it on the errand only.
+	 */
+	public FileList addToPost(final String name, final FileFolder folder) {
+		return add(name, folder, (String) null);
 	}
 
 	/**
@@ -73,6 +99,15 @@ public final class FileList {
 		return assetCategories.entrySet().stream()
 			.map(entry -> new AssetFile(files.get(entry.getKey()), entry.getValue()))
 			.toList();
+	}
+
+	/**
+	 * @return the purpose and date of the files that have either
+	 */
+	public Map<FileReference, FileDetails> details() {
+		return details.entrySet().stream()
+			.filter(entry -> !FileDetails.NONE.equals(entry.getValue()))
+			.collect(toUnmodifiableMap(entry -> files.get(entry.getKey()), Map.Entry::getValue));
 	}
 
 	private static String keyOf(final String name, final FileFolder folder) {

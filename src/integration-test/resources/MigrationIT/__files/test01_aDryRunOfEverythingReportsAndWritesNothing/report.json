@@ -27,7 +27,7 @@
 		"placeName": "Krogen Tre",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "G29",
-		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning 1, Beslut 1"
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning på lokalen med serveringsytan markerad 1, Beslut 1"
 	},
 	{
 		"source": "ALKT",

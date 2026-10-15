@@ -12,6 +12,8 @@ import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +23,7 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
@@ -51,7 +54,7 @@ class TargetMapperTest {
 		assertThat(errand.getClassification().getCategory()).isEqualTo("CATEGORY_SERVING_PERMIT");
 		assertThat(errand.getClassification().getType()).isEqualTo("TYPE_SERVING_PERMIT");
 		assertThat(errand.getLabels()).extracting(ErrandLabel::getId, ErrandLabel::getVersion).containsExactly(tuple("label-migrated", null), tuple("label-permanent-serving", null));
-		assertThat(errand.getChannel()).isEqualTo("MIGRATION");
+		assertThat(errand.getChannel()).isEqualTo("MIGRATED");
 		assertThat(errand.getReporterUserId()).isEqualTo("alkt-migration");
 		assertThat(errand.getBusinessRelated()).isTrue();
 		assertThat(errand.getLifecycle()).isEqualTo(LifecycleEnum.DRAFT);
@@ -252,6 +255,23 @@ class TargetMapperTest {
 
 		assertThat(mapper.toActivation().getLifecycle()).isEqualTo(LifecycleEnum.ACTIVE);
 		assertThat(mapper.toActivation().getTitle()).isNull();
+	}
+
+	@Test
+	void anInvestigationIsCompletedWhenTheSourceTellsWhenInSwedishTime() {
+		final var completed = mapper.toInvestigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2024, 3, 31, 1, 30), LocalDateTime.of(2024, 3, 31, 3, 30)));
+		final var notCompleted = mapper.toInvestigation(new InvestigationData("x".repeat(300), null, null));
+
+		assertThat(completed.getStatus()).isEqualTo("COMPLETED");
+		assertThat(completed.getTitle()).isEqualTo("Tillsyn – Restaurang 1");
+		// Summer time begins between the two
+		assertThat(completed.getStartedAt()).isEqualTo(OffsetDateTime.parse("2024-03-31T01:30+01:00"));
+		assertThat(completed.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2024-03-31T03:30+02:00"));
+		assertThat(completed.getType()).isNull();
+		assertThat(notCompleted.getStatus()).isEqualTo("ACTIVE");
+		assertThat(notCompleted.getTitle()).hasSize(255);
+		assertThat(notCompleted.getStartedAt()).isNull();
+		assertThat(notCompleted.getCompletedAt()).isNull();
 	}
 
 	@Test

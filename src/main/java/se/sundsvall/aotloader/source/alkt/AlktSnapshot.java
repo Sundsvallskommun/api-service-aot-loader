@@ -3,6 +3,7 @@ package se.sundsvall.aotloader.source.alkt;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
@@ -195,8 +196,20 @@ public record AlktSnapshot(
 	 * @param arendeId  the errand
 	 * @param name      the file name
 	 * @param generated true for a document AlkT generated, false for an attachment
+	 * @param details   the purpose and date the attachment of the file gets on the errand
 	 */
-	public record FileRow(Integer arendeId, String name, boolean generated) {
+	public record FileRow(Integer arendeId, String name, boolean generated, FileDetails details) {
+
+		public FileRow {
+			details = details == null ? FileDetails.NONE : details;
+		}
+
+		/**
+		 * A file without a purpose or a date.
+		 */
+		public FileRow(final Integer arendeId, final String name, final boolean generated) {
+			this(arendeId, name, generated, FileDetails.NONE);
+		}
 	}
 
 	/**

@@ -13,7 +13,9 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
@@ -48,6 +50,8 @@ public class AlktRepository {
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String OBJEKT_ID = "ObjektID";
 	private static final String BIFOGADFIL = "Bifogadfil";
+	private static final String HANDELSE_TYP = "HandelseTyp";
+	private static final String HANDELSE_DATUM = "HandelseDatumTid";
 
 	private static final String SELECT_PERMITS = """
 		SELECT g.ObjektID, g.GTAgarID, g.Starkol, g.Vin, g.Spritdrycker, g.AJADrycker, g.ALP, g.AretRunt,
@@ -96,13 +100,13 @@ public class AlktRepository {
 
 	// Also the events without an errand, whose files go to the permit of their place (decision 37)
 	private static final String SELECT_EVENT_FILES = """
-		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.Dokument, h.HandelseDatumTid, h.Worddokument, h.Bifogadfil
+		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.HandelseTyp, h.Dokument, h.HandelseDatumTid, h.Worddokument, h.Bifogadfil
 		FROM dbo.[Ärende_Händelser] h
 		WHERE h.Worddokument IS NOT NULL OR h.Bifogadfil IS NOT NULL
 		""";
 
 	private static final String SELECT_EVENT_EXTRA_FILES = """
-		SELECT h.HandelseID, h.ArendeID, h.ObjektID, f.Bifogadfil
+		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.HandelseTyp, h.HandelseDatumTid, f.Bifogadfil
 		FROM dbo.[Ärende_Händelser_Filer] f
 		JOIN dbo.[Ärende_Händelser] h ON h.HandelseID = f.HandelseID
 		WHERE f.Bifogadfil IS NOT NULL
@@ -171,7 +175,7 @@ public class AlktRepository {
 			Stream.concat(
 				jdbc.query(SELECT_EVENT_FILES, (rs, _) -> toEventFile(rs)).stream(),
 				jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> toEventExtraFile(rs)).stream()).toList(),
-			jdbc.query(SELECT_PICTURES, (rs, _) -> new FileRow(integer(rs, ARENDE_ID), text(rs, "Bildfilnamn"), false)),
+			jdbc.query(SELECT_PICTURES, (rs, _) -> toPicture(rs)),
 			errands.keySet());
 
 		final var codeTexts = readCodeTexts(jdbc);
@@ -330,25 +334,40 @@ public class AlktRepository {
 			integer(rs, "HandelseID"),
 			integer(rs, ARENDE_ID),
 			integer(rs, OBJEKT_ID),
+			text(rs, HANDELSE_TYP),
 			text(rs, "Dokument"),
-			date(rs, "HandelseDatumTid"),
+			date(rs, HANDELSE_DATUM),
 			text(rs, "Worddokument"),
 			text(rs, BIFOGADFIL));
 	}
 
 	static EventFile toEventExtraFile(final ResultSet rs) throws SQLException {
-		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), null, null, null, text(rs, BIFOGADFIL));
+		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), text(rs, HANDELSE_TYP), null, date(rs, HANDELSE_DATUM), null, text(rs, BIFOGADFIL));
 	}
 
 	/**
 	 * The files of an event of AlkT, from the event itself or from Ärende_Händelser_Filer.
 	 */
-	record EventFile(Integer handelseId, Integer arendeId, Integer objektId, String mall, LocalDate datum, String worddokument, String bifogadfil) {
+	record EventFile(Integer handelseId, Integer arendeId, Integer objektId, String handelseTyp, String mall, LocalDate datum, String worddokument, String bifogadfil) {
 
+		/**
+		 * @return the document and the attachment of the event, each with its purpose and the date of the event
+		 */
 		private Stream<FileRow> files(final Integer errand) {
-			return Stream.of(new FileRow(errand, worddokument, true), new FileRow(errand, bifogadfil, false))
+			final var received = datum == null ? null : datum.atStartOfDay();
+			return Stream.of(
+				new FileRow(errand, worddokument, true, new FileDetails(FilePurposes.ofDocument(ALKT, mall), received)),
+				new FileRow(errand, bifogadfil, false, new FileDetails(FilePurposes.ofAttachment(ALKT, handelseTyp, bifogadfil), received)))
 				.filter(row -> row.name() != null);
 		}
+	}
+
+	/**
+	 * Reads a row of Ärende_Bilder, which has no date.
+	 */
+	static FileRow toPicture(final ResultSet rs) throws SQLException {
+		final var name = text(rs, "Bildfilnamn");
+		return new FileRow(integer(rs, ARENDE_ID), name, false, new FileDetails(FilePurposes.ofAttachment(ALKT, null, name), null));
 	}
 
 	/**

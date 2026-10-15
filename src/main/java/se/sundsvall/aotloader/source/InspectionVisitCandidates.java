@@ -1,6 +1,8 @@
 package se.sundsvall.aotloader.source;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -12,6 +14,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.Place;
@@ -86,11 +89,13 @@ public final class InspectionVisitCandidates {
 		final var content = new VisitContent(visit, rows.kindText(visit.tillsynsart()), time(visit), remarks(rows.remarksOf(visit.tillfalleNr()), rows));
 		final var placeName = place == null ? null : place.name();
 		final var name = Optional.ofNullable(placeName).orElse(unknownPlace);
+		final var title = Texts.title("Tillsynsbesök", name);
 		return Candidate.builder(new ItemKey(type.getSource(), TILLSYNSBESOK, String.valueOf(visit.tillfalleNr())), type)
 			.placeName(placeName)
 			.ruleHits(hits)
 			.place(place)
-			.title(Texts.title("Tillsynsbesök", name))
+			.title(title)
+			.investigation(investigation(title, visit))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
 			.parameters(parameters(content));
@@ -141,8 +146,35 @@ public final class InspectionVisitCandidates {
 	 * @return the time as "hh:mm", also when AlkT has written it with seconds, otherwise as written
 	 */
 	private static String timeOfDay(final String value) {
-		final var withoutSeconds = Optional.ofNullable(value).map(written -> SECONDS.matcher(written.strip()).replaceFirst("$1")).orElse(null);
-		return SourceValues.parseTime(withoutSeconds).orElse(value);
+		return SourceValues.parseTime(withoutSeconds(value)).orElse(value);
+	}
+
+	private static String withoutSeconds(final String value) {
+		return Optional.ofNullable(value).map(written -> SECONDS.matcher(written.strip()).replaceFirst("$1")).orElse(null);
+	}
+
+	/**
+	 * The investigation of the visit (decision 41): it started on the date of the visit at its start time, or at the start
+	 * of that day without one, and was completed on that date at its end time, the day after when the visit went on past
+	 * midnight. A visit without an end time has no end.
+	 */
+	static InvestigationData investigation(final String title, final VisitRow visit) {
+		if (visit.datum() == null) {
+			return new InvestigationData(title, null, null);
+		}
+		final var started = at(visit.datum(), visit.startTid()).orElse(visit.datum().atStartOfDay());
+		final var completed = at(visit.datum(), visit.slutTid())
+			.map(end -> end.isBefore(started) ? end.plusDays(1) : end)
+			.orElse(null);
+		return new InvestigationData(title, started, completed);
+	}
+
+	/**
+	 * @return the date at the time, empty when the time cannot be read; 24:00 is the start of the next day
+	 */
+	private static Optional<LocalDateTime> at(final LocalDate date, final String time) {
+		return SourceValues.parseTime(withoutSeconds(time))
+			.map(hhmm -> "24:00".equals(hhmm) ? date.plusDays(1).atStartOfDay() : date.atTime(LocalTime.parse(hhmm)));
 	}
 
 	/**

@@ -79,7 +79,7 @@ class MigrationRunnerTest {
 		lenient().when(alktReader.kinds()).thenReturn(Set.of(TILLSTAND, TILLSYN));
 		lenient().when(alkolReader.kinds()).thenReturn(Set.of(Kind.values()));
 		lenient().when(targetGuard.check()).thenReturn(Optional.empty());
-		lenient().when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of(), Map.of("2281", TestData.labelIds())));
+		lenient().when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of(), Map.of("2281", TestData.labelIds()), Map.of("2281", TestData.purposes())));
 		lenient().when(runItemRepository.save(any())).thenAnswer(invocation -> {
 			lines.add(invocation.getArgument(0));
 			return invocation.getArgument(0);
@@ -137,7 +137,7 @@ class MigrationRunnerTest {
 
 	@Test
 	void aRealRunDoesNotStartWhenTheChecksFail() {
-		when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of("Rollen saknas", "Etiketten saknas"), Map.of()));
+		when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of("Rollen saknas", "Etiketten saknas"), Map.of(), Map.of()));
 		final var run = run(false, null);
 
 		runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND)), Optional.empty());
@@ -149,7 +149,7 @@ class MigrationRunnerTest {
 
 	@Test
 	void aDryRunGoesOnAndListsWhatTheChecksFound() {
-		when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of("Rollen saknas"), Map.of()));
+		when(preflight.check(any(), anyMap())).thenReturn(new Preflight.Result(List.of("Rollen saknas"), Map.of(), Map.of()));
 		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(), List.of()));
 		final var run = run(true, null);
 
@@ -262,7 +262,7 @@ class MigrationRunnerTest {
 		when(alkolReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("9")), List.of()));
 		when(preflight.check(any(), anyMap())).thenAnswer(_ -> {
 			runner.requestStop(run.getId());
-			return new Preflight.Result(List.of(), Map.of());
+			return new Preflight.Result(List.of(), Map.of(), Map.of());
 		});
 
 		runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND), Source.ALKOL, Set.of(TILLSTAND)), Optional.empty());

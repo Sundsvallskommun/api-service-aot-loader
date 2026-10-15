@@ -91,7 +91,7 @@ aot-loader:
   namespace: AOT
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
-  channel: MIGRATION
+  channel: MIGRATED
   # The closed status of the migrated errands, the one AOT has (decision 5)
   errand-status: SOLVED
   max-file-size: 50MB

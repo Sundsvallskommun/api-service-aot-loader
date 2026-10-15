@@ -1,9 +1,11 @@
 package se.sundsvall.aotloader.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.util.unit.DataSize;
@@ -15,8 +17,10 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Parameter;
@@ -26,6 +30,7 @@ import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.source.FilePurposes;
 
 import static java.util.function.Function.identity;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
@@ -93,7 +98,7 @@ public final class TestData {
 	}
 
 	private static AotLoaderProperties properties(final Map<ErrandType, ErrandTypeSettings> types, final String documents, final String attachments) {
-		return new AotLoaderProperties("AOT", "alkt-migration; type=migration", "alkt-migration", "MIGRATION", "SOLVED",
+		return new AotLoaderProperties("AOT", "alkt-migration; type=migration", "alkt-migration", "MIGRATED", "SOLVED",
 			new Roles("PRIMARY", "CONTACT", "INSPECTED"),
 			types,
 			Map.of(Source.ALKT, new AotLoaderProperties.Database("jdbc:sqlserver://alkt", null, null, null), Source.ALKOL, new AotLoaderProperties.Database("jdbc:sqlserver://alkol", null, null, null)),
@@ -149,6 +154,7 @@ public final class TestData {
 			.placeName("Restaurang 1")
 			.holder(new Holder(inspectionHolder, "Bolaget AB", null, null, null, null, null, null))
 			.title("Tillsyn – Restaurang 1")
+			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0)))
 			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
 			.permitLink(new PermitLink(permitKey, HOLDER_ID, inspectionHolder))
 			.build();
@@ -159,5 +165,14 @@ public final class TestData {
 			"TAGROOT/MIGRATED_ERRAND", "label-migrated",
 			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING", "label-permanent-serving",
 			"TAGROOT/ALCOHOL_INSPECTION", "label-alcohol-inspection");
+	}
+
+	/**
+	 * @return every purpose a file can get, with the id "purpose-" and the name, and the name in lower case as the name
+	 *         shown
+	 */
+	public static Map<String, FilePurpose> purposes() {
+		return FilePurposes.ALL.stream()
+			.collect(Collectors.toMap(name -> name, name -> new FilePurpose("purpose-" + name, name, name.toLowerCase(Locale.ROOT))));
 	}
 }

@@ -40,7 +40,7 @@ CREATE TABLE dbo.[Ärende] (
     AvslutsDatum datetime NULL, SokandeID int NULL
 )
 GO
-CREATE TABLE dbo.[Ärende_Händelser] (HandelseID int NOT NULL PRIMARY KEY, ArendeID int NULL, Worddokument varchar(12) NULL, Bifogadfil varchar(200) NULL, ObjektID int NULL, Dokument varchar(5) NULL, HandelseDatumTid datetime NULL)
+CREATE TABLE dbo.[Ärende_Händelser] (HandelseID int NOT NULL PRIMARY KEY, ArendeID int NULL, Worddokument varchar(12) NULL, Bifogadfil varchar(200) NULL, ObjektID int NULL, Dokument varchar(5) NULL, HandelseDatumTid datetime NULL, HandelseTyp varchar(5) NULL)
 GO
 CREATE TABLE dbo.[Ärende_Händelser_Filer] (ID int IDENTITY(1, 1) NOT NULL, HandelseID int NULL, Bifogadfil varchar(255) NULL)
 GO
@@ -71,11 +71,11 @@ INSERT INTO dbo.ObjVillkor (Notering, ObjID, Villkor) VALUES ('Mat ska serveras'
 INSERT INTO dbo.[Ärende] VALUES (500, 1, '01', 'IAN-2019-1', '2019-01-01', '2019-05-01', NULL)
 INSERT INTO dbo.[Ärende] VALUES (700, 1, '07', 'TIL-2021-7', '2021-01-01', '2021-03-01', 70)
 INSERT INTO dbo.[Ärende_Beslut] VALUES (100, 500, 'GT', '2019-04-30', NULL, '22222222.rtf', NULL, 'TDB')
-INSERT INTO dbo.[Ärende_Händelser] VALUES (1, 500, '11111111.rtf', 'ansokan.pdf', NULL, NULL, NULL)
-INSERT INTO dbo.[Ärende_Händelser] VALUES (2, 500, NULL, 'saknas.pdf', NULL, NULL, NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (1, 500, '11111111.rtf', 'ansokan.pdf', NULL, NULL, NULL, NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (2, 500, NULL, 'saknas.pdf', NULL, NULL, NULL, NULL)
 -- The certificate of permit 1, which also goes on the permit in PartyAssets, and an event of the place without an errand (decisions 34 and 37)
-INSERT INTO dbo.[Ärende_Händelser] VALUES (4, 500, '55555555.rtf', NULL, NULL, 'TDBV2', '2019-05-02')
-INSERT INTO dbo.[Ärende_Händelser] VALUES (5, NULL, NULL, 'serveringsansvarig.pdf', 1, NULL, '2020-01-01')
+INSERT INTO dbo.[Ärende_Händelser] VALUES (4, 500, '55555555.rtf', NULL, NULL, 'TDBV2', '2019-05-02', NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (5, NULL, NULL, 'serveringsansvarig.pdf', 1, NULL, '2020-01-01', NULL)
 INSERT INTO dbo.[Sökande] VALUES (70, '5566778899', 'Testbolaget AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvan Tolvansson', '191212121212', 'VD', 0, 0)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Avgången Ledamot', '191212121212', 'LE', 1, 0)
@@ -92,7 +92,7 @@ INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, AretRunt, S
     VALUES (3, 10, 1, 1, 1, '11:00', '23:00', '2021-02-01', 'IAN-2021-3', '12345680', 101)
 INSERT INTO dbo.[Ärende] VALUES (503, 3, '01', 'IAN-2021-3', '2020-12-01', '2021-02-01', NULL)
 INSERT INTO dbo.[Ärende_Beslut] VALUES (101, 503, 'GT', '2021-01-31', NULL, '44444444.rtf', NULL, 'TDB')
-INSERT INTO dbo.[Ärende_Händelser] VALUES (3, 503, NULL, 'ansökan räkenskaper.pdf', NULL, NULL, NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (3, 503, NULL, 'ansökan räkenskaper.pdf', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Ärende_Händelser_Filer] (HandelseID, Bifogadfil) VALUES (3, 'ritning våning 2.pdf')
 INSERT INTO dbo.[Ärende_Bilder] (ArendeID, Bildfilnamn) VALUES (503, 'fasad.jpg')
 -- A place in the area Timrå of AlkT, which belongs to another municipality (decision 19)
@@ -105,7 +105,7 @@ INSERT INTO dbo.[Ärende] VALUES (701, 1, '08', 'TIL-2022-8', '2022-01-01', '202
 INSERT INTO dbo.[Ärende] VALUES (702, 1, '09', 'TIL-2023-9', '2023-01-01', '2023-02-01', 70)
 -- An errand of another place that refers to the same file name as the place of permit 1 (decision 26)
 INSERT INTO dbo.[Ärende] VALUES (504, 2, '10', 'OVR-2020-5', '2020-05-01', '2020-06-01', NULL)
-INSERT INTO dbo.[Ärende_Händelser] VALUES (9, 504, NULL, 'skylt.jpg', NULL, NULL, NULL)
+INSERT INTO dbo.[Ärende_Händelser] VALUES (9, 504, NULL, 'skylt.jpg', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.Klartext VALUES ('A', '08', 'Tillsyn, besök')
 INSERT INTO dbo.Klartext VALUES ('A', '09', 'Tillsyn, inre')
 GO

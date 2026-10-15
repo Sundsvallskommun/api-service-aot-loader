@@ -9,6 +9,7 @@ import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,6 +17,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -248,7 +250,7 @@ class ItemMigratorTest {
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new ErrandAttachment().fileName("BESLUT.rtf").hash(FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8)).toUpperCase())));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), eq("LINK|" + ERRAND_ID + ";case;supportmanagement;AOT|"), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(true);
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of("attachment-id"));
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
 
@@ -264,12 +266,12 @@ class ItemMigratorTest {
 			tuple("CONTACT", null, "Kontakt Person"),
 			tuple("CONTACT", PERSON_PARTY_ID, "Person Ett"),
 			tuple("CONTACT", null, "Utländsk Person"));
-		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any());
+		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any(), any());
 		assertThat(assetCaptor.getValue().getAssetId()).isEqualTo(ERRAND_ID);
 		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.ACTIVE);
 		final var order = inOrder(supportManagement, partyAssets);
 		order.verify(supportManagement).createErrand(eq(MUNICIPALITY_ID), any());
-		order.verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any());
+		order.verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any());
 		order.verify(partyAssets).createAsset(eq(MUNICIPALITY_ID), anyString(), any());
 		order.verify(supportManagement).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), errandCaptor.capture());
 		assertThat(errandCaptor.getValue()).isEqualTo(new Errand().lifecycle(LifecycleEnum.ACTIVE));
@@ -356,7 +358,7 @@ class ItemMigratorTest {
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		verify(supportManagement, never()).updateErrand(anyString(), anyString(), any());
 		verify(supportManagement, never()).getAttachments(anyString(), anyString());
-		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any(), any());
 	}
 
 	@Test
@@ -741,7 +743,7 @@ class ItemMigratorTest {
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("id", Status.ACTIVE)));
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenReturn(false);
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.empty());
 
 		final var rejected = migrator.process(TestData.permit("1"), context(false));
 
@@ -749,7 +751,7 @@ class ItemMigratorTest {
 		assertThat(rejected.rules()).containsExactly("G14");
 		assertThat(rejected.detail()).isEqualTo("G14 1 fil är större än 0 MB och laddas inte upp (beslut.rtf); G14 1 fil togs inte emot av SupportManagement (ansokan.pdf)");
 
-		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any())).thenThrow(Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte"));
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenThrow(Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte"));
 
 		final var failed = migrator.process(TestData.permit("1"), context(false));
 
@@ -773,7 +775,7 @@ class ItemMigratorTest {
 
 	@Test
 	void theLimitStopsTheItemBeforeItIsWritten() {
-		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(MUNICIPALITY_ID, TestData.labelIds()), 0, new AtomicBoolean(), this::fileArea);
+		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(MUNICIPALITY_ID, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes()), 0, new AtomicBoolean(), this::fileArea);
 
 		final var result = migrator.process(TestData.permit("1"), context);
 
@@ -814,7 +816,26 @@ class ItemMigratorTest {
 		assertThat(relation.getValue().getSource().getResourceId()).isEqualTo(PERMIT_ERRAND_ID);
 		assertThat(relation.getValue().getTarget().getResourceId()).isEqualTo(ERRAND_ID);
 		assertThat(errandCaptor.getValue().getStakeholders()).extracting("role").containsExactly("INSPECTED");
+		final var investigation = ArgumentCaptor.forClass(Investigation.class);
+		verify(supportManagement).createInvestigation(eq(MUNICIPALITY_ID), eq(ERRAND_ID), investigation.capture());
+		assertThat(investigation.getValue().getStatus()).isEqualTo("COMPLETED");
+		assertThat(investigation.getValue().getStartedAt()).isEqualTo(OffsetDateTime.parse("2020-01-01T00:00+01:00"));
+		assertThat(investigation.getValue().getCompletedAt()).isEqualTo(OffsetDateTime.parse("2020-03-01T00:00+01:00"));
 		verifyNoInteractions(partyAssets);
+	}
+
+	@Test
+	void anInvestigationAnEarlierRunCreatedIsNotCreatedAgain() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-id")));
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of(new Relation().id("existing")));
+
+		assertThat(migrator.process(TestData.inspection("700", permitKey, TestData.HOLDER_ID), context(false)).outcome()).isEqualTo(Outcome.MIGRERAD);
+
+		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
 	}
 
 	@Test
@@ -927,7 +948,7 @@ class ItemMigratorTest {
 	}
 
 	private ItemMigrator migrator(final AotLoaderProperties settings) {
-		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, partyAssets, settings),
+		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, partyAssets, settings, CLOCK),
 			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings)), settings, CLOCK);
 	}
 
@@ -948,7 +969,7 @@ class ItemMigratorTest {
 	}
 
 	private RunContext context(final boolean dryRun) {
-		return new RunContext("run-id", MUNICIPALITY_ID, dryRun, Map.of(MUNICIPALITY_ID, TestData.labelIds(), TIMRA, TestData.labelIds()), null, new AtomicBoolean(), this::fileArea);
+		return new RunContext("run-id", MUNICIPALITY_ID, dryRun, Map.of(MUNICIPALITY_ID, TestData.labelIds(), TIMRA, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes(), TIMRA, TestData.purposes()), null, new AtomicBoolean(), this::fileArea);
 	}
 
 	private FileArea fileArea(final Source source) {

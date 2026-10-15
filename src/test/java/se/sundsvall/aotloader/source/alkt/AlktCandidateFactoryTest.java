@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.source.alkt;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -9,7 +10,9 @@ import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -17,6 +20,7 @@ import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
@@ -179,6 +183,9 @@ class AlktCandidateFactoryTest {
 			new AssetFile(new FileReference("33333333.rtf", DOCUMENTS), "Tillståndsbevis"),
 			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
 			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Beslut"));
+		// A decision's file gets the day of the decision, and a drawing the purpose of one
+		assertThat(candidate.detailsOf(new FileReference("11111111.rtf", DOCUMENTS))).isEqualTo(new FileDetails(null, LocalDateTime.of(2019, 4, 20, 0, 0)));
+		assertThat(candidate.detailsOf(new FileReference("ritning.pdf", ATTACHMENTS))).isEqualTo(new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null));
 	}
 
 	/**
@@ -279,7 +286,9 @@ class AlktCandidateFactoryTest {
 			.decision(new DecisionRow(101, 600, "GT", LocalDate.of(2015, 1, 31), null, "TDBBS", "55555555.rtf", null))
 			.errand(new ErrandRow(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 12, 1), LocalDate.of(2020, 1, 1), null))
 			.errand(new ErrandRow(600, 1, "02", "IAN-2015-6", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
-			.file(new FileRow(500, "situationsritning.pdf", false))
+			.file(new FileRow(500, "situationsritning.pdf", false, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
+			// A referral answer named as a drawing stays on the errand
+			.file(new FileRow(500, "ritning yttrande.pdf", false, new FileDetails(FilePurposes.RESCUE_SERVICE_RESPONSE, null)))
 			.file(new FileRow(600, "gammal ritning.pdf", false))
 			// Two certificates of the same day, the one without an errand made after the other
 			.document(new DocumentRow(10, 600, null, "TDBV2", LocalDate.of(2020, 6, 1), "66666666.rtf"))
@@ -308,6 +317,7 @@ class AlktCandidateFactoryTest {
 			new AssetFile(new FileReference("44444444.rtf", DOCUMENTS), "Beslut"));
 		assertThat(candidate.files()).containsExactly(
 			new FileReference("situationsritning.pdf", ATTACHMENTS),
+			new FileReference("ritning yttrande.pdf", ATTACHMENTS),
 			new FileReference("44444444.rtf", DOCUMENTS),
 			new FileReference("Planritning.PDF", ATTACHMENTS),
 			new FileReference("ritning.pdf", ATTACHMENTS, true),
@@ -629,11 +639,15 @@ class AlktCandidateFactoryTest {
 		assertThat(closed.holder().name()).isEqualTo("Sökande 70 AB");
 		assertThat(parameters(closed)).containsEntry("beslut", List.of("Erinran, 2020-02-01")).containsEntry("arendetyp", List.of("Tillsyn, ifrågasatt åtgärd"));
 		assertThat(closed.files()).containsExactly(new FileReference("protokoll.pdf", ATTACHMENTS), new FileReference("33333333.rtf", DOCUMENTS));
+		assertThat(closed.investigation())
+			.isEqualTo(new InvestigationData("Tillsyn, ifrågasatt åtgärd – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0)));
 
 		final var open = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("701")).findFirst().orElseThrow();
 		assertThat(open.ruleHits()).extracting(RuleHit::rule).containsExactly(ERRAND_OPEN);
 		assertThat(open.labelPaths()).containsExactly("TAGROOT/ALCOHOL_INSPECTION");
 		assertThat(open.permitLink().sameHolder()).isFalse();
+		assertThat(open.investigation().startedAt()).isEqualTo(LocalDateTime.of(2021, 1, 1, 0, 0));
+		assertThat(open.investigation().completed()).isFalse();
 	}
 
 	@Test
@@ -682,6 +696,8 @@ class AlktCandidateFactoryTest {
 		assertThat(visit.placeName()).isEqualTo("Restaurang 1");
 		assertThat(visit.placeNumber()).isEqualTo("12345678");
 		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Restaurang 1");
+		// The end time 23 cannot be read, so the visit has no end
+		assertThat(visit.investigation()).isEqualTo(new InvestigationData("Tillsynsbesök – Restaurang 1", LocalDateTime.of(2023, 11, 4, 21, 30), null));
 		assertThat(visit.labelPaths()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
 		assertThat(visit.externalTags()).isEmpty();
 		assertThat(visit.asset()).isNull();

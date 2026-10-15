@@ -12,8 +12,11 @@ import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -27,6 +30,7 @@ import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Person;
@@ -55,6 +59,7 @@ import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEME
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
 import static se.sundsvall.aotloader.Constants.TAG_MIGRATION_ID;
+import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 
 /**
  * Maps a candidate to what the target systems get: the errand in SupportManagement (section 7.3), the post in
@@ -67,6 +72,9 @@ public class TargetMapper {
 	static final String CONTACT_PHONE = "PHONE";
 	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
+	private static final String INVESTIGATION_ACTIVE = "ACTIVE";
+	private static final String INVESTIGATION_COMPLETED = "COMPLETED";
+	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
 
 	private final AotLoaderProperties properties;
 
@@ -209,6 +217,22 @@ public class TargetMapper {
 			.type(RELATION_TYPE_LINK)
 			.source(toResourceIdentifier(permitErrandId))
 			.target(toResourceIdentifier(inspectionErrandId));
+	}
+
+	/**
+	 * @return the investigation of an inspection errand or visit, completed when the source tells when the inspection was,
+	 *         with the times in Swedish time (decision 41)
+	 */
+	public Investigation toInvestigation(final InvestigationData investigation) {
+		return new Investigation()
+			.status(investigation.completed() ? INVESTIGATION_COMPLETED : INVESTIGATION_ACTIVE)
+			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
+			.startedAt(inSwedishTime(investigation.startedAt()))
+			.completedAt(inSwedishTime(investigation.completedAt()));
+	}
+
+	private static OffsetDateTime inSwedishTime(final LocalDateTime time) {
+		return time == null ? null : time.atZone(SWEDISH_TIME).toOffsetDateTime();
 	}
 
 	/**

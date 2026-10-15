@@ -2,7 +2,7 @@
 	"name": "support-management-upload",
 	"request": {
 		"method": "POST",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/attachments",
+		"urlPath": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/attachments",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [

@@ -2,6 +2,7 @@ package se.sundsvall.aotloader.support;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.MonthDay;
 import java.util.Locale;
 import java.util.Map;
@@ -108,6 +109,13 @@ public final class SourceValues {
 			return Optional.empty();
 		}
 		return Optional.of("%02d:%02d".formatted(hours, minutes));
+	}
+
+	/**
+	 * @return the start of the day, null for null
+	 */
+	public static LocalDateTime startOfDay(final LocalDate date) {
+		return date == null ? null : date.atStartOfDay();
 	}
 
 	/**

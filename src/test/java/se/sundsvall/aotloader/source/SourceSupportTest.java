@@ -96,7 +96,7 @@ class SourceSupportTest {
 		assertThat(errandOnly.assetFiles()).containsExactly(new AssetFile(new FileReference("bevis.rtf", DOCUMENTS), "Tillståndsbevis"));
 
 		final var withoutCategory = new FileList(shared)
-			.add("anmalan.pdf", ATTACHMENTS, null)
+			.addToPost("anmalan.pdf", ATTACHMENTS)
 			.add("ANMALAN.pdf", ATTACHMENTS, "Ritning");
 		assertThat(withoutCategory.assetFiles()).as("being marked without a category is a first mark too")
 			.containsExactly(new AssetFile(new FileReference("anmalan.pdf", ATTACHMENTS), null));

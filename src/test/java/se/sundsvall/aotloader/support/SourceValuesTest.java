@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.support;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.MonthDay;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -92,5 +93,7 @@ class SourceValuesTest {
 		assertThat(SourceValues.format(LocalDate.of(2026, 1, 2))).isEqualTo("2026-01-02");
 		assertThat(SourceValues.format((LocalDate) null)).isNull();
 		assertThat(SourceValues.format(MonthDay.of(5, 1))).isEqualTo("05-01");
+		assertThat(SourceValues.startOfDay(LocalDate.of(2019, 6, 1))).isEqualTo(LocalDateTime.of(2019, 6, 1, 0, 0));
+		assertThat(SourceValues.startOfDay(null)).isNull();
 	}
 }

@@ -37,7 +37,8 @@
 				"id": "a1",
 				"fileName": "44444444.rtf",
 				"hash": "92d8c82839191e59a85f8c04e57d1e84ef10aa03fbb9d7dbf6ca65d86484cbdf",
-				"fileSize": 28
+				"fileSize": 28,
+				"received": "2021-01-30T23:00:00Z"
 			},
 			{
 				"id": "a2",
@@ -49,7 +50,11 @@
 				"id": "a3",
 				"fileName": "ritning våning 2.pdf",
 				"hash": "7cabe8856505f572864aab340dc3efeebb3f3a54303fc9e1ce80f97dd4b9ae45",
-				"fileSize": 16
+				"fileSize": 16,
+				"purpose": {
+					"id": "purpose-SERVING_AREA_DRAWING",
+					"name": "SERVING_AREA_DRAWING"
+				}
 			},
 			{
 				"id": "a4",

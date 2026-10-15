@@ -100,8 +100,8 @@ public class MigrationRunner {
 		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
 		try {
-			checkBeforeRun(run, scope, progress).ifPresent(labelIds -> {
-				final var context = new RunContext(run.getId(), run.getMunicipalityId(), run.isDryRun(), labelIds, run.getItemLimit(), stop, fileAreaFactory());
+			checkBeforeRun(run, scope, progress).ifPresent(check -> {
+				final var context = new RunContext(run.getId(), run.getMunicipalityId(), run.isDryRun(), check.labelIds(), check.purposes(), run.getItemLimit(), stop, fileAreaFactory());
 				migrate(run, scope, single, context, progress);
 			});
 		} catch (final RuntimeException e) {
@@ -120,9 +120,9 @@ public class MigrationRunner {
 	/**
 	 * Checks the target and the configuration. A problem stops a real run, while a dry run goes on and reports it.
 	 *
-	 * @return the ids of the labels per municipality, empty when the run is not to start
+	 * @return what the check found, empty when the run is not to start
 	 */
-	private Optional<Map<String, Map<String, String>>> checkBeforeRun(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Progress progress) {
+	private Optional<Preflight.Result> checkBeforeRun(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Progress progress) {
 		final var wrongTarget = targetGuard.check();
 		if (wrongTarget.isPresent()) {
 			progress.fail("Körningen startade inte. " + wrongTarget.get());
@@ -137,7 +137,7 @@ public class MigrationRunner {
 			}
 			progress.note("Kontrollen före körning, som stoppar en skarp körning: " + problems);
 		}
-		return Optional.of(check.labelIds());
+		return Optional.of(check);
 	}
 
 	private void migrate(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single, final RunContext context, final Progress progress) {

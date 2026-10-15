@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -30,6 +31,7 @@ import se.sundsvall.aotloader.source.AssetParameters;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
@@ -245,7 +247,8 @@ public final class AlktCandidateFactory {
 				!permit.aretRunt() && periods.hasDatePeriod() ? periods.periodEnd() : null,
 				assetParameters(content, holder, premises, restaurantNumber)))
 			.files(files.build())
-			.assetFiles(files.assetFiles());
+			.assetFiles(files.assetFiles())
+			.fileDetails(files.details());
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -262,19 +265,22 @@ public final class AlktCandidateFactory {
 			.filter(Objects::nonNull)
 			.toList();
 
+		final var files = errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
 		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions)
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
-			.files(errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames)).build())
+			.files(files.build())
+			.fileDetails(files.details())
 			.build();
 	}
 
 	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
 		final var place = placeOf(visit.objektId());
 		final var files = new FileList(sharedFileNames);
-		snapshot.visits().forEachFile(visit, files::add);
+		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.detailsOf(ALKT, folder, name, SourceValues.startOfDay(visit.datum()))));
 		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
 			.files(files.build())
+			.fileDetails(files.details())
 			.build();
 	}
 
@@ -476,9 +482,9 @@ public final class AlktCandidateFactory {
 	private FileList permitFiles(final PermitRow permit, final PlaceRow place, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
 		final var files = errandFiles(issuingErrands, new FileList(sharedFileNames));
 		if (place != null) {
-			files.add(place.bifogadfil(), ATTACHMENTS).add(place.bifogadfil2(), ATTACHMENTS);
+			Stream.of(place.bifogadfil(), place.bifogadfil2()).forEach(name -> files.add(name, ATTACHMENTS, FilePurposes.detailsOf(ALKT, ATTACHMENTS, name, null)));
 		}
-		snapshot.placeFilesOf(permit.objektId()).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS));
+		snapshot.placeFilesOf(permit.objektId()).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
 
 		latestDocument(permit.objektId(), CERTIFICATE_TEMPLATES).ifPresentOrElse(certificate -> {
 			if (isCurrent(certificate, permit)) {
@@ -498,7 +504,8 @@ public final class AlktCandidateFactory {
 
 		for (final var arendeId : issuingErrands) {
 			snapshot.filesOf(arendeId).stream()
-				.filter(file -> !file.generated() && PermitFiles.isDrawing(file.name()))
+				// The purpose rather than the name, since a referral answer named as a drawing stays on the errand
+				.filter(file -> !file.generated() && FilePurposes.isDrawing(file.details().purpose()))
 				.forEach(file -> files.add(file.name(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 			decisionsOf(arendeId).stream()
 				.filter(decision -> PermitFiles.isDrawing(decision.bifogadFil()))
@@ -509,7 +516,7 @@ public final class AlktCandidateFactory {
 				.filter(PermitFiles::isDrawing)
 				.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 		}
-		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> addDecisionFiles(files, decision)));
+		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> markPermitDecision(files, decision)));
 		return files;
 	}
 
@@ -518,7 +525,7 @@ public final class AlktCandidateFactory {
 	 * decision, and an attachment whose name tells it is a permit, a decision or a certificate (decision 39). The others,
 	 * such as an investigation or a referral answer, stay on the errand only.
 	 */
-	private static void addDecisionFiles(final FileList files, final DecisionRow decision) {
+	private static void markPermitDecision(final FileList files, final DecisionRow decision) {
 		if (PermitFiles.isTemplate(decision.mall(), DECISION_TEMPLATES)) {
 			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
 		}
@@ -569,10 +576,12 @@ public final class AlktCandidateFactory {
 
 	private FileList errandFiles(final Collection<Integer> arendeIds, final FileList files) {
 		for (final var arendeId : arendeIds) {
-			snapshot.filesOf(arendeId).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS));
-			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files
-				.add(decision.worddokument(), DOCUMENTS)
-				.add(decision.bifogadFil(), ATTACHMENTS));
+			snapshot.filesOf(arendeId).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> {
+				final var received = SourceValues.startOfDay(decision.beslutsDatum());
+				files.add(decision.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKT, decision.mall()), received))
+					.add(decision.bifogadFil(), ATTACHMENTS, FilePurposes.detailsOf(ALKT, ATTACHMENTS, decision.bifogadFil(), received));
+			});
 		}
 		return files;
 	}

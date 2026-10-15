@@ -1,11 +1,13 @@
 package se.sundsvall.aotloader.service;
 
+import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +21,11 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettin
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.mapper.LabelPaths;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.Texts;
@@ -53,7 +57,9 @@ public class Preflight {
 	/**
 	 * @param  municipalityId the municipality the run is started for
 	 * @param  scope          the sources and kinds of the run
-	 * @return                the problems found and the ids of the labels of the namespace in the municipality of the run
+	 * @return                the problems found, and the ids of the labels and the attachment purposes of the namespace in
+	 *                        the
+	 *                        municipality of the run
 	 */
 	public Result check(final String municipalityId, final Map<Source, Set<Kind>> scope) {
 		final var problems = new ArrayList<String>();
@@ -66,7 +72,8 @@ public class Preflight {
 		final var labels = readLabels(municipalityId, problems);
 		labels.ifPresent(found -> checkLabels(found, types, problems));
 		checkActions(municipalityId, problems);
-		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())));
+		final var purposes = readPurposes(municipalityId, problems);
+		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())), Map.of(municipalityId, purposes));
 	}
 
 	/**
@@ -166,6 +173,38 @@ public class Preflight {
 	}
 
 	/**
+	 * Reads the attachment purposes of the namespace, and adds a problem for each purpose a file can get that the namespace
+	 * lacks or has deprecated (decision 40).
+	 *
+	 * @return the purposes a file can get, by name
+	 */
+	private Map<String, FilePurpose> readPurposes(final String municipalityId, final List<String> problems) {
+		final List<AttachmentPurpose> found;
+		try {
+			found = supportManagement.getAttachmentPurposes(municipalityId);
+		} catch (final RuntimeException e) {
+			problems.add("Syftena för bilagor i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+			return Map.of();
+		}
+		final var purposes = new HashMap<String, FilePurpose>();
+		final var deprecated = new HashSet<String>();
+		found.stream()
+			.filter(purpose -> purpose.getId() != null && FilePurposes.ALL.contains(purpose.getName()))
+			.forEach(purpose -> {
+				if (Boolean.TRUE.equals(purpose.getDeprecated())) {
+					deprecated.add(purpose.getName());
+				} else {
+					purposes.put(purpose.getName(), new FilePurpose(purpose.getId(), purpose.getName(), purpose.getDisplayName()));
+				}
+			});
+		FilePurposes.ALL.stream()
+			.filter(name -> !purposes.containsKey(name))
+			.sorted()
+			.forEach(name -> problems.add((deprecated.contains(name) ? "Syftet %s för bilagor är inaktuellt i namnrymden (beslut 40)" : "Syftet %s för bilagor finns inte i namnrymden (beslut 40)").formatted(name)));
+		return purposes;
+	}
+
+	/**
 	 * Adds a problem when an action is active in the namespace of the municipality (R6).
 	 */
 	private void checkActions(final String municipalityId, final List<String> problems) {
@@ -225,12 +264,14 @@ public class Preflight {
 	 *
 	 * @param problems what stops a real run
 	 * @param labelIds the ids of the labels of the namespace by normalized resource path, per municipality
+	 * @param purposes the attachment purposes of the namespace that a file can get, by name, per municipality
 	 */
-	public record Result(List<String> problems, Map<String, Map<String, String>> labelIds) {
+	public record Result(List<String> problems, Map<String, Map<String, String>> labelIds, Map<String, Map<String, FilePurpose>> purposes) {
 
 		public Result {
 			problems = List.copyOf(problems);
 			labelIds = labelIds.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
+			purposes = purposes.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
 		}
 	}
 }

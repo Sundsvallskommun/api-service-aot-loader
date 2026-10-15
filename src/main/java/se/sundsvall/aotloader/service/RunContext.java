@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -21,6 +22,7 @@ public final class RunContext {
 	private final String municipalityId;
 	private final boolean dryRun;
 	private final Map<String, Map<String, String>> labelIds;
+	private final Map<String, Map<String, FilePurpose>> purposes;
 	private final Integer limit;
 	private final AtomicBoolean stopRequested;
 	private final Function<Source, FileArea> fileAreaFactory;
@@ -34,16 +36,19 @@ public final class RunContext {
 	 * @param municipalityId  the municipality the run is started for, which every item is written to (decision 19)
 	 * @param dryRun          true for a dry run, which writes nothing to the target systems or the status table
 	 * @param labelIds        the ids of the labels by normalized resource path, per municipality
+	 * @param purposes        the attachment purposes a file can get, by name, per municipality
 	 * @param limit           the largest number of items the run writes, null for no limit
 	 * @param stopRequested   set when the run is to stop before its next item
 	 * @param fileAreaFactory creates the file area of a source, once per run
 	 */
-	public RunContext(final String runId, final String municipalityId, final boolean dryRun, final Map<String, Map<String, String>> labelIds, final Integer limit, final AtomicBoolean stopRequested,
+	public RunContext(final String runId, final String municipalityId, final boolean dryRun, final Map<String, Map<String, String>> labelIds,
+		final Map<String, Map<String, FilePurpose>> purposes, final Integer limit, final AtomicBoolean stopRequested,
 		final Function<Source, FileArea> fileAreaFactory) {
 		this.runId = runId;
 		this.municipalityId = municipalityId;
 		this.dryRun = dryRun;
 		this.labelIds = Map.copyOf(labelIds);
+		this.purposes = Map.copyOf(purposes);
 		this.limit = limit;
 		this.stopRequested = stopRequested;
 		this.fileAreaFactory = fileAreaFactory;
@@ -66,6 +71,13 @@ public final class RunContext {
 	 */
 	public Map<String, String> labelIds(final String municipalityId) {
 		return labelIds.getOrDefault(municipalityId, Map.of());
+	}
+
+	/**
+	 * @return the attachment purpose of the name in the municipality, empty when it was not read for it
+	 */
+	public Optional<FilePurpose> purpose(final String municipalityId, final String name) {
+		return Optional.ofNullable(purposes.getOrDefault(municipalityId, Map.of()).get(name));
 	}
 
 	public boolean stopRequested() {

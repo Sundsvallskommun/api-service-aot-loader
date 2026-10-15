@@ -13,6 +13,7 @@ import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
@@ -20,6 +21,7 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
@@ -241,6 +243,12 @@ class AlkolCandidateFactoryTest {
 			new AssetFile(new FileReference("anmalan 2016.pdf", ATTACHMENTS), null),
 			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), null),
 			new AssetFile(new FileReference("44444444.rtf", DOCUMENTS), null));
+		// Each file gets its purpose and the time of its event or decision
+		assertThat(notification.detailsOf(new FileReference("remissvar polisen.pdf", ATTACHMENTS)))
+			.isEqualTo(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2015, 1, 5, 9, 0)));
+		assertThat(notification.detailsOf(new FileReference("Planritning.pdf", ATTACHMENTS)))
+			.isEqualTo(new FileDetails(FilePurposes.SALES_PREMISES_DRAWING, LocalDateTime.of(2015, 1, 6, 9, 0)));
+		assertThat(notification.detailsOf(new FileReference("44444444.rtf", DOCUMENTS))).isEqualTo(new FileDetails(null, LocalDateTime.of(2015, 1, 20, 10, 0)));
 	}
 
 	@Test

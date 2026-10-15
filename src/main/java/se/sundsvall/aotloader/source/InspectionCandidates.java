@@ -11,6 +11,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettin
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
@@ -89,12 +90,15 @@ public final class InspectionCandidates {
 		final var holder = PartyRows.holder(applicant, today);
 		final var ownerLegalId = Optional.ofNullable(PartyRows.holder(owner, today)).map(Holder::legalId).orElse(null);
 		final var placeName = place == null ? null : place.name();
+		final var title = Texts.title(errand.typeText(), Optional.ofNullable(placeName).orElse(unknownPlace));
 		return Candidate.builder(new ItemKey(errand.source(), TILLSYN, String.valueOf(errand.arendeId())), type)
 			.placeName(placeName)
 			.ruleHits(hits)
 			.holder(holder)
 			.place(place)
-			.title(Texts.title(errand.typeText(), Optional.ofNullable(placeName).orElse(unknownPlace)))
+			.title(title)
+			// The errand was started when it was opened and completed when it was closed (decision 41)
+			.investigation(new InvestigationData(title, SourceValues.startOfDay(errand.opened()), SourceValues.startOfDay(errand.closed())))
 			.description(description(errand, decisions))
 			.labelPaths(settings.labels())
 			.labelPath(settings.sourceErrandType(errand.typeCode()).orElse(null))
