@@ -1,0 +1,48 @@
+{
+	"name": "support-management-create-investigation",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "COMPLETED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05\nTillsammans med polisen."
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.summary",
+					"equalTo": "Mycket folk i baren."
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"equalTo": "Servering till minderårig: Ungdomar i baren\nServering utom tillåten serveringstid"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations/investigation-1"
+		}
+	}
+}

@@ -1,0 +1,14 @@
+{
+	"name": "party-2281-5566778899",
+	"request": {
+		"method": "GET",
+		"url": "/party/2281/ENTERPRISE/5566778899/partyId"
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "text/plain"
+		},
+		"body": "22222222-aaaa-bbbb-cccc-000000000001"
+	}
+}

@@ -1,0 +1,15 @@
+{
+	"source": "ALKOL",
+	"kind": "ANMALAN",
+	"sourceId": "2-FOLKOL",
+	"errandType": "FOLKOL_SALES_NOTIFICATION",
+	"status": "KLAR",
+	"placeName": "Timråkiosken",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000004",
+	"errandNumber": "ALKT-2026-4",
+	"assetId": "11111111-aaaa-bbbb-cccc-000000000004",
+	"partyAssetsId": "asset-internal-4",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

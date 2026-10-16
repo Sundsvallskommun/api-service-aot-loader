@@ -1,0 +1,10 @@
+{
+	"source": "ALKOL",
+	"kind": "TILLSTAND",
+	"sourceId": "1",
+	"placeName": "Kiosken",
+	"outcome": "MIGRERAD",
+	"rules": "G29,G14",
+	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; G14 1 fil togs inte emot av SupportManagement (33333333.rtf)",
+	"errandNumber": "ALKT-2026-3"
+}

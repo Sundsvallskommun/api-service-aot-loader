@@ -1,0 +1,18 @@
+{
+	"id": "${json-unit.any-string}",
+	"municipalityId": "2281",
+	"dryRun": true,
+	"sources": [
+		"ALKT",
+		"ALKOL"
+	],
+	"kinds": [
+		"TILLSTAND",
+		"ANMALAN",
+		"TILLSYN",
+		"TILLSYNSBESOK"
+	],
+	"status": "RUNNING",
+	"started": "${json-unit.any-string}",
+	"outcomes": {}
+}
