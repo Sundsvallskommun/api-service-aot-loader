@@ -114,18 +114,20 @@ public record AotLoaderProperties(
 	}
 
 	/**
-	 * The roles of the stakeholders.
+	 * The roles of the stakeholders, and the role the measures are added by.
 	 *
 	 * @param permitHolder     the permit holder, the role pw-alkt reads as holder
 	 * @param contact          the persons with significant influence (decision 15), told apart from other contacts by the
 	 *                         parameter PBI = true
 	 * @param inspectionHolder the role of the holder an inspection errand concerned; PRIMARY would show the errand on Mina
 	 *                         sidor (decision 27)
+	 * @param measureAddedBy   the role a measure is added by, as Draken gives every measure it adds (decision 57)
 	 */
 	public record Roles(
 		@NotBlank String permitHolder,
 		@NotBlank String contact,
-		String inspectionHolder) {
+		String inspectionHolder,
+		String measureAddedBy) {
 	}
 
 	/**

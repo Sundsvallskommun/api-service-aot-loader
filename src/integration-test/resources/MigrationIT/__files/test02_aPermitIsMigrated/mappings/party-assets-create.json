@@ -80,6 +80,12 @@
 			},
 			{
 				"matchesJsonPath": {
+					"expression": "$.additionalParameters.legalBasis",
+					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
+				}
+			},
+			{
+				"matchesJsonPath": {
 					"expression": "$.additionalParameters.premisesName",
 					"equalTo": "Krogen Ett"
 				}

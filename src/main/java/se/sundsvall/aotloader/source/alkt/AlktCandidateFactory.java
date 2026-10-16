@@ -21,7 +21,9 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
+import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Place;
@@ -38,14 +40,17 @@ import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
+import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitFiles;
+import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
@@ -89,6 +94,7 @@ import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_AREA;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_CONDITION;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_DECISION;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_ERRAND;
+import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_EVENT;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GROUP;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_POSITION;
 
@@ -108,6 +114,7 @@ public final class AlktCandidateFactory {
 	private static final Set<String> CATERING_ANNEX_TEMPLATES = Set.of("TDBBC");
 	/** The templates of the permit decision: of Sundsvall and of Timrå (decision 39). */
 	private static final Set<String> DECISION_TEMPLATES = Set.of("TDB", "TBT");
+	private static final String PICTURE_HEADING = "Bild";
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
 		.comparing(PlaceDocument::tidpunkt, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
 		.thenComparing(PlaceDocument::order, Comparator.nullsFirst(Comparator.<Integer>naturalOrder()));
@@ -214,6 +221,8 @@ public final class AlktCandidateFactory {
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SERVING_PLACE);
 		final var premises = place == null ? null : place(place);
 		final var settings = properties.errandType(ErrandType.SERVING_PERMIT);
+		final var title = Texts.title("Serveringstillstånd", name);
+		final var errands = issuingErrands.stream().map(snapshot.errands()::get).filter(Objects::nonNull).toList();
 		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSTAND, String.valueOf(permit.objektId())), ErrandType.SERVING_PERMIT)
 			.placeName(placeName)
 			.placeNumber(restaurantNumber)
@@ -221,7 +230,9 @@ public final class AlktCandidateFactory {
 			.holder(holder)
 			.place(premises)
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
-			.title(Texts.title("Serveringstillstånd", name))
+			.title(title)
+			.investigation(PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
+				permit.utfardandeDatum(), investigationTexts(issuingErrands, permit.notes())))
 			.description(permitDescription(name, content))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
@@ -229,6 +240,7 @@ public final class AlktCandidateFactory {
 				.add("alktObjektId", "Id i AlkT", String.valueOf(permit.objektId()))
 				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(permit.utfardandeDatum()))
 				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkT", permit.utfardandeDiarienr())
+				.add(ErrandParameters.HANDLERS, "Handläggare i AlkT", snapshot.visits().handlerNames(errands.stream().flatMap(errand -> errand.handlaggare().stream()).toList()))
 				.add("ersatter", "Ersätter", Texts.join(", ", Arrays.asList(SourceValues.format(permit.ersatterDatum()), permit.ersatterDiarienr())))
 				.add("drycker", "Drycker", content.drinks())
 				.add("serveringTill", "Servering till", content.servingTo())
@@ -243,11 +255,12 @@ public final class AlktCandidateFactory {
 				.add("villkor", "Villkor", content.conditions())
 				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", decisionText(decision, true))
+				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkT", Journal.lines(entries(snapshot.placeTextsOf(permit.objektId()), null)))
 				.add(CandidateTexts.migrated(today, ALKT))
 				.build())
 			.asset(new AssetData(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(),
 				!permit.aretRunt() && periods.hasDatePeriod() ? periods.periodEnd() : null,
-				assetParameters(content, holder, premises, restaurantNumber)))
+				assetParameters(content, holder, premises, restaurantNumber), legalBasisDocuments(permit, decision, files)))
 			.files(files.build(), files.assetFiles(), files.details());
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
@@ -256,7 +269,7 @@ public final class AlktCandidateFactory {
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
 		final var place = placeOf(errand.objektId());
 		final var source = new InspectionErrand(ALKT, errand.arendeId(), errand.arendeTyp(), snapshot.codeText(CODE_TYPE_ERRAND, errand.arendeTyp()), errand.diarieNr(), errand.oppnad(),
-			errand.avslutad());
+			errand.avslutad(), snapshot.visits().handlerNames(errand.handlaggare()));
 		final var applicant = errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId());
 		final var permitKey = permitRowsByPlace.containsKey(errand.objektId()) ? new ItemKey(ALKT, TILLSTAND, String.valueOf(errand.objektId())) : null;
 		final var decisions = decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()
@@ -266,7 +279,8 @@ public final class AlktCandidateFactory {
 			.toList();
 
 		final var files = errandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
-		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions)
+		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place).orElse(null), permitKey, decisions,
+			investigationTexts(List.of(errand.arendeId())))
 			.placeNumber(place == null ? null : place.restaurangBeteckning())
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
@@ -520,6 +534,23 @@ public final class AlktCandidateFactory {
 	}
 
 	/**
+	 * @return the documents that state the legal basis of the permit, which AlkT keeps nowhere else (decision 58): the
+	 *         document of the decision the permit points to, when it is made from the template of a permit decision, and
+	 *         then the latest certificate; none that the permit keeps on its errand only, such as an older certificate
+	 */
+	private List<FileReference> legalBasisDocuments(final PermitRow permit, final DecisionRow decision, final FileList files) {
+		final var decisionDocument = Optional.ofNullable(decision)
+			.filter(row -> PermitFiles.isTemplate(row.mall(), DECISION_TEMPLATES))
+			.map(DecisionRow::worddokument);
+		final var certificate = latestDocument(permit.objektId(), CERTIFICATE_TEMPLATES).map(PlaceDocument::name);
+		return Stream.of(decisionDocument, certificate)
+			.flatMap(Optional::stream)
+			.map(name -> files.findOfHolder(name, DOCUMENTS))
+			.flatMap(Optional::stream)
+			.toList();
+	}
+
+	/**
 	 * Marks the files of a decision that are the permit decision for the post: the document made from the template of the
 	 * decision, and an attachment whose name tells it is a permit, a decision or a certificate (decision 39). The others,
 	 * such as an investigation or a referral answer, stay on the errand only.
@@ -672,6 +703,46 @@ public final class AlktCandidateFactory {
 			content.conditions().forEach(condition -> lines.add("- " + condition));
 		}
 		return Texts.join("\n", lines);
+	}
+
+	/**
+	 * @return the texts of the investigation of the errands: their notes, their events and the texts of their pictures, and
+	 *         their decisions with their texts and who made them (decisions 44, 46, 52 and 53)
+	 */
+	private InvestigationTexts investigationTexts(final Collection<Integer> arendeIds) {
+		return investigationTexts(arendeIds, List.of());
+	}
+
+	/**
+	 * @param  shownNotes notes the errand already shows as a parameter, which the investigation leaves out, since AlkT
+	 *                    copies the notes of the issuing errand to the permit
+	 * @return            the texts of the investigation of the errands, as above, without the notes already shown
+	 */
+	private InvestigationTexts investigationTexts(final Collection<Integer> arendeIds, final Collection<String> shownNotes) {
+		return Journal.investigation(
+			arendeIds.stream().map(snapshot.errands()::get).filter(Objects::nonNull).flatMap(errand -> errand.notes().stream()).filter(note -> !shownNotes.contains(note)).toList(),
+			arendeIds.stream()
+				.flatMap(arendeId -> entries(snapshot.textsOf(arendeId), Optional.ofNullable(snapshot.errands().get(arendeId)).map(ErrandRow::diarieNr).orElse(null)).stream())
+				.toList(),
+			arendeIds.stream().flatMap(arendeId -> decisionsOf(arendeId).stream())
+				.map(decision -> new Journal.Entry(decision.beslutad(),
+					Journal.decisionHeading(snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()), snapshot.visits().handlerName(decision.beslutsfattare())),
+					decision.beslutsText()))
+				.toList());
+	}
+
+	/**
+	 * @param  errandDiaryNumber the diary number of the errand of the events, null for events without an errand
+	 * @return                   the events and pictures as entries of a journal, each headed by the text of its event type,
+	 *                           marked when confidential and with its own diary number when it is another than the
+	 *                           errand's, or "Bild" for a picture
+	 */
+	private List<Journal.Entry> entries(final List<TextRow> texts, final String errandDiaryNumber) {
+		return texts.stream()
+			.map(text -> new Journal.Entry(text.tidpunkt(), text.picture() ? PICTURE_HEADING
+				: Journal.eventHeading(snapshot.codeText(CODE_TYPE_EVENT, text.handelseTyp()), text.confidential(), Journal.otherDiaryNumber(text.diarieNr(), errandDiaryNumber)),
+				text.text()))
+			.toList();
 	}
 
 	private String decisionText(final DecisionRow decision, final boolean withValidTo) {

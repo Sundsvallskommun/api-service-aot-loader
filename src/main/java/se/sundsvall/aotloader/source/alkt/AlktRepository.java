@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,8 @@ import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PartyRows;
@@ -31,6 +34,8 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
+import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.stream.Collectors.groupingBy;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
@@ -40,6 +45,7 @@ import static se.sundsvall.aotloader.source.Rows.dateTime;
 import static se.sundsvall.aotloader.source.Rows.flag;
 import static se.sundsvall.aotloader.source.Rows.integer;
 import static se.sundsvall.aotloader.source.Rows.text;
+import static se.sundsvall.aotloader.source.Rows.texts;
 
 /**
  * Reads AlkT. The queries only select, and they use nothing that needs a compatibility level above 100.
@@ -53,6 +59,7 @@ public class AlktRepository {
 	private static final String BIFOGADFIL = "Bifogadfil";
 	private static final String HANDELSE_TYP = "HandelseTyp";
 	private static final String HANDELSE_DATUM = "HandelseDatumTid";
+	private static final String NO_INSPECTION_KIND = "01";
 
 	// The table has no key: the order numbers the permits without ObjektID the same way in every run
 	private static final String SELECT_PERMITS = """
@@ -92,14 +99,36 @@ public class AlktRepository {
 		ORDER BY v.ObjID, v.ID
 		""";
 
+	// Ordered, like the errands, so that decisions at the same time keep their order in the journal from run to run
 	private static final String SELECT_DECISIONS = """
-		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtTOM_Datum, b.Dokument, b.Worddokument, b.BifogadFil
+		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtTOM_Datum, b.Dokument, b.Worddokument, b.BifogadFil,
+		       b.BeslutsText, b.BeslutsText2, b.BeslutsFattare
 		FROM dbo.[Ärende_Beslut] b
+		ORDER BY b.BeslutsID
 		""";
 
 	private static final String SELECT_ERRANDS = """
-		SELECT ar.ArendeID, ar.ObjektID, ar.ArendeTyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.SokandeID
+		SELECT ar.ArendeID, ar.ObjektID, ar.ArendeTyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.SokandeID,
+		       ar.Noteringar, ar.Noteringar2, ar.Noteringar3, ar.Noteringar4, ar.Noteringar5, ar.Noteringar5B, ar.Noteringar6,
+		       ar.Noteringar7, ar.Noteringar8, ar.ArendeNotat, ar.HandlaggarID, ar.HandlaggarID2
 		FROM dbo.[Ärende] ar
+		ORDER BY ar.ArendeID
+		""";
+
+	// Every event, also one without a text, since an errand's events make the journal of its investigation (decision 52).
+	// Ordered so that events at the same time keep the order AlkT gave them
+	private static final String SELECT_EVENT_TEXTS = """
+		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.HandelseTyp, h.HandelseDatumTid, h.HandelseText, h.Sekretess, h.DiarieNr
+		FROM dbo.[Ärende_Händelser] h
+		ORDER BY h.HandelseID
+		""";
+
+	private static final String SELECT_PICTURE_TEXTS = """
+		SELECT bi.ArendeID, bi.BildDatumTid, bi.BildText
+		FROM dbo.[Ärende_Bilder] bi
+		WHERE bi.ArendeID IS NOT NULL
+		  AND bi.BildText IS NOT NULL
+		ORDER BY bi.BildID
 		""";
 
 	// Also the events without an errand, whose files go to the permit of their place (decision 37)
@@ -144,8 +173,19 @@ public class AlktRepository {
 
 	private static final String SELECT_VISITS = """
 		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
-		       t.WordDokument, t.Bifogadfil
+		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.ServPersAgarePaPlats, t.ServPersEjKollat, t.ServPersEjpaPlats,
+		       t.TillsynsOmgangsNr
 		FROM dbo.[Tillsyn_Tillfälle] t
+		""";
+
+	private static final String SELECT_ROUNDS = """
+		SELECT o.TillsynsOmgangsID, o.Omgangsnamn, o.StartDatum, o.SlutDatum, o.Fritext
+		FROM dbo.[Tillsyn_Omgång] o
+		""";
+
+	private static final String SELECT_HANDLERS = """
+		SELECT h.HandlaggarID, h.Namn
+		FROM dbo.[Handläggare] h
 		""";
 
 	// Tillsyn_AnmSpec, the specifications of the remarks, is not read: every one of its texts is empty (analysis round 7b)
@@ -182,6 +222,11 @@ public class AlktRepository {
 			jdbc.query(SELECT_PICTURES, (rs, _) -> toPicture(rs)),
 			errands.keySet());
 
+		final var eventTexts = EventTexts.of(
+			jdbc.query(SELECT_EVENT_TEXTS, (rs, _) -> toEventText(rs)),
+			jdbc.query(SELECT_PICTURE_TEXTS, (rs, _) -> toPictureText(rs)),
+			errands.keySet());
+
 		final var codeTexts = readCodeTexts(jdbc);
 		return new AlktSnapshot(
 			jdbc.query(SELECT_PERMITS, (rs, _) -> toPermit(rs)),
@@ -194,6 +239,8 @@ public class AlktRepository {
 			eventFiles.placeFiles(),
 			eventFiles.unplacedFiles(),
 			eventFiles.documents(),
+			eventTexts.errandTexts(),
+			eventTexts.placeTexts(),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
@@ -206,7 +253,24 @@ public class AlktRepository {
 			jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
 			InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, "TillsynsTillfalleNr"), text(rs, BIFOGADFIL)))),
 			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_INSPECTION_KIND, Map.of()),
-			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_REMARK, Map.of()));
+			codeTexts.getOrDefault(AlktSnapshot.CODE_TYPE_REMARK, Map.of()),
+			readHandlerNames(jdbc),
+			byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id));
+	}
+
+	/**
+	 * @return the names of the handlers by HandlaggarID, the code the visits name them with (decision 48)
+	 */
+	private static Map<String, String> readHandlerNames(final JdbcTemplate jdbc) {
+		final var names = new HashMap<String, String>();
+		jdbc.query(SELECT_HANDLERS, rs -> {
+			final var code = text(rs, "HandlaggarID");
+			final var name = text(rs, "Namn");
+			if (code != null && name != null) {
+				names.putIfAbsent(code, name);
+			}
+		});
+		return names;
 	}
 
 	private static Map<String, Map<String, String>> readCodeTexts(final JdbcTemplate jdbc) {
@@ -298,7 +362,9 @@ public class AlktRepository {
 			date(rs, "GiltigtTOM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
-			text(rs, "BifogadFil"));
+			text(rs, "BifogadFil"),
+			Texts.join("\n", Arrays.asList(text(rs, "BeslutsText"), text(rs, "BeslutsText2"))),
+			text(rs, "BeslutsFattare"));
 	}
 
 	static ErrandRow toErrand(final ResultSet rs) throws SQLException {
@@ -309,7 +375,9 @@ public class AlktRepository {
 			text(rs, "DiarieNr"),
 			date(rs, "OppnandeDatum"),
 			date(rs, "AvslutsDatum"),
-			integer(rs, "SokandeID"));
+			integer(rs, "SokandeID"),
+			texts(rs, "Noteringar", "Noteringar2", "Noteringar3", "Noteringar4", "Noteringar5", "Noteringar5B", "Noteringar6", "Noteringar7", "Noteringar8", "ArendeNotat"),
+			texts(rs, "HandlaggarID", "HandlaggarID2"));
 	}
 
 	static VisitRow toVisit(final ResultSet rs) throws SQLException {
@@ -319,10 +387,24 @@ public class AlktRepository {
 			date(rs, "StartDatum"),
 			text(rs, "StartTid"),
 			text(rs, "SlutTid"),
-			text(rs, "Tillsynsform"),
+			inspectionKind(rs),
 			text(rs, "Fritext"),
 			text(rs, "WordDokument"),
-			text(rs, BIFOGADFIL));
+			text(rs, BIFOGADFIL),
+			texts(rs, "Handl1", "Handl2", "Handl3"),
+			new StaffMarks(flag(rs, "ServPersAgarePaPlats"), flag(rs, "ServPersEjKollat"), flag(rs, "ServPersEjpaPlats")),
+			integer(rs, "TillsynsOmgangsNr"),
+			List.of(),
+			false);
+	}
+
+	/**
+	 * AlkT writes 01 in Tillsynsform when no kind of inspection was chosen, a code that code list L does not have. It
+	 * counts as no kind, the same as a blank one (decision 42).
+	 */
+	static String inspectionKind(final ResultSet rs) throws SQLException {
+		final var code = text(rs, "Tillsynsform");
+		return NO_INSPECTION_KIND.equals(code) ? null : code;
 	}
 
 	static RemarkRow toRemark(final ResultSet rs) throws SQLException {
@@ -362,6 +444,49 @@ public class AlktRepository {
 				new FileRow(errand, worddokument, true, new FileDetails(FilePurposes.ofDocument(ALKT, mall), tidpunkt)),
 				new FileRow(errand, bifogadfil, false, new FileDetails(FilePurposes.ofAttachment(ALKT, handelseTyp, bifogadfil), tidpunkt)))
 				.filter(row -> row.name() != null);
+		}
+	}
+
+	static EventText toEventText(final ResultSet rs) throws SQLException {
+		return new EventText(integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID),
+			new TextRow(dateTime(rs, HANDELSE_DATUM), text(rs, HANDELSE_TYP), false, text(rs, "HandelseText"), flag(rs, "Sekretess"), text(rs, "DiarieNr")));
+	}
+
+	static EventText toPictureText(final ResultSet rs) throws SQLException {
+		return new EventText(integer(rs, ARENDE_ID), null, new TextRow(dateTime(rs, "BildDatumTid"), null, true, text(rs, "BildText")));
+	}
+
+	/**
+	 * The text of an event or a picture with where it belongs: its errand, or the place of an event without one.
+	 */
+	record EventText(Integer arendeId, Integer objektId, TextRow row) {
+	}
+
+	/**
+	 * The events and the texts of the pictures, split the same way as the files (decisions 37, 47 and 52). Every event of
+	 * an errand counts, also one without a text, but a picture only with a text, and an event without an errand only with
+	 * a text, for the log of the permit. An event whose errand is missing in Ärende counts as one without an errand; an
+	 * event without an errand or a place goes nowhere.
+	 *
+	 * @param errandTexts the events with an errand, and the texts of the pictures, by ArendeID
+	 * @param placeTexts  the events with a text that have no errand, by the ObjektID of the event
+	 */
+	record EventTexts(Map<Integer, List<TextRow>> errandTexts, Map<Integer, List<TextRow>> placeTexts) {
+
+		static EventTexts of(final List<EventText> events, final List<EventText> pictures, final Set<Integer> errandIds) {
+			final var errandTexts = new HashMap<Integer, List<TextRow>>();
+			final var placeTexts = new HashMap<Integer, List<TextRow>>();
+			Stream.concat(events.stream(), pictures.stream()).forEach(text -> {
+				final var row = text.row();
+				if (text.arendeId() != null && errandIds.contains(text.arendeId())) {
+					if (!row.picture() || row.text() != null) {
+						errandTexts.computeIfAbsent(text.arendeId(), _ -> new ArrayList<>()).add(row);
+					}
+				} else if (!row.picture() && row.text() != null && text.objektId() != null) {
+					placeTexts.computeIfAbsent(text.objektId(), _ -> new ArrayList<>()).add(row);
+				}
+			});
+			return new EventTexts(errandTexts, placeTexts);
 		}
 	}
 

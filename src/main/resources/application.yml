@@ -106,6 +106,8 @@ aot-loader:
     contact: CONTACT
     # The holder on an inspection errand. Not PRIMARY, which would show the errand on Mina sidor (decision 27)
     inspection-holder: CONTACT
+    # The role the measures of the inspection visits are added by, the one Draken gives every measure (decision 57)
+    measure-added-by: PRIMARY
   # Everything each errand type becomes in the target systems: the classification (category and type, decision 5), the
   # labels by their resource path (section 7.3.4), and the type and title in PartyAssets (decisions 20 and 4). The asset
   # types are those pw-alkt gives the permits and notifications it creates, a notification ending in Notification. The

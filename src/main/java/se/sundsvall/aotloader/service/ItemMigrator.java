@@ -188,6 +188,7 @@ public class ItemMigrator {
 			}
 			if (context.dryRun()) {
 				fileUploader.check(candidate, context, notes);
+				fileUploader.withLegalBasis(candidate, context, notes);
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -227,7 +228,8 @@ public class ItemMigrator {
 
 			step = Step.TILLSTAND;
 			if (candidate.asset() != null) {
-				final var partyAssetsId = targets.ensureAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes);
+				final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
+				final var partyAssetsId = targets.ensureAsset(withLegalBasis, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes);
 				entity.setPartyAssetsId(partyAssetsId);
 				entity.setAssetId(errand.getId());
 				if (!expired) {

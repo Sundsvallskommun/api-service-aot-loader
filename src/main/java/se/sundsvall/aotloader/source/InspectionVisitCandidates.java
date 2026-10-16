@@ -15,11 +15,14 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettin
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
@@ -38,6 +41,7 @@ import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
 public final class InspectionVisitCandidates {
 
 	private static final Pattern SECONDS = Pattern.compile("^(\\d{1,2}[:.]\\d{2})[:.]\\d{2}$");
+	private static final String REMARK = "Anmärkning";
 
 	private final ErrandType type;
 	private final ErrandTypeSettings settings;
@@ -86,7 +90,8 @@ public final class InspectionVisitCandidates {
 			// A visit not yet made may be a planned one, which must not become an inspection that took place
 			hits.add(RuleHit.of(VISIT_DATE_INVALID, visit.datum() == null ? "datum saknas" : SourceValues.format(visit.datum())));
 		}
-		final var content = new VisitContent(visit, rows.kindText(visit.tillsynsart()), time(visit), remarks(rows.remarksOf(visit.tillfalleNr()), rows));
+		final var content = new VisitContent(visit, rows.kindText(visit.tillsynsart()), time(visit), remarks(rows.remarksOf(visit.tillfalleNr()), rows),
+			rows.handlerNamesOf(visit), visit.staff().texts(), rows.roundOf(visit));
 		final var placeName = place == null ? null : place.name();
 		final var name = Optional.ofNullable(placeName).orElse(unknownPlace);
 		final var title = Texts.title("Tillsynsbesök", name);
@@ -95,7 +100,8 @@ public final class InspectionVisitCandidates {
 			.ruleHits(hits)
 			.place(place)
 			.title(title)
-			.investigation(investigation(title, visit))
+			.investigation(investigation(title, visit, content.remarks(), content.round()))
+			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
 			.parameters(parameters(content));
@@ -107,6 +113,11 @@ public final class InspectionVisitCandidates {
 		lines.add(Texts.joinWords("Tillsynsbesök på " + name, SourceValues.format(visit.datum())) + ", migrerat från " + type.getSource().getDisplayName() + ".");
 		lines.add(line("Tillsynsart", content.kind()));
 		lines.add(line("Tid", content.time()));
+		lines.add(line("Tillsynsomgång", roundName(content.round())));
+		lines.add(line("Tillsynen gällde", Texts.join(", ", visit.covered())));
+		lines.add(line("Anmält besök", announced(visit)));
+		lines.add(line("Handläggare", Texts.join(", ", content.handlers())));
+		lines.add(line("Serveringspersonal", Texts.join(", ", content.staff())));
 		if (!content.remarks().isEmpty()) {
 			lines.add("Anmärkningar:");
 			content.remarks().forEach(remark -> lines.add("- " + remark));
@@ -123,6 +134,11 @@ public final class InspectionVisitCandidates {
 			.add("besoksdatum", "Besöksdatum", SourceValues.format(visit.datum()))
 			.add("besokstid", "Tid", content.time())
 			.add("tillsynsart", "Tillsynsart", content.kind())
+			.add("tillsynsomgang", "Tillsynsomgång", roundName(content.round()))
+			.add("tillsynenGallde", "Tillsynen gällde", visit.covered())
+			.add("anmaltBesok", "Anmält besök", announced(visit))
+			.add(ErrandParameters.HANDLERS, "Handläggare i " + source.getDisplayName(), content.handlers())
+			.add("serveringspersonal", "Serveringspersonal", content.staff())
 			.add("anmarkningar", "Anmärkningar", content.remarks())
 			.add("anteckning", "Anteckning i " + source.getDisplayName(), visit.fritext())
 			.add(migrated(today, source))
@@ -154,19 +170,40 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
+	 * @return the name of the round with its days, "name, ÅÅÅÅ-MM-DD–ÅÅÅÅ-MM-DD", without what it lacks; null without a
+	 *         round
+	 */
+	static String roundName(final RoundRow round) {
+		if (round == null) {
+			return null;
+		}
+		final var start = SourceValues.format(round.start());
+		final var end = SourceValues.format(round.slut());
+		final var days = start == null || end == null || start.equals(end) ? Optional.ofNullable(start).orElse(end) : Texts.range(start, end);
+		return Texts.join(", ", Arrays.asList(Texts.trimToNull(round.namn()), days));
+	}
+
+	private static String announced(final VisitRow visit) {
+		return visit.announced() ? "Ja" : null;
+	}
+
+	/**
 	 * The investigation of the visit (decision 41): it started on the date of the visit at its start time, or at the start
 	 * of that day without one, and was completed on that date at its end time, the day after when the visit went on past
-	 * midnight. A visit without an end time has no end.
+	 * midnight. A visit without an end time has no end. The round of inspection the visit was made in, with its note, is
+	 * its description (decision 50), the note of the visit its summary and the remarks its conclusion (decision 45).
 	 */
-	static InvestigationData investigation(final String title, final VisitRow visit) {
+	static InvestigationData investigation(final String title, final VisitRow visit, final List<String> remarks, final RoundRow round) {
+		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(line("Tillsynsomgång", roundName(round)), Texts.trimToNull(round.fritext())));
+		final var texts = new InvestigationTexts(roundText, Texts.trimToNull(visit.fritext()), Texts.join("\n", remarks));
 		if (visit.datum() == null) {
-			return new InvestigationData(title, null, null);
+			return new InvestigationData(title, null, null, texts);
 		}
 		final var started = at(visit.datum(), visit.startTid()).orElse(visit.datum().atStartOfDay());
 		final var completed = at(visit.datum(), visit.slutTid())
 			.map(end -> end.isBefore(started) ? end.plusDays(1) : end)
 			.orElse(null);
-		return new InvestigationData(title, started, completed);
+		return new InvestigationData(title, started, completed, texts);
 	}
 
 	/**
@@ -175,6 +212,18 @@ public final class InspectionVisitCandidates {
 	private static Optional<LocalDateTime> at(final LocalDate date, final String time) {
 		return SourceValues.parseTime(withoutSeconds(time))
 			.map(hhmm -> "24:00".equals(hhmm) ? date.plusDays(1).atStartOfDay() : date.atTime(LocalTime.parse(hhmm)));
+	}
+
+	/**
+	 * @return each remark as a measure, as the AoT solution keeps the deficiencies of an inspection, headed by the text of
+	 *         its code, or "Anmärkning" for a remark with only a note (decision 57); a remark with neither is left out
+	 */
+	static List<MeasureData> measures(final List<RemarkRow> remarks, final InspectionVisitRows rows) {
+		return remarks.stream()
+			.map(remark -> new MeasureData(Texts.trimToNull(rows.remarkText(remark.code())), Texts.trimToNull(remark.notering())))
+			.filter(measure -> measure.title() != null || measure.description() != null)
+			.map(measure -> measure.title() == null ? new MeasureData(REMARK, measure.description()) : measure)
+			.toList();
 	}
 
 	/**
@@ -190,11 +239,14 @@ public final class InspectionVisitCandidates {
 	/**
 	 * What a visit holds, interpreted once for the description and the parameters.
 	 *
-	 * @param visit   the row of the visit
-	 * @param kind    the text of the kind of inspection
-	 * @param time    the time of the visit
-	 * @param remarks the remarks as texts
+	 * @param visit    the row of the visit
+	 * @param kind     the text of the kind of inspection
+	 * @param time     the time of the visit
+	 * @param remarks  the remarks as texts
+	 * @param handlers the names of the handlers, or their codes when no name is found (decision 48)
+	 * @param staff    the marks about the serving staff as texts (decision 48)
+	 * @param round    the round of inspection the visit was made in, null when none (decision 50)
 	 */
-	private record VisitContent(VisitRow visit, String kind, String time, List<String> remarks) {
+	private record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> handlers, List<String> staff, RoundRow round) {
 	}
 }

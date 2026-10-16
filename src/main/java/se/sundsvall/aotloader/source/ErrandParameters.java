@@ -12,6 +12,8 @@ public final class ErrandParameters {
 	public static final String LATEST_DECISION = "senasteBeslut";
 	public static final String AREA = "omrade";
 	public static final String ALKOL_FS_ID = "alkolFsId";
+	public static final String EVENT_LOG = "handelselogg";
+	public static final String HANDLERS = "handlaggare";
 
 	private ErrandParameters() {}
 }

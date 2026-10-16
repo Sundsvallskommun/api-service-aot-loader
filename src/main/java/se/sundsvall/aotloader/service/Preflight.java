@@ -3,6 +3,7 @@ package se.sundsvall.aotloader.service;
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
+import generated.se.sundsvall.supportmanagement.MeasureType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
@@ -35,6 +37,7 @@ import static java.util.stream.Collectors.toCollection;
 import static se.sundsvall.aotloader.Constants.LABEL_ATTRIBUTE_PROCESS_BLOCKED;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 
 /**
  * The checks before a run (section 9): what the configuration still waits for, that the file area and the source
@@ -74,6 +77,7 @@ public class Preflight {
 		final var labels = readLabels(municipalityId, problems);
 		labels.ifPresent(found -> checkLabels(found, types, problems));
 		checkActions(municipalityId, problems);
+		checkMeasures(municipalityId, types, problems);
 		final var purposes = readPurposes(municipalityId, problems);
 		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())), Map.of(municipalityId, purposes));
 	}
@@ -182,6 +186,36 @@ public class Preflight {
 			problems.add("Etiketterna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
 			return Optional.empty();
 		}
+	}
+
+	/**
+	 * Adds a problem when the remarks of the inspection visits cannot become measures (decision 57): the role they are
+	 * added
+	 * by is not set, or the namespace lacks the measure type of a type of visit, the type of its errands, which
+	 * SupportManagement requires of every measure.
+	 */
+	private void checkMeasures(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
+		final var measureTypes = types.stream()
+			.filter(type -> type.getKind() == TILLSYNSBESOK)
+			.map(type -> properties.errandType(type).type())
+			.filter(type -> !Texts.isBlank(type))
+			.collect(toCollection(TreeSet::new));
+		if (measureTypes.isEmpty()) {
+			return;
+		}
+		if (Texts.isBlank(properties.roles().measureAddedBy())) {
+			problems.add("Rollen som tillsynsbesökens åtgärder läggs till med är inte angiven (aot-loader.roles.measure-added-by, beslut 57)");
+		}
+		final Set<String> found;
+		try {
+			found = supportManagement.getMeasureTypes(municipalityId).stream().map(MeasureType::getName).collect(Collectors.toSet());
+		} catch (final RuntimeException e) {
+			problems.add("Åtgärdstyperna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+			return;
+		}
+		measureTypes.stream()
+			.filter(type -> !found.contains(type))
+			.forEach(type -> problems.add("Åtgärdstypen %s finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (beslut 57)".formatted(type)));
 	}
 
 	/**

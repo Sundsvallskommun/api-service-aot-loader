@@ -4,6 +4,7 @@ import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
+import generated.se.sundsvall.supportmanagement.MeasureType;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -68,10 +69,30 @@ class PreflightTest {
 	private Path directory;
 
 	@BeforeEach
-	void namespaceHasEveryPurpose() {
+	void namespaceHasEveryPurposeAndTheMeasureTypesOfTheInspections() {
 		lenient().when(supportManagement.getAttachmentPurposes(MUNICIPALITY_ID)).thenReturn(FilePurposes.ALL.stream()
 			.map(name -> new AttachmentPurpose().id("id-" + name).name(name).displayName(name.toLowerCase(Locale.ROOT)))
 			.toList());
+		lenient().when(supportManagement.getMeasureTypes(MUNICIPALITY_ID))
+			.thenReturn(List.of(new MeasureType().name("TYPE_ALCOHOL_INSPECTION_VISIT"), new MeasureType().name("TYPE_TOBACCO_INSPECTION_VISIT")));
+	}
+
+	@Test
+	void theVisitsNeedTheMeasureTypeOfTheirErrandsAndTheRoleOfTheMeasures() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
+		final var visits = Map.of(Source.ALKT, Set.of(TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSYNSBESOK));
+
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).isEmpty();
+
+		when(supportManagement.getMeasureTypes(MUNICIPALITY_ID)).thenReturn(List.of(new MeasureType().name("TYPE_ALCOHOL_INSPECTION_VISIT")));
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems())
+			.containsExactly("Åtgärdstypen TYPE_TOBACCO_INSPECTION_VISIT finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (beslut 57)");
+		// A run without visits gives no measures and needs no measure type
+		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).isEmpty();
+
+		when(supportManagement.getMeasureTypes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly("Åtgärdstyperna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
 	}
 
 	@Test
@@ -174,14 +195,17 @@ class PreflightTest {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(List.of(new Label().id("x").resourcePath("/TAGROOT/MIGRATED_ERRAND")
 			.attributes(List.of(new LabelAttribute().key("processBlocked").value("false")))));
 		final var inspection = new ErrandTypeSettings(null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
-		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null),
-			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection), Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
+		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null, null),
+			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection, ErrandType.ALCOHOL_INSPECTION_VISIT,
+				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true)),
+			Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
 			Map.of("Timrå", "22620"));
 		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
 
-		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(TILLSTAND, TILLSYN)));
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, TILLSYN)));
 
 		assertThat(result.problems()).contains(
+			"Rollen som tillsynsbesökens åtgärder läggs till med är inte angiven (aot-loader.roles.measure-added-by, beslut 57)",
 			"Den avslutade statusen för migrerade ärenden är inte angiven (aot-loader.errand-status, beslut 5)",
 			"Klassificering saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Typ i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 20)",

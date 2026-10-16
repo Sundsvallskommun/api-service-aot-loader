@@ -6,6 +6,6 @@
 	"placeName": "Krogen Tre",
 	"outcome": "MIGRERAD",
 	"rules": "G29",
-	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Tillståndet i PartyAssets har 2 av 2 filer: Ritning på lokalen med serveringsytan markerad 1, Beslut 1",
+	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget; Tillståndet i PartyAssets har 2 av 2 filer: Ritning på lokalen med serveringsytan markerad 1, Beslut 1",
 	"errandNumber": "ALKT-2026-6"
 }

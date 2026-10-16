@@ -7,7 +7,7 @@
 		"placeName": "Krogen Ett",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "G14",
-		"detail": "Till tillståndet i PartyAssets: Tillståndsbevis 1, Beslut 1; G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg)"
+		"detail": "Till tillståndet i PartyAssets: Tillståndsbevis 1, Beslut 1; G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg); Lagrum: ur tillståndets beslut eller bevis"
 	},
 	{
 		"source": "ALKT",
@@ -27,7 +27,7 @@
 		"placeName": "Krogen Tre",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "G29",
-		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning på lokalen med serveringsytan markerad 1, Beslut 1"
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning på lokalen med serveringsytan markerad 1, Beslut 1; Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget"
 	},
 	{
 		"source": "ALKT",

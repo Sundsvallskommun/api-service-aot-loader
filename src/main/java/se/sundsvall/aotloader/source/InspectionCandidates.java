@@ -12,6 +12,7 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
@@ -76,10 +77,11 @@ public final class InspectionCandidates {
 	 * @param  owner     the owner of the place, null when it has none
 	 * @param  permitKey the permit of the place, null when the place has no current permit
 	 * @param  decisions the decisions of the errand as texts, in order
+	 * @param  texts     the texts of the errand's investigation (decision 44)
 	 * @return           the builder of the candidate
 	 */
 	public Candidate.Builder builder(final InspectionErrand errand, final Place place, final ContactRow applicant, final ContactRow owner, final ItemKey permitKey,
-		final List<String> decisions) {
+		final List<String> decisions, final InvestigationTexts texts) {
 		final var hits = new ArrayList<RuleHit>();
 		if (place == null) {
 			hits.add(RuleHit.of(PLACE_MISSING, placeMissing));
@@ -98,7 +100,7 @@ public final class InspectionCandidates {
 			.place(place)
 			.title(title)
 			// The errand was started when it was opened and completed when it was closed (decision 41)
-			.investigation(new InvestigationData(title, SourceValues.startOfDay(errand.opened()), SourceValues.startOfDay(errand.closed())))
+			.investigation(new InvestigationData(title, SourceValues.startOfDay(errand.opened()), SourceValues.startOfDay(errand.closed()), texts))
 			.description(description(errand, decisions))
 			.labelPaths(settings.labels())
 			.labelPath(settings.sourceErrandType(errand.typeCode()).orElse(null))
@@ -113,6 +115,7 @@ public final class InspectionCandidates {
 			line("Diarienummer", errand.diaryNumber()),
 			"Öppnat: " + Optional.ofNullable(SourceValues.format(errand.opened())).orElse("okänt"),
 			"Avslutat: " + Optional.ofNullable(SourceValues.format(errand.closed())).orElse("inte avslutat"),
+			line("Handläggare", Texts.join(", ", errand.handlers())),
 			decisions.isEmpty() ? null : "Beslut: " + String.join("; ", decisions)));
 	}
 
@@ -124,6 +127,7 @@ public final class InspectionCandidates {
 			.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i " + sourceName, errand.diaryNumber())
 			.add("oppnat", "Öppnat", SourceValues.format(errand.opened()))
 			.add("avslutat", "Avslutat", SourceValues.format(errand.closed()))
+			.add(ErrandParameters.HANDLERS, "Handläggare i " + sourceName, errand.handlers())
 			.add("beslut", "Beslut i " + sourceName, decisions)
 			.add(migrated(today, errand.source()))
 			.build();
@@ -139,7 +143,13 @@ public final class InspectionCandidates {
 	 * @param diaryNumber the diary number
 	 * @param opened      the day the errand was opened
 	 * @param closed      the day the errand was closed, null when it is open
+	 * @param handlers    the names of the handlers of the errand, or their codes when no name is found (decision 51)
 	 */
-	public record InspectionErrand(Source source, Integer arendeId, String typeCode, String typeText, String diaryNumber, LocalDate opened, LocalDate closed) {
+	public record InspectionErrand(Source source, Integer arendeId, String typeCode, String typeText, String diaryNumber, LocalDate opened, LocalDate closed,
+		List<String> handlers) {
+
+		public InspectionErrand {
+			handlers = handlers == null ? List.of() : List.copyOf(handlers);
+		}
 	}
 }

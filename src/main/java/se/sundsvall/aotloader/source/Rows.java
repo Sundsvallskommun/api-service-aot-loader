@@ -4,10 +4,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -23,6 +25,17 @@ public final class Rows {
 
 	public static String text(final ResultSet rs, final String column) throws SQLException {
 		return Texts.trimToNull(rs.getString(column));
+	}
+
+	/**
+	 * @return the texts of the columns that are not blank, in the order of the columns
+	 */
+	public static List<String> texts(final ResultSet rs, final String... columns) throws SQLException {
+		final var texts = new ArrayList<String>();
+		for (final var column : columns) {
+			Optional.ofNullable(text(rs, column)).ifPresent(texts::add);
+		}
+		return texts;
 	}
 
 	public static LocalDate date(final ResultSet rs, final String column) throws SQLException {

@@ -92,3 +92,46 @@ INSERT INTO dbo.[Tillsyn_Anmärkningar] VALUES (950, 'Rekl I')
 INSERT INTO dbo.TillsynsArt (Kod, Klartext) VALUES ('Kontr', 'Kontrollköp')
 INSERT INTO dbo.Anmarkningar (Kod, Klartext) VALUES ('Rekl I', N'Påträngande reklam i butik')
 GO
+-- The texts of the errands, their events and decisions, and of the events of a place without an errand (decisions 44, 46 and 47)
+ALTER TABLE dbo.[Ärende] ADD Noteringar varchar(3000) NULL
+ALTER TABLE dbo.Beslut ADD BeslutsText varchar(1500) NULL
+ALTER TABLE dbo.[Händelser] ADD Handelsetext nvarchar(MAX) NULL
+CREATE TABLE dbo.[Händelsetyper] (Kod varchar(8) NULL, Klartext varchar(50) NULL, Passiv bit NULL)
+GO
+UPDATE dbo.[Ärende] SET Noteringar = 'Komplett ansökan' WHERE ArendeID = 100
+UPDATE dbo.Beslut SET BeslutsText = 'Tillstånd beviljas.' WHERE BeslutsID = 200
+UPDATE dbo.[Händelser] SET Handelsetext = N'Ansökan inkom' WHERE HandelseID = 300
+-- The event registers the folköl the place has notified, so its text is not in the log of the permit
+UPDATE dbo.[Händelser] SET Handelsetext = N'Anmälan om folköl' WHERE HandelseID = 301
+INSERT INTO dbo.[Händelser] (HandelseID, FSID, ArendeID, HandelseTyp, HandelseDatumTid, Handelsetext) VALUES (303, 1, NULL, '024', '2021-04-01T09:00:00', N'Samtal med kiosken')
+INSERT INTO dbo.[Händelsetyper] (Kod, Klartext) VALUES ('024', 'Anteckningar')
+GO
+-- The handlers of the visit, named by the number of the user AnvID (decision 48). There is no user 7, and PE is the code
+-- of a user, which the visits do not use
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD Handl1 nvarchar(5) NULL, Handl2 nvarchar(5) NULL, Handl3 nvarchar(5) NULL
+CREATE TABLE dbo.[Användare] (AnvID int IDENTITY(1, 1) NOT NULL, [AnvändarKod] nvarchar(4) NULL, Namn nvarchar(50) NULL)
+GO
+UPDATE dbo.[Tillsyn_Tillfälle] SET Handl1 = '2', Handl2 = '7', Handl3 = 'PE' WHERE TillsynsTillfalleNr = 950
+INSERT INTO dbo.[Användare] ([AnvändarKod], Namn) VALUES ('KA', N'Karin Andersson')
+INSERT INTO dbo.[Användare] ([AnvändarKod], Namn) VALUES ('PE', N'Per Eriksson')
+GO
+-- The handlers of the errand by the numbers of the users, who made the decision by the code of the user, a confidential event, an event without a
+-- text, and what the visit covered, that it was announced and its round of inspection (decisions 50-53)
+ALTER TABLE dbo.[Ärende] ADD HandlaggarID int NULL, HandlaggarID2 int NULL
+ALTER TABLE dbo.Beslut ADD BeslutsFattare varchar(5) NULL
+ALTER TABLE dbo.[Händelser] ADD Sekretess bit NOT NULL CONSTRAINT DF_Handelser_Sekretess DEFAULT 0
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD TillsynsOmgangsNr int NULL, AnmaltBesok bit NULL, TTypOL bit NULL, TTypTOBAK bit NULL, TTypNIKOTIN bit NULL, TTypECIG bit NULL,
+    TTypTobaksfriNikotin bit NOT NULL CONSTRAINT DF_Tillfalle_TTypTobaksfriNikotin DEFAULT 0
+CREATE TABLE dbo.[Tillsyn_Omgång] (TillsynsOmgangsID int NOT NULL, Omgangsnamn nvarchar(30) NULL, StartDatum datetime NULL, SlutDatum datetime NULL, Fritext nvarchar(MAX) NULL)
+GO
+UPDATE dbo.[Ärende] SET HandlaggarID = 1 WHERE ArendeID = 100
+UPDATE dbo.Beslut SET BeslutsFattare = 'PE' WHERE BeslutsID = 200
+UPDATE dbo.[Händelser] SET Sekretess = 1 WHERE HandelseID = 303
+INSERT INTO dbo.[Händelser] (HandelseID, FSID, ArendeID, HandelseTyp, HandelseDatumTid) VALUES (304, 1, 100, '017', '2019-06-15T09:00:00')
+INSERT INTO dbo.[Händelsetyper] (Kod, Klartext) VALUES ('017', 'Annan utsänd handling')
+UPDATE dbo.[Tillsyn_Tillfälle] SET TTypTOBAK = 1, TTypECIG = 1, AnmaltBesok = 1, TillsynsOmgangsNr = 1 WHERE TillsynsTillfalleNr = 950
+INSERT INTO dbo.[Tillsyn_Omgång] VALUES (1, N'Kontrollköp vecka 18', '2024-05-03', '2024-05-03', NULL)
+GO
+-- The event without a text was registered in another case, which the journal shows (decision 56)
+UPDATE dbo.[Händelser] SET DiarieNr = 'IAN-2019-99' WHERE HandelseID = 304
+GO

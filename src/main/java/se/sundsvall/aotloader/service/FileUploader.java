@@ -27,9 +27,11 @@ import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
+import se.sundsvall.aotloader.source.files.LegalBasis;
 import se.sundsvall.aotloader.support.MigrationException;
 
 import static java.util.stream.Collectors.joining;
+import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FILE_NOT_UPLOADED;
 
@@ -78,6 +80,40 @@ class FileUploader {
 				() -> uploadFile(municipalityId, errandId, lookup, wanted(candidate.detailsOf(reference), context, municipalityId), attached, problems));
 		}
 		reportAndFailOnUnreadable(problems, notes, candidate);
+	}
+
+	/**
+	 * Reads the legal basis of the permit from the first of its documents that states one, its decision or its certificate
+	 * (decision 58), and tells in the report whether one was found. A document whose name another place refers to too is
+	 * not read, since it may be that place's.
+	 *
+	 * @return the candidate with the legal basis on its post in PartyAssets; the candidate as it is when no document states
+	 *         one, or when it has no such documents
+	 */
+	Candidate withLegalBasis(final Candidate candidate, final RunContext context, final ReportNotes notes) {
+		final var asset = candidate.asset();
+		if (asset == null || asset.legalBasisDocuments().isEmpty()) {
+			return candidate;
+		}
+		final var fileArea = context.fileArea(candidate.key().source());
+		final var legalBasis = asset.legalBasisDocuments().stream()
+			.filter(document -> !document.sharedWithAnotherPlace())
+			.map(fileArea::find)
+			.filter(lookup -> lookup.result() == LookupResult.FOUND)
+			.map(this::legalBasisOf)
+			.flatMap(Optional::stream)
+			.findFirst();
+		notes.line(legalBasis.isPresent() ? "Lagrum: ur tillståndets beslut eller bevis" : "Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget");
+		return legalBasis.map(value -> candidate.withAsset(asset.withParameter(ASSET_PARAMETER_LEGAL_BASIS, value))).orElse(candidate);
+	}
+
+	private Optional<String> legalBasisOf(final FileArea.Lookup lookup) {
+		try {
+			return FileArea.read(lookup.path(), properties.maxFileSize().toBytes()).flatMap(LegalBasis::of);
+		} catch (final IOException _) {
+			// A document that cannot be read states nothing; the upload reports it
+			return Optional.empty();
+		}
 	}
 
 	/**

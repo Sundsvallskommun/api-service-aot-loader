@@ -99,7 +99,7 @@ public final class TestData {
 
 	private static AotLoaderProperties properties(final Map<ErrandType, ErrandTypeSettings> types, final String documents, final String attachments) {
 		return new AotLoaderProperties("AOT", "alkt-migration; type=migration", "alkt-migration", "MIGRATED", "SOLVED",
-			new Roles("PRIMARY", "CONTACT", "INSPECTED"),
+			new Roles("PRIMARY", "CONTACT", "INSPECTED", "MEASURER"),
 			types,
 			Map.of(Source.ALKT, new AotLoaderProperties.Database("jdbc:sqlserver://alkt", null, null, null), Source.ALKOL, new AotLoaderProperties.Database("jdbc:sqlserver://alkol", null, null, null)),
 			Map.of(Source.ALKT, new FileAreaDirectories(documents, attachments), Source.ALKOL, new FileAreaDirectories(documents, attachments)),
@@ -133,6 +133,15 @@ public final class TestData {
 			.build();
 	}
 
+	/**
+	 * @return a permit whose post reads its legal basis from the documents
+	 */
+	public static Candidate permitWithLegalBasisDocuments(final String objektId, final FileReference... documents) {
+		final var permit = permit(objektId);
+		final var asset = permit.asset();
+		return permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), asset.parameters(), List.of(documents)));
+	}
+
 	private static Candidate.Builder permitBuilder(final String objektId, final String area) {
 		return Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, objektId), ErrandType.SERVING_PERMIT)
 			.placeName("Restaurang " + objektId)
@@ -150,13 +159,17 @@ public final class TestData {
 	}
 
 	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId inspectionHolder) {
+		return inspection(arendeId, permitKey, HOLDER_ID, inspectionHolder);
+	}
+
+	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId permitHolder, final LegalId inspectionHolder) {
 		return Candidate.builder(new ItemKey(Source.ALKT, TILLSYN, arendeId), ErrandType.ALCOHOL_INSPECTION)
 			.placeName("Restaurang 1")
 			.holder(new Holder(inspectionHolder, "Bolaget AB", null, null, null, null, null, null))
 			.title("Tillsyn – Restaurang 1")
 			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0)))
 			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
-			.permitLink(new PermitLink(permitKey, HOLDER_ID, inspectionHolder))
+			.permitLink(new PermitLink(permitKey, permitHolder, inspectionHolder))
 			.build();
 	}
 

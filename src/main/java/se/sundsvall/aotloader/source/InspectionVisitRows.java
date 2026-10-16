@@ -1,6 +1,10 @@
 package se.sundsvall.aotloader.source;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -12,35 +16,65 @@ import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
+import static se.sundsvall.aotloader.source.Rows.date;
+import static se.sundsvall.aotloader.source.Rows.integer;
+import static se.sundsvall.aotloader.source.Rows.text;
 
 /**
  * The inspection visits of a source: the rows of Tillsyn_Tillfälle with their remarks and files, and the texts of the
  * code lists of the kinds of inspection and the remarks. AlkT and AlkOL have the same tables. The visits hold free text
  * that may name persons, so they are never logged or stored.
  *
- * @param visits      the visits
- * @param remarks     the remarks by TillsynsTillfalleNr
- * @param files       the names of the files of Tillsyn_Tillfälle_Filer by TillsynsTillfalleNr
- * @param kindTexts   the texts of the kinds of inspection by code
- * @param remarkTexts the texts of the remarks by code
+ * @param visits       the visits
+ * @param remarks      the remarks by TillsynsTillfalleNr
+ * @param files        the names of the files of Tillsyn_Tillfälle_Filer by TillsynsTillfalleNr
+ * @param kindTexts    the texts of the kinds of inspection by code
+ * @param remarkTexts  the texts of the remarks by code
+ * @param handlerNames the names of the handlers by the code the visits and the errands name them with
+ * @param rounds       the rounds of inspection by their id, Tillsyn_Omgång
  */
 public record InspectionVisitRows(
 	List<VisitRow> visits,
 	Map<Integer, List<RemarkRow>> remarks,
 	Map<Integer, List<String>> files,
 	Map<String, String> kindTexts,
-	Map<String, String> remarkTexts) {
+	Map<String, String> remarkTexts,
+	Map<String, String> handlerNames,
+	Map<Integer, RoundRow> rounds) {
+
+	/**
+	 * Visits without rounds of inspection.
+	 */
+	public InspectionVisitRows(final List<VisitRow> visits, final Map<Integer, List<RemarkRow>> remarks, final Map<Integer, List<String>> files,
+		final Map<String, String> kindTexts, final Map<String, String> remarkTexts, final Map<String, String> handlerNames) {
+		this(visits, remarks, files, kindTexts, remarkTexts, handlerNames, Map.of());
+	}
+
+	/**
+	 * Visits without names for the handlers or rounds of inspection.
+	 */
+	public InspectionVisitRows(final List<VisitRow> visits, final Map<Integer, List<RemarkRow>> remarks, final Map<Integer, List<String>> files,
+		final Map<String, String> kindTexts, final Map<String, String> remarkTexts) {
+		this(visits, remarks, files, kindTexts, remarkTexts, Map.of());
+	}
 
 	/**
 	 * @return no visits at all
 	 */
 	public static InspectionVisitRows empty() {
-		return new InspectionVisitRows(List.of(), Map.of(), Map.of(), Map.of(), Map.of());
+		return new InspectionVisitRows(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
 	}
 
 	@Override
 	public String toString() {
 		return "InspectionVisitRows[visits=" + visits.size() + "]";
+	}
+
+	/**
+	 * @return the round of inspection of a row of Tillsyn_Omgång, which AlkT and AlkOL keep with the same columns
+	 */
+	public static RoundRow toRound(final ResultSet rs) throws SQLException {
+		return new RoundRow(integer(rs, "TillsynsOmgangsID"), text(rs, "Omgangsnamn"), date(rs, "StartDatum"), date(rs, "SlutDatum"), text(rs, "Fritext"));
 	}
 
 	/**
@@ -86,6 +120,36 @@ public record InspectionVisitRows(
 	}
 
 	/**
+	 * @return the names of the handlers of the visit in order, each the code itself when no name is found, without
+	 *         repeating one (decision 48)
+	 */
+	public List<String> handlerNamesOf(final VisitRow visit) {
+		return handlerNames(visit.handlaggare());
+	}
+
+	/**
+	 * @return the names of the handlers in order, each the code itself when no name is found, without repeating one; the
+	 *         errands name their handlers with the same codes as the visits
+	 */
+	public List<String> handlerNames(final Collection<String> codes) {
+		return codes.stream().map(this::handlerName).distinct().toList();
+	}
+
+	/**
+	 * @return the name of the handler, or the code itself when no name is found; null for a null code
+	 */
+	public String handlerName(final String code) {
+		return CodeTexts.textOf(handlerNames, code);
+	}
+
+	/**
+	 * @return the round of inspection the visit was made in, null when it was in none or the round is missing
+	 */
+	public RoundRow roundOf(final VisitRow visit) {
+		return visit.omgangsNr() == null ? null : rounds.get(visit.omgangsNr());
+	}
+
+	/**
 	 * A row of Tillsyn_Tillfälle.
 	 *
 	 * @param tillfalleNr  TillsynsTillfalleNr, the id of the visit
@@ -97,6 +161,11 @@ public record InspectionVisitRows(
 	 * @param fritext      the note of the visit
 	 * @param worddokument the document the system generated for the visit
 	 * @param bifogadfil   the file attached to the visit
+	 * @param handlaggare  the codes of the handlers who made the visit, Handl1 to Handl3, those that are not blank
+	 * @param staff        the marks about the serving staff; AlkOL has none
+	 * @param omgangsNr    the round of inspection the visit was made in, TillsynsOmgangsNr, null when none
+	 * @param covered      what the inspection covered, such as tobacco or e-cigarettes, as texts; AlkT has none
+	 * @param announced    true when the visit was announced in advance; AlkT has no such mark
 	 */
 	public record VisitRow(
 		Integer tillfalleNr,
@@ -107,11 +176,88 @@ public record InspectionVisitRows(
 		String tillsynsart,
 		String fritext,
 		String worddokument,
-		String bifogadfil) {
+		String bifogadfil,
+		List<String> handlaggare,
+		StaffMarks staff,
+		Integer omgangsNr,
+		List<String> covered,
+		boolean announced) {
+
+		public VisitRow {
+			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
+			staff = staff == null ? StaffMarks.NONE : staff;
+			covered = covered == null ? List.of() : List.copyOf(covered);
+		}
+
+		/**
+		 * A visit outside a round of inspection, without marks of what it covered.
+		 */
+		public VisitRow(final Integer tillfalleNr, final Integer objektId, final LocalDate datum, final String startTid, final String slutTid, final String tillsynsart,
+			final String fritext, final String worddokument, final String bifogadfil, final List<String> handlaggare, final StaffMarks staff) {
+			this(tillfalleNr, objektId, datum, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, handlaggare, staff, null, List.of(), false);
+		}
+
+		/**
+		 * A visit without handlers or marks about the staff.
+		 */
+		public VisitRow(final Integer tillfalleNr, final Integer objektId, final LocalDate datum, final String startTid, final String slutTid, final String tillsynsart,
+			final String fritext, final String worddokument, final String bifogadfil) {
+			this(tillfalleNr, objektId, datum, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, List.of(), StaffMarks.NONE);
+		}
 
 		@Override
 		public String toString() {
 			return "VisitRow[tillfalleNr=" + tillfalleNr + "]";
+		}
+	}
+
+	/**
+	 * The marks AlkT keeps about the serving staff at a visit (decision 48).
+	 *
+	 * @param ownerOnSite     ServPersAgarePaPlats, the owner was on site
+	 * @param staffNotChecked ServPersEjKollat, the staff was not checked
+	 * @param staffNotOnSite  ServPersEjpaPlats, the staff was not on site
+	 */
+	public record StaffMarks(boolean ownerOnSite, boolean staffNotChecked, boolean staffNotOnSite) {
+
+		/**
+		 * No marks.
+		 */
+		public static final StaffMarks NONE = new StaffMarks(false, false, false);
+
+		/**
+		 * @return the marks that are set, as the business names them
+		 */
+		public List<String> texts() {
+			final var texts = new ArrayList<String>();
+			if (ownerOnSite) {
+				texts.add("Ägaren på plats");
+			}
+			if (staffNotChecked) {
+				texts.add("Personalen inte kontrollerad");
+			}
+			if (staffNotOnSite) {
+				texts.add("Personalen inte på plats");
+			}
+			return texts;
+		}
+	}
+
+	/**
+	 * A row of Tillsyn_Omgång, a round of inspection that holds several visits, such as an evening of inspections
+	 * together with the police.
+	 *
+	 * @param id      TillsynsOmgangsID
+	 * @param namn    the name of the round, Omgangsnamn
+	 * @param start   the first day of the round, null when unknown
+	 * @param slut    the last day of the round, null when unknown
+	 * @param fritext the note of the round, which concerns all its visits; null when blank
+	 */
+	public record RoundRow(Integer id, String namn, LocalDate start, LocalDate slut, String fritext) {
+
+		@Override
+		public String toString() {
+			return "RoundRow[id=" + id + "]";
 		}
 	}
 

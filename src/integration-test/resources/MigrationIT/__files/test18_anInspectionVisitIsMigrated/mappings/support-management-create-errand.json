@@ -82,7 +82,31 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[1] == 'Servering utom tillåten serveringstid')]"
 			},
 			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 2 && @.values[0] == 'Anna Berg' && @.values[1] == 'XYZ')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'serveringspersonal' && @.values.length() == 2 && @.values[0] == 'Ägaren på plats' && @.values[1] == 'Personalen inte på plats')]"
+			},
+			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.values[0] == '12345678')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsomgang' && @.values.length() == 1 && @.values[0] == 'Krogrunda, 2023-11-04–2023-11-05')]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.measures.length() == 2)]"
+			},
+			{
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Servering till minderårig' && @.description == 'Ungdomar i baren' && @.status == 'COMPLETED' && @.addedByUser == 'alkt-migration' && @.addedByRole == 'PRIMARY')]"
+			},
+			{
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Servering utom tillåten serveringstid' && @.status == 'COMPLETED')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"contains": "<p>Tillsynsart: Rutintillsyn</p><p>Tid: 21:30–23:00</p><p>Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05</p>"
+				}
 			},
 			{
 				"matches": "(?s).*Anteckning: Mycket folk i baren[.].*"

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.FileDetails;
@@ -90,6 +91,17 @@ public final class FileList {
 
 	public List<FileReference> build() {
 		return List.copyOf(files.values());
+	}
+
+	/**
+	 * @return the reference of the file of the list, which tells whether another place refers to its name too; empty when
+	 *         the list does not have the file or keeps it on the errand only, since such a file may be a former holder's
+	 */
+	public Optional<FileReference> findOfHolder(final String name, final FileFolder folder) {
+		return Optional.ofNullable(Texts.trimToNull(name))
+			.map(trimmed -> keyOf(trimmed, folder))
+			.filter(key -> !errandOnly.contains(key))
+			.map(files::get);
 	}
 
 	/**

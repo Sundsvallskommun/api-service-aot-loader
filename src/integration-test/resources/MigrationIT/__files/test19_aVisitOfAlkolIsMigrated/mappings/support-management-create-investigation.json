@@ -18,6 +18,24 @@
 					"expression": "$.status",
 					"equalTo": "COMPLETED"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.summary",
+					"equalTo": "Köpet nekades."
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"equalTo": "Påträngande reklam i butik"
+				}
 			}
 		]
 	},

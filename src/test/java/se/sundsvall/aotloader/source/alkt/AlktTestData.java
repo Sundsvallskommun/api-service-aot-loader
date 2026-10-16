@@ -8,6 +8,7 @@ import java.util.Map;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
@@ -18,6 +19,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 
 /**
  * Made up rows of AlkT for the tests. No row holds real data.
@@ -42,6 +44,7 @@ final class AlktTestData {
 		final var texts = new HashMap<String, Map<String, String>>();
 		texts.put("A", Map.of("07", "Tillsyn, ifrågasatt åtgärd", "08", "Tillsyn, restaurangrapport"));
 		texts.put("B", Map.of("GT", "Serveringstillstånd", "ER", "Erinran"));
+		texts.put("D", Map.of("ANT", "Anteckning"));
 		texts.put("G", Map.of("01", "Centrum"));
 		texts.put("O", Map.of("0100", "Krav på bordsservering"));
 		texts.put("P", Map.of("VD", "Verkställande direktör"));
@@ -71,11 +74,14 @@ final class AlktTestData {
 		private final Map<Integer, List<FileRow>> placeFiles = new HashMap<>();
 		private final Map<Integer, List<FileRow>> unplacedFiles = new HashMap<>();
 		private final List<DocumentRow> documents = new ArrayList<>();
+		private final Map<Integer, List<TextRow>> errandTexts = new HashMap<>();
+		private final Map<Integer, List<TextRow>> placeTexts = new HashMap<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
 		private final List<VisitRow> visits = new ArrayList<>();
 		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
 		private final Map<Integer, List<String>> visitFiles = new HashMap<>();
+		private final Map<Integer, RoundRow> rounds = new HashMap<>();
 
 		SnapshotBuilder permit(final PermitRow row) {
 			permits.add(row);
@@ -127,6 +133,16 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder errandText(final int arendeId, final TextRow row) {
+			errandTexts.computeIfAbsent(arendeId, _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		SnapshotBuilder placeText(final int objektId, final TextRow row) {
+			placeTexts.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
 		SnapshotBuilder person(final PersonRow row) {
 			persons.computeIfAbsent(row.agarId(), _ -> new ArrayList<>()).add(row);
 			return this;
@@ -152,10 +168,16 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder round(final RoundRow row) {
+			rounds.put(row.id(), row);
+			return this;
+		}
+
 		AlktSnapshot build() {
 			final var texts = codeTexts();
-			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeFiles, unplacedFiles, documents, persons, applicants, texts,
-				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V")));
+			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeFiles, unplacedFiles, documents, errandTexts, placeTexts, persons,
+				applicants, texts,
+				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V"), Map.of("ABE", "Anna Berg"), rounds));
 		}
 	}
 

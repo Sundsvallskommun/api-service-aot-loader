@@ -46,6 +46,8 @@ public final class Constants {
 	public static final String ASSET_PARAMETER_ERRAND_ID = "errandId";
 	/** The parameter of the permit with its conditions, as pw-alkt writes it. */
 	public static final String ASSET_PARAMETER_CONDITIONS = "conditions";
+	/** The parameter of the permit with its legal basis, as pw-alkt writes it (decision 58). */
+	public static final String ASSET_PARAMETER_LEGAL_BASIS = "legalBasis";
 	public static final String ASSET_ORIGIN = "SUPPORTMANAGEMENT";
 	/**
 	 * The category of the permit certificate on a permit in PartyAssets, the one pw-alkt replaces when the permit changes.

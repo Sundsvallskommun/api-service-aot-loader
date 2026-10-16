@@ -43,6 +43,7 @@ import se.sundsvall.aotloader.integration.relation.RelationIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
+import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.LegalId;
@@ -68,6 +69,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
@@ -275,6 +277,50 @@ class ItemMigratorTest {
 		order.verify(partyAssets).createAsset(eq(MUNICIPALITY_ID), anyString(), any());
 		order.verify(supportManagement).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), errandCaptor.capture());
 		assertThat(errandCaptor.getValue()).isEqualTo(new Errand().lifecycle(LifecycleEnum.ACTIVE));
+	}
+
+	@Test
+	void thePostGetsTheLegalBasisTheFirstDocumentOfTheHolderStates() throws IOException {
+		Files.writeString(documents.resolve("delad.rtf"), "{\\rtf1 8 kap. 6 \\'a7 alkohollagen (2010:1622)}");
+		Files.writeString(documents.resolve("beslut.rtf"), "{\\rtf1 Beslut}");
+		Files.writeString(documents.resolve("bevis.rtf"), "{\\rtf1 Tillst\\'e5nd enligt 8 kap. 2 \\'a7 alkohollagen (2010:1622)}");
+		Files.writeString(documents.resolve("senare.rtf"), "{\\rtf1 9 kap. 17 \\'a7 alkohollagen (2010:1622)}");
+		final var candidate = TestData.permitWithLegalBasisDocuments("1",
+			// A document another place also refers to may be that place's
+			new FileReference("delad.rtf", DOCUMENTS, true),
+			new FileReference("saknas.rtf", DOCUMENTS),
+			new FileReference("beslut.rtf", DOCUMENTS),
+			new FileReference("bevis.rtf", DOCUMENTS),
+			new FileReference("senare.rtf", DOCUMENTS));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of("attachment-id"));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), assetCaptor.capture())).thenReturn(Optional.of("asset-internal-id"));
+
+		final var dryRun = migrator.process(candidate, context(true));
+		final var result = migrator.process(candidate, context(false));
+
+		assertThat(dryRun.detail()).contains("Lagrum: ur tillståndets beslut eller bevis");
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Lagrum: ur tillståndets beslut eller bevis");
+		assertThat(assetCaptor.getValue().getAdditionalParameters()).containsEntry("legalBasis", "8 kap. 2 § alkohollagen (2010:1622)");
+	}
+
+	@Test
+	void aPostWhoseDocumentsStateNoLegalBasisGetsNone() throws IOException {
+		Files.writeString(documents.resolve("beslut.rtf"), "{\\rtf1 Beslut}");
+		Files.writeString(documents.resolve("skannad.pdf"), "%PDF-1.4 8 kap. 2 § alkohollagen (2010:1622)");
+		final var candidate = TestData.permitWithLegalBasisDocuments("1", new FileReference("beslut.rtf", DOCUMENTS), new FileReference("skannad.pdf", DOCUMENTS));
+
+		final var result = migrator.process(candidate, context(true));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(result.detail()).contains("Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget");
+		// A permit without such documents is not told about
+		assertThat(migrator.process(TestData.permit("2"), context(true)).detail()).doesNotContain("Lagrum");
 	}
 
 	@Test
@@ -833,6 +879,26 @@ class ItemMigratorTest {
 		assertThat(result.outcome()).isEqualTo(Outcome.VANTAR);
 		assertThat(result.detail()).isEqualTo("Väntar på tillståndet ALKT/TILLSTAND/1, som är GRANSKAS");
 		assertThat(savedStatuses).containsExactly(ItemStatus.VANTAR);
+	}
+
+	@Test
+	void anInspectionErrandThatCanGetNoRelationDoesNotWaitForThePermit() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.GRANSKAS, null)));
+
+		final var formerHolder = new LegalId("5599887766", PartyType.ENTERPRISE);
+		lenient().when(party.getPartyId(MUNICIPALITY_ID, formerHolder)).thenReturn(Optional.of("former-party"));
+
+		final var unknownHolder = migrator.process(TestData.inspection("703", permitKey, null), context(true));
+		final var unknownPermitHolder = migrator.process(TestData.inspection("704", permitKey, null, TestData.HOLDER_ID), context(true));
+		final var former = migrator.process(TestData.inspection("705", permitKey, formerHolder), context(true));
+
+		assertThat(unknownHolder.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(unknownHolder.detail()).contains("Ingen relation: det går inte att se vilken tillståndshavare ärendet gällde").doesNotContain("Väntar");
+		assertThat(unknownPermitHolder.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(unknownPermitHolder.detail()).contains("Ingen relation: det går inte att se vem som har tillståndet").doesNotContain("Väntar");
+		assertThat(former.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(former.detail()).contains("Ingen relation: ärendet gällde en tidigare tillståndshavare").doesNotContain("Väntar");
 	}
 
 	@Test

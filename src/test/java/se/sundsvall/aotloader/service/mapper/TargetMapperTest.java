@@ -9,6 +9,7 @@ import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
+import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.Clock;
@@ -26,7 +27,10 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.Kind;
+import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Source;
@@ -53,7 +57,8 @@ class TargetMapperTest {
 		final var errand = newDraft();
 
 		assertThat(errand.getTitle()).isEqualTo("Serveringstillstånd – Restaurang 1");
-		assertThat(errand.getDescription()).isEqualTo("Beskrivning");
+		// Draken reads the description as HTML
+		assertThat(errand.getDescription()).isEqualTo("<p>Beskrivning</p>");
 		assertThat(errand.getPriority()).isEqualTo(Priority.MEDIUM);
 		assertThat(errand.getStatus()).isEqualTo("SOLVED");
 		assertThat(errand.getClassification().getCategory()).isEqualTo("CATEGORY_SERVING_PERMIT");
@@ -128,6 +133,26 @@ class TargetMapperTest {
 	/**
 	 * A new draft of a permit with a holder, its contact person and two persons, the second without a party id.
 	 */
+	@Test
+	void theRemarksOfAVisitAreCompletedMeasuresOfTheTypeOfTheErrand() {
+		final var visit = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "900"), ErrandType.ALCOHOL_INSPECTION_VISIT)
+			.title("Tillsynsbesök – Restaurang 1")
+			.measures(List.of(new MeasureData("Servering till minderårig", "Ungdomar i baren"), new MeasureData("x".repeat(300), null)))
+			.build();
+
+		final var errand = mapper.toNewDraft(visit, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
+
+		assertThat(errand.getMeasures()).extracting(Measure::getType, Measure::getTitle, Measure::getDescription, Measure::getAddedByUser, Measure::getAddedByRole, Measure::getStatus)
+			.containsExactly(
+				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "Servering till minderårig", "Ungdomar i baren", "alkt-migration", "MEASURER", "COMPLETED"),
+				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "x".repeat(254) + "…", null, "alkt-migration", "MEASURER", "COMPLETED"));
+		// A visit without remarks sends an empty list, so that an update of a draft removes the measures of an earlier run
+		final var withoutRemarks = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "901"), ErrandType.ALCOHOL_INSPECTION_VISIT).build();
+		assertThat(mapper.toDraftUpdate(withoutRemarks, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getMeasures()).isEmpty();
+		// Another errand sends none, which leaves the measures of the errand as they are
+		assertThat(newDraft().getMeasures()).isNull();
+	}
+
 	private Errand newDraft() {
 		final var personIds = new ArrayList<String>();
 		personIds.add("person-party-id");
@@ -277,6 +302,19 @@ class TargetMapperTest {
 		assertThat(notCompleted.getTitle()).hasSize(255);
 		assertThat(notCompleted.getStartedAt()).isNull();
 		assertThat(notCompleted.getCompletedAt()).isNull();
+	}
+
+	@Test
+	void anInvestigationGetsTheTextsOfTheSource() {
+		final var withTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null, new InvestigationTexts("Noteringar", "2020-01-10 Anteckning: text", "2020-02-01 Erinran")));
+		final var withoutTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null));
+
+		assertThat(withTexts.getDescription()).isEqualTo("Noteringar");
+		assertThat(withTexts.getSummary()).isEqualTo("2020-01-10 Anteckning: text");
+		assertThat(withTexts.getConclusion()).isEqualTo("2020-02-01 Erinran");
+		assertThat(withoutTexts.getDescription()).isNull();
+		assertThat(withoutTexts.getSummary()).isNull();
+		assertThat(withoutTexts.getConclusion()).isNull();
 	}
 
 	@Test

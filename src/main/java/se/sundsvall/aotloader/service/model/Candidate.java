@@ -33,6 +33,7 @@ import static java.util.Objects.requireNonNull;
  * @param fileDetails   the purpose and date of the errand's files that have either, by file
  * @param investigation the investigation of an inspection errand, null for an errand without one
  * @param permitLink    for an inspection errand, what decides the relation to the permit errand, otherwise null
+ * @param measures      the measures of an inspection visit, its remarks (decision 57)
  */
 public record Candidate(
 	ItemKey key,
@@ -53,7 +54,8 @@ public record Candidate(
 	List<AssetFile> assetFiles,
 	Map<FileReference, FileDetails> fileDetails,
 	InvestigationData investigation,
-	PermitLink permitLink) {
+	PermitLink permitLink,
+	List<MeasureData> measures) {
 
 	public Candidate {
 		requireNonNull(key, "key");
@@ -66,6 +68,7 @@ public record Candidate(
 		files = files == null ? List.of() : List.copyOf(files);
 		assetFiles = assetFiles == null ? List.of() : List.copyOf(assetFiles);
 		fileDetails = fileDetails == null ? Map.of() : Map.copyOf(fileDetails);
+		measures = measures == null ? List.of() : List.copyOf(measures);
 	}
 
 	/**
@@ -73,6 +76,14 @@ public record Candidate(
 	 */
 	public FileDetails detailsOf(final FileReference file) {
 		return fileDetails.getOrDefault(file, FileDetails.NONE);
+	}
+
+	/**
+	 * @return the candidate with another post in PartyAssets
+	 */
+	public Candidate withAsset(final AssetData value) {
+		return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, value, files, assetFiles, fileDetails,
+			investigation, permitLink, measures);
 	}
 
 	public static Builder builder(final ItemKey key, final ErrandType type) {
@@ -99,6 +110,7 @@ public record Candidate(
 		private final List<FileReference> files = new ArrayList<>();
 		private final List<AssetFile> assetFiles = new ArrayList<>();
 		private final Map<FileReference, FileDetails> fileDetails = new LinkedHashMap<>();
+		private final List<MeasureData> measures = new ArrayList<>();
 		private String placeName;
 		private String placeNumber;
 		private Holder holder;
@@ -218,9 +230,14 @@ public record Candidate(
 			return this;
 		}
 
+		public Builder measures(final List<MeasureData> values) {
+			this.measures.addAll(values);
+			return this;
+		}
+
 		public Candidate build() {
 			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, asset, files, assetFiles, fileDetails, investigation,
-				permitLink);
+				permitLink, measures);
 		}
 	}
 }

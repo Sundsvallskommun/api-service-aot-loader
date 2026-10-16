@@ -4,13 +4,19 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PartyRows;
@@ -31,6 +37,7 @@ import static se.sundsvall.aotloader.source.Rows.flag;
 import static se.sundsvall.aotloader.source.Rows.integer;
 import static se.sundsvall.aotloader.source.Rows.isSet;
 import static se.sundsvall.aotloader.source.Rows.text;
+import static se.sundsvall.aotloader.source.Rows.texts;
 
 /**
  * Reads AlkOL, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
@@ -58,19 +65,26 @@ public class AlkolRepository {
 		""";
 
 	private static final String SELECT_ERRANDS = """
-		SELECT ar.ArendeID, ar.ObjektID, ar.Arendetyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.Sokandeid
+		SELECT ar.ArendeID, ar.ObjektID, ar.Arendetyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.Sokandeid, ar.Noteringar,
+		       ar.HandlaggarID, ar.HandlaggarID2
 		FROM dbo.[Ärende] ar
+		ORDER BY ar.ArendeID
 		""";
 
+	// Ordered, like the errands, so that decisions at the same time keep their order in the journal from run to run
 	private static final String SELECT_DECISIONS = """
 		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum,
-		       b.Dokument, b.Worddokument, b.Bifogadfil
+		       b.Dokument, b.Worddokument, b.Bifogadfil, b.BeslutsText, b.BeslutsFattare
 		FROM dbo.Beslut b
+		ORDER BY b.BeslutsID
 		""";
 
+	// Ordered so that events at the same time keep the order AlkOL gave them
 	private static final String SELECT_EVENTS = """
-		SELECT h.HandelseID, h.FSID, h.ArendeID, h.HandelseTyp, h.HandelseDatumTid, h.DiarieNr, h.Dokument, h.Worddokument, h.Bifogadfil
+		SELECT h.HandelseID, h.FSID, h.ArendeID, h.HandelseTyp, h.HandelseDatumTid, h.DiarieNr, h.Dokument, h.Worddokument, h.Bifogadfil,
+		       h.Handelsetext, h.Sekretess
 		FROM dbo.[Händelser] h
+		ORDER BY h.HandelseID
 		""";
 
 	private static final String SELECT_APPLICANTS = """
@@ -88,8 +102,23 @@ public class AlkolRepository {
 
 	private static final String SELECT_VISITS = """
 		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
-		       t.WordDokument, t.Bifogadfil
+		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.TillsynsOmgangsNr, t.AnmaltBesok,
+		       t.TTypOL, t.TTypTOBAK, t.TTypNIKOTIN, t.TTypECIG, t.TTypTobaksfriNikotin
 		FROM dbo.[Tillsyn_Tillfälle] t
+		""";
+
+	private static final String SELECT_ROUNDS = """
+		SELECT o.TillsynsOmgangsID, o.Omgangsnamn, o.StartDatum, o.SlutDatum, o.Fritext
+		FROM dbo.[Tillsyn_Omgång] o
+		""";
+
+	// The visits and errands name their handlers with the number of the user, AnvID, but the decisions name who made them
+	// with the code of the user, AnvändarKod (decisions 48, 51 and 53, analysis rounds 10c and 11). Ordered so that the
+	// first user of a code counts
+	private static final String SELECT_USERS = """
+		SELECT a.AnvID, a.[AnvändarKod], a.Namn
+		FROM dbo.[Användare] a
+		ORDER BY a.AnvID
 		""";
 
 	private static final String SELECT_VISIT_REMARKS = """
@@ -109,6 +138,13 @@ public class AlkolRepository {
 	// Kod is no key: an active row of a code gives its text before a passive one
 	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c ORDER BY c.Kod, ISNULL(c.Passiv, 0), c.Klartext";
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+	// The marks of a visit of what the inspection covered, with their texts, in the order the visit shows them
+	private static final List<Map.Entry<String, String>> COVERED = List.of(
+		Map.entry("TTypTOBAK", "Tobak"),
+		Map.entry("TTypOL", "Folköl"),
+		Map.entry("TTypECIG", "E-cigaretter"),
+		Map.entry("TTypTobaksfriNikotin", "Tobaksfria nikotinprodukter"),
+		Map.entry("TTypNIKOTIN", "Nikotin"));
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String TILLSYNSTILLFALLE_NR = "TillsynsTillfalleNr";
 	private static final String BIFOGADFIL = "Bifogadfil";
@@ -124,6 +160,7 @@ public class AlkolRepository {
 	 */
 	public AlkolSnapshot readSnapshot() {
 		final var jdbc = sourceDatabases.jdbcTemplate(ALKOL);
+		final var users = readUserNames(jdbc);
 		return new AlkolSnapshot(
 			// FSID, AgarID, ArendeID and SokandeID are primary keys, and the query of the persons leaves out rows without owner
 			jdbc.query(SELECT_PLACES, (rs, _) -> toPlace(rs)),
@@ -135,6 +172,7 @@ public class AlkolRepository {
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			codeTable(jdbc, "Beslutskoder"),
+			codeTable(jdbc, "[Händelsetyper]"),
 			codeTable(jdbc, "[Ärendetyper]"),
 			codeTable(jdbc, "Kategorier"),
 			codeTable(jdbc, "[Områden]"),
@@ -144,7 +182,40 @@ public class AlkolRepository {
 				jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
 				InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, TILLSYNSTILLFALLE_NR), text(rs, BIFOGADFIL)))),
 				codeTable(jdbc, "TillsynsArt"),
-				codeTable(jdbc, "Anmarkningar")));
+				codeTable(jdbc, "Anmarkningar"),
+				users.byNumber(),
+				// Tillsyn_Omgång has no primary key in AlkOL, so the first row of an id counts
+				byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id)),
+			users.byCode());
+	}
+
+	/**
+	 * @return the names of the users, by AnvID written as text and by AnvändarKod; the first user of a code counts
+	 */
+	static UserNames readUserNames(final JdbcTemplate jdbc) {
+		final var byNumber = new HashMap<String, String>();
+		final var byCode = new HashMap<String, String>();
+		jdbc.query(SELECT_USERS, rs -> {
+			final var id = integer(rs, "AnvID");
+			final var code = text(rs, "AnvändarKod");
+			final var name = text(rs, "Namn");
+			if (name != null && id != null) {
+				byNumber.put(String.valueOf(id), name);
+			}
+			if (name != null && code != null) {
+				byCode.putIfAbsent(code, name);
+			}
+		});
+		return new UserNames(byNumber, byCode);
+	}
+
+	/**
+	 * The names of the users of AlkOL.
+	 *
+	 * @param byNumber the names by AnvID written as text, the code the visits and errands name their handlers with
+	 * @param byCode   the names by AnvändarKod, the code the decisions name who made them with
+	 */
+	record UserNames(Map<String, String> byNumber, Map<String, String> byCode) {
 	}
 
 	private static Map<String, String> codeTable(final JdbcTemplate jdbc, final String table) {
@@ -192,7 +263,9 @@ public class AlkolRepository {
 			text(rs, "DiarieNr"),
 			date(rs, "OppnandeDatum"),
 			date(rs, "AvslutsDatum"),
-			integer(rs, "Sokandeid"));
+			integer(rs, "Sokandeid"),
+			text(rs, "Noteringar"),
+			Stream.of(integer(rs, "HandlaggarID"), integer(rs, "HandlaggarID2")).filter(Objects::nonNull).map(String::valueOf).toList());
 	}
 
 	static DecisionRow toDecision(final ResultSet rs) throws SQLException {
@@ -204,7 +277,9 @@ public class AlkolRepository {
 			date(rs, "GiltigtFROM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
-			text(rs, BIFOGADFIL));
+			text(rs, BIFOGADFIL),
+			text(rs, "BeslutsText"),
+			text(rs, "BeslutsFattare"));
 	}
 
 	static VisitRow toVisit(final ResultSet rs) throws SQLException {
@@ -217,7 +292,25 @@ public class AlkolRepository {
 			text(rs, "Tillsynsform"),
 			text(rs, "Fritext"),
 			text(rs, "WordDokument"),
-			text(rs, BIFOGADFIL));
+			text(rs, BIFOGADFIL),
+			texts(rs, "Handl1", "Handl2", "Handl3"),
+			StaffMarks.NONE,
+			integer(rs, "TillsynsOmgangsNr"),
+			covered(rs),
+			flag(rs, "AnmaltBesok"));
+	}
+
+	/**
+	 * @return what the inspection covered, by the marks of the visit, as texts (decision 50)
+	 */
+	static List<String> covered(final ResultSet rs) throws SQLException {
+		final var covered = new ArrayList<String>();
+		for (final var mark : COVERED) {
+			if (flag(rs, mark.getKey())) {
+				covered.add(mark.getValue());
+			}
+		}
+		return covered;
 	}
 
 	static RemarkRow toRemark(final ResultSet rs) throws SQLException {
@@ -243,6 +336,8 @@ public class AlkolRepository {
 			text(rs, "DiarieNr"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
-			text(rs, BIFOGADFIL));
+			text(rs, BIFOGADFIL),
+			text(rs, "Handelsetext"),
+			flag(rs, "Sekretess"));
 	}
 }

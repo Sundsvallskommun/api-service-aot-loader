@@ -22,7 +22,7 @@
 				},
 				"bodyPatterns": [
 					{
-						"equalTo": "{\\rtf1 Beslut}"
+						"equalTo": "{\\rtf1 Beslut enligt 8 kap. 2 \\'a7 alkohollagen (2010:1622)}"
 					}
 				]
 			},

@@ -30,6 +30,10 @@ import static java.util.Collections.emptyMap;
  * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
  *                      tell which file names are shared
  * @param documents     the documents AlkT generated at events, with the template each was made from
+ * @param errandTexts   the events of the errands, also those without a text, and the texts of their pictures, by
+ *                      ArendeID
+ * @param placeTexts    the events with a text that have no errand, by the ObjektID of the event, split the same way as
+ *                      the files
  * @param persons       the active persons with significant influence, by AgarID
  * @param applicants    the applicants of the inspection errands, by SokandeID
  * @param codeTexts     the texts of the code lists, by code type and code
@@ -46,6 +50,8 @@ public record AlktSnapshot(
 	Map<Integer, List<FileRow>> placeFiles,
 	Map<Integer, List<FileRow>> unplacedFiles,
 	List<DocumentRow> documents,
+	Map<Integer, List<TextRow>> errandTexts,
+	Map<Integer, List<TextRow>> placeTexts,
 	Map<Integer, List<PersonRow>> persons,
 	Map<Integer, ContactRow> applicants,
 	Map<String, Map<String, String>> codeTexts,
@@ -53,6 +59,7 @@ public record AlktSnapshot(
 
 	public static final String CODE_TYPE_ERRAND = "A";
 	public static final String CODE_TYPE_DECISION = "B";
+	public static final String CODE_TYPE_EVENT = "D";
 	public static final String CODE_TYPE_AREA = "G";
 	public static final String CODE_TYPE_INSPECTION_KIND = "L";
 	public static final String CODE_TYPE_CONDITION = "O";
@@ -85,6 +92,17 @@ public record AlktSnapshot(
 	 */
 	public List<FileRow> placeFilesOf(final Integer objektId) {
 		return placeFiles.getOrDefault(objektId, emptyList());
+	}
+
+	public List<TextRow> textsOf(final Integer arendeId) {
+		return errandTexts.getOrDefault(arendeId, emptyList());
+	}
+
+	/**
+	 * @return the texts of the events of the place that have no errand
+	 */
+	public List<TextRow> placeTextsOf(final Integer objektId) {
+		return placeTexts.getOrDefault(objektId, emptyList());
 	}
 
 	public List<PersonRow> personsOf(final Integer agarId) {
@@ -165,8 +183,10 @@ public record AlktSnapshot(
 	/**
 	 * A row of Ärende_Beslut.
 	 *
-	 * @param beslutad when the decision was made, null when unknown
-	 * @param mall     the code of the document template the decision document was made from, null when none
+	 * @param beslutad       when the decision was made, null when unknown
+	 * @param mall           the code of the document template the decision document was made from, null when none
+	 * @param beslutsText    BeslutsText and BeslutsText2, null when both are blank
+	 * @param beslutsfattare the code of the handler who made the decision, BeslutsFattare, null when blank
 	 */
 	public record DecisionRow(
 		Integer beslutsId,
@@ -176,7 +196,30 @@ public record AlktSnapshot(
 		LocalDate giltigtTom,
 		String mall,
 		String worddokument,
-		String bifogadFil) {
+		String bifogadFil,
+		String beslutsText,
+		String beslutsfattare) {
+
+		/**
+		 * A decision without a decision maker.
+		 */
+		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtTom, final String mall,
+			final String worddokument, final String bifogadFil, final String beslutsText) {
+			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtTom, mall, worddokument, bifogadFil, beslutsText, null);
+		}
+
+		/**
+		 * A decision without a text.
+		 */
+		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtTom, final String mall,
+			final String worddokument, final String bifogadFil) {
+			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtTom, mall, worddokument, bifogadFil, null);
+		}
+
+		@Override
+		public String toString() {
+			return "DecisionRow[beslutsId=" + beslutsId + ", arendeId=" + arendeId + ", beslutsTyp=" + beslutsTyp + "]";
+		}
 
 		/**
 		 * @return the date the decision was made, null when unknown
@@ -188,6 +231,9 @@ public record AlktSnapshot(
 
 	/**
 	 * A row of Ärende.
+	 *
+	 * @param notes       Noteringar to Noteringar8 and ArendeNotat, those that are not blank
+	 * @param handlaggare the codes of the handlers of the errand, HandlaggarID and HandlaggarID2, those that are not blank
 	 */
 	public record ErrandRow(
 		Integer arendeId,
@@ -196,7 +242,68 @@ public record AlktSnapshot(
 		String diarieNr,
 		LocalDate oppnad,
 		LocalDate avslutad,
-		Integer sokandeId) {
+		Integer sokandeId,
+		List<String> notes,
+		List<String> handlaggare) {
+
+		public ErrandRow {
+			notes = notes == null ? List.of() : List.copyOf(notes);
+			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
+		}
+
+		/**
+		 * An errand without handlers.
+		 */
+		public ErrandRow(final Integer arendeId, final Integer objektId, final String arendeTyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
+			final Integer sokandeId, final List<String> notes) {
+			this(arendeId, objektId, arendeTyp, diarieNr, oppnad, avslutad, sokandeId, notes, List.of());
+		}
+
+		/**
+		 * An errand without notes.
+		 */
+		public ErrandRow(final Integer arendeId, final Integer objektId, final String arendeTyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
+			final Integer sokandeId) {
+			this(arendeId, objektId, arendeTyp, diarieNr, oppnad, avslutad, sokandeId, List.of());
+		}
+
+		@Override
+		public String toString() {
+			return "ErrandRow[arendeId=" + arendeId + ", objektId=" + objektId + ", arendeTyp=" + arendeTyp + "]";
+		}
+	}
+
+	/**
+	 * An event or the text of a picture, which goes in the journal of the investigation or of the permit errand
+	 * (decisions 44, 46, 47 and 52).
+	 *
+	 * @param tidpunkt     when the event was or the picture was taken, null when unknown
+	 * @param handelseTyp  the code of the event type, null for a picture
+	 * @param picture      true for the text of a picture in Ärende_Bilder
+	 * @param text         the text, null for an event without one
+	 * @param confidential true when the event is marked as confidential, Sekretess
+	 * @param diarieNr     the diary number of the event, DiarieNr, null for a picture or when blank
+	 */
+	public record TextRow(LocalDateTime tidpunkt, String handelseTyp, boolean picture, String text, boolean confidential, String diarieNr) {
+
+		/**
+		 * An event or picture without a diary number of its own.
+		 */
+		public TextRow(final LocalDateTime tidpunkt, final String handelseTyp, final boolean picture, final String text, final boolean confidential) {
+			this(tidpunkt, handelseTyp, picture, text, confidential, null);
+		}
+
+		/**
+		 * An event or picture that is not marked as confidential.
+		 */
+		public TextRow(final LocalDateTime tidpunkt, final String handelseTyp, final boolean picture, final String text) {
+			this(tidpunkt, handelseTyp, picture, text, false);
+		}
+
+		@Override
+		public String toString() {
+			return "TextRow[tidpunkt=" + tidpunkt + ", handelseTyp=" + handelseTyp + ", picture=" + picture + ", confidential=" + confidential + "]";
+		}
 	}
 
 	/**

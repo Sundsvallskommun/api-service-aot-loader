@@ -156,6 +156,9 @@ class MigrationIT extends AbstractAppTest {
 	void test02_aPermitIsMigrated() {
 		migrateItem("ALKT/TILLSTAND/1", false);
 
+		assertThat(investigationTimes(PERMIT_ERRAND_ID))
+			.as("The trial started when the issuing errand was opened and was completed when the permit was issued, in Swedish time (decision 46)")
+			.containsExactly(Instant.parse("2018-12-31T23:00:00Z"), Instant.parse("2019-04-30T22:00:00Z"));
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26)
@@ -457,7 +460,8 @@ class MigrationIT extends AbstractAppTest {
 			Files.createDirectories(root.resolve("alkt-bilder"));
 			Files.createDirectories(root.resolve("alkol"));
 			Files.writeString(root.resolve("alkt-dokument").resolve("11111111.rtf"), "{\\rtf1 Dokument}");
-			Files.writeString(root.resolve("alkt-dokument").resolve("22222222.rtf"), "{\\rtf1 Beslut}");
+			// The decision states the legal basis of the permit, as the templates of AlkT write it (decision 58)
+			Files.writeString(root.resolve("alkt-dokument").resolve("22222222.rtf"), "{\\rtf1 Beslut enligt 8 kap. 2 \\'a7 alkohollagen (2010:1622)}");
 			Files.writeString(root.resolve("alkt-dokument").resolve("44444444.rtf"), "{\\rtf1 Beslut om Krogen Tre}");
 			Files.writeString(root.resolve("alkt-dokument").resolve("55555555.rtf"), "{\\rtf1 Tillståndsbevis}");
 			Files.writeString(root.resolve("alkt-bilder").resolve("ansokan.pdf"), "%PDF-1.4 ansökan");

@@ -58,6 +58,9 @@
 				"matchesJsonPath": "$.labels[?(@.id == 'label-internal-inspection')]"
 			},
 			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 2 && @.values[0] == 'Anna Berg' && @.values[1] == 'XYZ')]"
+			},
+			{
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001')]"
 			},
 			{

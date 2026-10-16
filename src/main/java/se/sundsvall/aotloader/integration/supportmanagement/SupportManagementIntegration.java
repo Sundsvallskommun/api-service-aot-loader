@@ -7,6 +7,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Label;
+import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
 import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.time.OffsetDateTime;
@@ -170,6 +171,13 @@ public class SupportManagementIntegration {
 	 */
 	public List<AttachmentPurpose> getAttachmentPurposes(final String municipalityId) {
 		return Optional.ofNullable(client.getAttachmentPurposes(municipalityId, namespace)).orElse(emptyList());
+	}
+
+	/**
+	 * @return the measure types of the namespace
+	 */
+	public List<MeasureType> getMeasureTypes(final String municipalityId) {
+		return Optional.ofNullable(client.getMeasureTypes(municipalityId, namespace)).orElse(emptyList());
 	}
 
 	private static boolean hasTag(final Errand errand, final String key, final String value) {

@@ -1,11 +1,15 @@
 package se.sundsvall.aotloader.support;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.web.util.HtmlUtils;
+
+import static java.util.stream.Collectors.joining;
 
 /**
  * Text handling shared by the readers and the mappers (section 7.5: blanks at the start and end are removed and empty
@@ -113,5 +117,25 @@ public final class Texts {
 	 */
 	public static String joinWords(final String... values) {
 		return join(" ", Arrays.asList(values));
+	}
+
+	/**
+	 * Writes a text of lines as HTML, one paragraph per line that is not blank, with the characters HTML gives a meaning
+	 * escaped. Draken shows the description of an errand in an editor that reads HTML, where a line break of plain text is
+	 * only a blank.
+	 *
+	 * @return the paragraphs, "&lt;p&gt;line&lt;/p&gt;" after each other, or null when the text has no line that is not
+	 *         blank
+	 */
+	public static String paragraphs(final String text) {
+		if (text == null) {
+			return null;
+		}
+		final var paragraphs = text.lines()
+			.map(Texts::trimToNull)
+			.filter(Objects::nonNull)
+			.map(line -> "<p>" + HtmlUtils.htmlEscape(line, StandardCharsets.UTF_8.name()) + "</p>")
+			.collect(joining());
+		return paragraphs.isEmpty() ? null : paragraphs;
 	}
 }

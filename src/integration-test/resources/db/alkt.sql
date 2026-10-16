@@ -130,3 +130,52 @@ INSERT INTO dbo.Klartext VALUES ('L', '04', 'Rutintillsyn')
 INSERT INTO dbo.Klartext VALUES ('V', '05', 'Servering till minderårig')
 INSERT INTO dbo.Klartext VALUES ('V', '06', 'Servering utom tillåten serveringstid')
 GO
+-- The texts of the errands, their events, decisions and pictures, and of an event of a place without an errand (decisions 44, 46 and 47)
+ALTER TABLE dbo.[Ärende] ADD Noteringar varchar(500) NULL, Noteringar2 varchar(500) NULL, Noteringar3 varchar(500) NULL, Noteringar4 varchar(500) NULL,
+    Noteringar5 varchar(3000) NULL, Noteringar5B varchar(500) NULL, Noteringar6 varchar(500) NULL, Noteringar7 varchar(500) NULL, Noteringar8 varchar(500) NULL,
+    ArendeNotat varchar(50) NULL
+ALTER TABLE dbo.[Ärende_Beslut] ADD BeslutsText varchar(1500) NULL, BeslutsText2 varchar(3000) NULL
+ALTER TABLE dbo.[Ärende_Händelser] ADD HandelseText varchar(MAX) NULL
+ALTER TABLE dbo.[Ärende_Bilder] ADD BildText varchar(1000) NULL
+GO
+UPDATE dbo.[Ärende] SET Noteringar = 'Ansökan komplett' WHERE ArendeID = 500
+UPDATE dbo.[Ärende] SET Noteringar5 = 'Klagomål från grannar' WHERE ArendeID = 700
+UPDATE dbo.[Ärende_Beslut] SET BeslutsText = 'Tillstånd beviljas.' WHERE BeslutsID = 100
+INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid, HandelseText) VALUES (10, 700, 1, 'ANT', '2021-01-15T10:00:00', 'Samtal med bolaget')
+INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid, HandelseText) VALUES (11, NULL, 1, 'ANT', '2020-02-01T08:00:00', 'Samtal om öppettider')
+INSERT INTO dbo.Klartext VALUES ('D', 'ANT', 'Anteckning')
+GO
+-- The second decision text, a picture with only a text, and the handlers and marks about the serving staff of the visit (decisions 44 and 48)
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD Handl1 varchar(5) NULL, Handl2 varchar(5) NULL, Handl3 varchar(5) NULL, ServPersEjKollat bit NULL, ServPersEjpaPlats bit NULL,
+    ServPersAgarePaPlats bit NULL
+CREATE TABLE dbo.[Handläggare] (HandlaggarID varchar(5) NOT NULL PRIMARY KEY, Namn varchar(40) NULL)
+GO
+UPDATE dbo.[Ärende_Beslut] SET BeslutsText2 = 'Med villkor om bordsservering.' WHERE BeslutsID = 100
+INSERT INTO dbo.[Ärende_Bilder] (ArendeID, BildDatumTid, Bildfilnamn, BildText) VALUES (700, '2021-01-20T10:00:00', NULL, 'Fasaden mot torget')
+-- XYZ has no name in Handläggare, so the visit names that handler by the code
+UPDATE dbo.[Tillsyn_Tillfälle] SET Handl1 = 'ABE', Handl2 = 'XYZ', ServPersAgarePaPlats = 1, ServPersEjKollat = 0, ServPersEjpaPlats = 1 WHERE TillsynsTillfalleNr = 900
+INSERT INTO dbo.[Handläggare] VALUES ('ABE', 'Anna Berg')
+GO
+-- The handlers of the errands, who made the decision, a confidential event, an event without a text and the round of inspection of the visit
+-- (decisions 50-53). XYZ has no name in Handläggare, so the errand names that handler by the code
+ALTER TABLE dbo.[Ärende] ADD HandlaggarID varchar(5) NULL, HandlaggarID2 varchar(5) NULL
+ALTER TABLE dbo.[Ärende_Beslut] ADD BeslutsFattare varchar(5) NULL
+ALTER TABLE dbo.[Ärende_Händelser] ADD Sekretess bit NOT NULL CONSTRAINT DF_Arende_Handelser_Sekretess DEFAULT 0
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD TillsynsOmgangsNr int NULL
+CREATE TABLE dbo.[Tillsyn_Omgång] (TillsynsOmgangsID int NOT NULL PRIMARY KEY, Omgangsnamn varchar(40) NULL, StartDatum datetime NULL, SlutDatum datetime NULL, Fritext varchar(1000) NULL)
+GO
+UPDATE dbo.[Ärende] SET HandlaggarID = 'ABE' WHERE ArendeID = 500
+UPDATE dbo.[Ärende] SET HandlaggarID = 'ABE', HandlaggarID2 = 'XYZ' WHERE ArendeID = 700
+UPDATE dbo.[Ärende_Beslut] SET BeslutsFattare = 'ABE' WHERE BeslutsID = 100
+UPDATE dbo.[Ärende_Händelser] SET Sekretess = 1 WHERE HandelseID = 10
+INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid) VALUES (12, 700, 1, 'REMP', '2021-01-18T09:00:00')
+INSERT INTO dbo.Klartext VALUES ('D', 'REMP', 'Remiss till polisen')
+INSERT INTO dbo.[Tillsyn_Omgång] VALUES (40, 'Krogrunda', '2023-11-04', '2023-11-05', 'Tillsammans med polisen.')
+UPDATE dbo.[Tillsyn_Tillfälle] SET TillsynsOmgangsNr = 40 WHERE TillsynsTillfalleNr = 900
+GO
+-- The diary number of an event, which the journal shows when it is another than that of its errand (decision 56)
+ALTER TABLE dbo.[Ärende_Händelser] ADD DiarieNr varchar(30) NULL
+GO
+UPDATE dbo.[Ärende_Händelser] SET DiarieNr = 'TIL-2021-7' WHERE HandelseID = 10
+UPDATE dbo.[Ärende_Händelser] SET DiarieNr = 'TIL-2020-3' WHERE HandelseID = 12
+GO

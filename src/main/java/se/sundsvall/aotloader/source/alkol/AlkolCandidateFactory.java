@@ -21,8 +21,10 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
+import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Place;
@@ -40,9 +42,11 @@ import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
+import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitFiles;
+import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.EventRow;
@@ -228,6 +232,11 @@ public final class AlkolCandidateFactory {
 		final var holder = PartyRows.holder(owner, today);
 		final var premises = place == null ? null : place(place);
 		final var files = permitFiles(place, fsId, grant, grantErrand, hits);
+		final var title = Texts.title("Tobakstillstånd", name);
+		final var log = eventsWithoutErrand(fsId)
+			.filter(event -> event.text() != null && !registersNotification(place, event))
+			.map(event -> journalEntry(event, null))
+			.toList();
 
 		return Candidate.builder(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), ErrandType.TOBACCO_PERMIT)
 			.placeName(placeName)
@@ -235,7 +244,10 @@ public final class AlkolCandidateFactory {
 			.holder(holder)
 			.place(premises)
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.persons().getOrDefault(owner.id(), List.of()), code -> CodeTexts.textOf(snapshot.positions(), code), today))
-			.title(Texts.title("Tobakstillstånd", name))
+			.title(title)
+			.investigation(PermitInvestigations.of(title, Stream.ofNullable(grantErrand).map(ErrandRow::oppnad).toList(),
+				Stream.ofNullable(grantErrand).map(ErrandRow::avslutad).toList(), grant == null ? null : grant.beslutsDatum(),
+				grantErrand == null ? InvestigationTexts.NONE : investigationTexts(grantErrand, place == null ? null : place.notering())))
 			.description(Texts.join("\n", Arrays.asList(
 				"Tobakstillstånd för " + name + ", migrerat från " + ALKOL.getDisplayName() + ".",
 				line("Tillståndstyp", kindsText),
@@ -248,14 +260,16 @@ public final class AlkolCandidateFactory {
 				.add("tillstandstyp", "Tillståndstyp", kindsText)
 				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(issued))
 				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
+				.add(ErrandParameters.HANDLERS, "Handläggare i AlkOL", grantErrand == null ? List.of() : snapshot.visits().handlerNames(grantErrand.handlaggare()))
 				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
 				.add("anmaldaProdukter", "Anmälda produkter", products)
 				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", place == null ? null : place.notering())
+				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.lines(log))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
-				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber)))
+				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber), legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -311,6 +325,18 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
+	 * @return the documents that state the legal basis of the permit, which AlkOL keeps nowhere else (decision 58): the
+	 *         certificate, and then the document of the latest grant; none that the permit keeps on its errand only, such
+	 *         as
+	 *         the certificate of an earlier grant
+	 */
+	private List<FileReference> legalBasisDocuments(final Integer fsId, final DecisionRow grant, final FileList files) {
+		final var certificate = certificate(fsId).flatMap(found -> files.findOfHolder(found.name(), found.folder()));
+		final var grantDocument = Optional.ofNullable(grant).flatMap(row -> files.findOfHolder(row.worddokument(), DOCUMENTS));
+		return Stream.of(certificate, grantDocument).flatMap(Optional::stream).toList();
+	}
+
+	/**
 	 * @return the latest certificate of the place: the document of a granting decision made from the template of the
 	 *         certificate, or else an attachment of the decision whose name tells it is a certificate
 	 */
@@ -334,8 +360,13 @@ public final class AlkolCandidateFactory {
 	/**
 	 * @return the events of the place that have no errand
 	 */
+	/**
+	 * @return the events of the place without an errand; an event whose errand is missing in Ärende counts as one without
+	 *         an
+	 *         errand, as in AlkT, so that its text and files are not lost
+	 */
 	private Stream<EventRow> eventsWithoutErrand(final Integer fsId) {
-		return eventsByPlace.getOrDefault(fsId, List.of()).stream().filter(event -> event.arendeId() == null);
+		return eventsByPlace.getOrDefault(fsId, List.of()).stream().filter(event -> event.arendeId() == null || !errandsById.containsKey(event.arendeId()));
 	}
 
 	/**
@@ -440,7 +471,7 @@ public final class AlkolCandidateFactory {
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
 		final var place = errand.fsId() == null ? null : placesById.get(errand.fsId());
 		final var source = new InspectionErrand(ALKOL, errand.arendeId(), errand.arendetyp(), CodeTexts.textOf(snapshot.errandTypes(), errand.arendetyp()), errand.diarieNr(), errand.oppnad(),
-			errand.avslutad());
+			errand.avslutad(), snapshot.visits().handlerNames(errand.handlaggare()));
 		final var applicant = errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId());
 		final var permitKey = hasPermit(errand.fsId()) ? new ItemKey(ALKOL, TILLSTAND, String.valueOf(errand.fsId())) : null;
 		final var decisions = decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()
@@ -450,7 +481,7 @@ public final class AlkolCandidateFactory {
 			.toList();
 
 		final var files = addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
-		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions)
+		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions, investigationTexts(errand))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -590,6 +621,40 @@ public final class AlkolCandidateFactory {
 			.max(DECISION_ORDER)
 			.map(this::decisionText)
 			.orElse(null);
+	}
+
+	/**
+	 * @return the texts of the investigation of the errand: its notes, its events, and its decisions with their texts and
+	 *         who made them (decisions 44, 46, 52 and 53)
+	 */
+	private InvestigationTexts investigationTexts(final ErrandRow errand) {
+		return investigationTexts(errand, null);
+	}
+
+	/**
+	 * @param  shownNote a note the errand already shows as a parameter, which the investigation leaves out; null when none
+	 * @return           the texts of the investigation of the errand, as above, without the note already shown
+	 */
+	private InvestigationTexts investigationTexts(final ErrandRow errand, final String shownNote) {
+		return Journal.investigation(
+			Stream.ofNullable(errand.noteringar()).filter(note -> !note.equals(shownNote)).toList(),
+			eventsByErrand.getOrDefault(errand.arendeId(), List.of()).stream().map(event -> journalEntry(event, errand.diarieNr())).toList(),
+			decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()
+				.map(decision -> new Journal.Entry(decision.beslutad(),
+					Journal.decisionHeading(CodeTexts.textOf(snapshot.decisionTypes(), decision.beslutsTyp()), CodeTexts.textOf(snapshot.userNames(), decision.beslutsfattare())),
+					decision.beslutsText()))
+				.toList());
+	}
+
+	/**
+	 * @param  errandDiaryNumber the diary number of the errand of the event, null for an event without an errand
+	 * @return                   the event as an entry of a journal, headed by the text of its type, marked when
+	 *                           confidential and with its own diary number when it is another than the errand's
+	 */
+	private Journal.Entry journalEntry(final EventRow event, final String errandDiaryNumber) {
+		return new Journal.Entry(event.tidpunkt(),
+			Journal.eventHeading(CodeTexts.textOf(snapshot.eventTypes(), event.handelseTyp()), event.confidential(), Journal.otherDiaryNumber(event.diarieNr(), errandDiaryNumber)),
+			event.text());
 	}
 
 	private String decisionText(final DecisionRow decision) {

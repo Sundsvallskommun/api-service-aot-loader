@@ -1,0 +1,48 @@
+{
+	"name": "support-management-create-investigation",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/investigations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "COMPLETED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Komplett ansökan"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.summary",
+					"equalTo": "2019-06-01 001: Ansökan inkom\n2019-06-15 Annan utsänd handling (diarienummer IAN-2019-99)"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"equalTo": "2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Per Eriksson: Tillstånd beviljas."
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/investigations/investigation-1"
+		}
+	}
+}

@@ -18,6 +18,18 @@
 					"expression": "$.status",
 					"equalTo": "COMPLETED"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Klagomål från grannar"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.summary",
+					"equalTo": "2021-01-15 Anteckning (sekretess): Samtal med bolaget\n2021-01-18 Remiss till polisen (diarienummer TIL-2020-3)\n2021-01-20 Bild: Fasaden mot torget"
+				}
 			}
 		]
 	},

@@ -13,6 +13,7 @@ import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.Clock;
@@ -32,6 +33,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Person;
@@ -76,6 +78,9 @@ public class TargetMapper {
 	private static final String INVESTIGATION_ACTIVE = "ACTIVE";
 	private static final String INVESTIGATION_COMPLETED = "COMPLETED";
 	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
+	private static final String MEASURE_COMPLETED = "COMPLETED";
+	private static final int MEASURE_TITLE_MAX_LENGTH = 255;
+	private static final int MEASURE_DESCRIPTION_MAX_LENGTH = 3000;
 
 	private final AotLoaderProperties properties;
 	private final Clock clock;
@@ -116,9 +121,9 @@ public class TargetMapper {
 
 	private Errand toErrand(final Candidate candidate, final String municipalityId, final PartyIds parties, final Map<String, String> labelIds) {
 		final var settings = properties.errandType(candidate.type());
-		return new Errand()
+		final var errand = new Errand()
 			.title(candidate.title())
-			.description(candidate.description())
+			.description(Texts.paragraphs(candidate.description()))
 			.priority(Priority.MEDIUM)
 			.status(properties.errandStatus())
 			.classification(new Classification().category(settings.category()).type(settings.type()))
@@ -131,6 +136,31 @@ public class TargetMapper {
 				.flatMap(List::stream)
 				.map(TargetMapper::toParameter)
 				.toList());
+		// A visit always sends its list, also an empty one, so that an update of a draft replaces what an earlier run gave it
+		if (candidate.type().getKind() == Kind.TILLSYNSBESOK) {
+			errand.measures(measures(candidate, settings.type()));
+		}
+		return errand;
+	}
+
+	/**
+	 * @param  type the type of the measures, the type of the errand, as the AoT solution gives the measures of an
+	 *              inspection
+	 *              of the kind
+	 * @return      the measures of an inspection visit, its remarks (decision 57): added by the migration in the role
+	 *              Draken
+	 *              gives every measure, and completed, so that no remark of a closed visit counts as an open deficiency
+	 */
+	private List<Measure> measures(final Candidate candidate, final String type) {
+		return candidate.measures().stream()
+			.map(measure -> new Measure()
+				.type(type)
+				.title(Texts.truncate(measure.title(), MEASURE_TITLE_MAX_LENGTH, null))
+				.description(Texts.truncate(measure.description(), MEASURE_DESCRIPTION_MAX_LENGTH, null))
+				.addedByUser(properties.reporterUserId())
+				.addedByRole(properties.roles().measureAddedBy())
+				.status(MEASURE_COMPLETED))
+			.toList();
 	}
 
 	/**
@@ -223,17 +253,22 @@ public class TargetMapper {
 	}
 
 	/**
-	 * @return the investigation of an inspection errand or visit, completed when the source tells when the inspection was,
-	 *         with the times in Swedish time (decision 41); an end later than now, which the source has in error or for a
-	 *         planned inspection, leaves it active without an end
+	 * @return the investigation of an inspection errand, visit or permit, completed when the source tells when the
+	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source
+	 *         (decisions 44–46); an end later than now, which the source has in error or for a planned inspection, leaves
+	 *         it active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
 		final var completedAt = Optional.ofNullable(inSwedishTime(investigation.completedAt()))
 			.filter(time -> !time.toInstant().isAfter(clock.instant()))
 			.orElse(null);
+		final var texts = investigation.texts();
 		return new Investigation()
 			.status(completedAt == null ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
 			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
+			.description(texts.description())
+			.summary(texts.summary())
+			.conclusion(texts.conclusion())
 			.startedAt(inSwedishTime(investigation.startedAt()))
 			.completedAt(completedAt);
 	}

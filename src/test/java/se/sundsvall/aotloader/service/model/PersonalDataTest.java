@@ -9,8 +9,10 @@ import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitFileRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
+import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot;
@@ -37,20 +39,35 @@ class PersonalDataTest {
 		assertHidden(new PermitLink(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), legalId, legalId));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
 		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
+		assertHidden(new InvestigationData("Tillsyn", null, null, new InvestigationTexts(NAME, NAME + " " + NUMBER, NUMBER)));
+		assertHidden(new Journal.Entry(null, "Anteckning", NAME + " " + NUMBER));
+	}
+
+	@Test
+	void theTextsOfTheSourcesHidePersonalData() {
+		assertHidden(new AlktSnapshot.ErrandRow(1, 1, "07", null, null, null, null, List.of(NAME + " " + NUMBER)));
+		assertHidden(new AlktSnapshot.DecisionRow(1, 1, "VT", null, null, null, null, null, NAME + " " + NUMBER));
+		assertHidden(new AlktSnapshot.TextRow(null, "ANT", false, NAME + " " + NUMBER, true));
+		assertHidden(new AlkolSnapshot.ErrandRow(1, 1, "IT", null, null, null, null, NAME + " " + NUMBER));
+		assertHidden(new AlkolSnapshot.DecisionRow(1, 1, "VT", null, null, null, null, null, NAME + " " + NUMBER));
+		assertHidden(new AlkolSnapshot.EventRow(1, 1, 1, "024", null, null, null, null, null, NAME + " " + NUMBER));
+		assertHidden(new MeasureData("Servering till minderårig", NAME + " " + NUMBER));
 	}
 
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1));
-		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
-		final var visit = new VisitRow(1, 1, null, null, null, null, NAME + " " + NUMBER, null, null);
+		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		final var visit = new VisitRow(1, 1, null, null, null, null, NAME + " " + NUMBER, null, null, List.of(NAME), null);
 		final var remark = new RemarkRow(1, "05", NAME + " " + NUMBER, null);
+		final var round = new RoundRow(1, NAME, null, null, NAME + " " + NUMBER);
 		assertHidden(visit);
 		assertHidden(remark);
-		assertHidden(new InspectionVisitRows(List.of(visit), Map.of(1, List.of(remark)), Map.of(), Map.of(), Map.of()));
+		assertHidden(round);
+		assertHidden(new InspectionVisitRows(List.of(visit), Map.of(1, List.of(remark)), Map.of(), Map.of(), Map.of(), Map.of("TT", NAME), Map.of(1, round)));
 	}
 
 	@Test
@@ -66,7 +83,7 @@ class PersonalDataTest {
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");
