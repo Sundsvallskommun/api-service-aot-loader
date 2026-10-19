@@ -41,7 +41,7 @@ public final class LegalBasis {
 		final var references = new LinkedHashSet<String>();
 		// A non-breaking space, written as the escaped character a0 or as Unicode 160 in the document, separates the words as a
 		// space does
-		REFERENCE.matcher(text(new String(content, WINDOWS_1252)).replace(' ', ' ')).results()
+		REFERENCE.matcher(text(new String(content, WINDOWS_1252)).replace('\u00A0', ' ')).results()
 			.map(match -> match.group().replace("§", " § ").replaceAll("\\s+", " ").strip())
 			.forEach(references::add);
 		return Optional.ofNullable(Texts.join("; ", references));

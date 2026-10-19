@@ -171,16 +171,6 @@ public class TargetMapper {
 	}
 
 	/**
-	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4).
-	 *
-	 * @param  candidate      the candidate
-	 * @param  municipalityId the municipality the run is started for
-	 * @param  errandId       the id of the errand
-	 * @param  partyId        the partyId of the holder
-	 * @param  expired        true to create the post as EXPIRED (the exception list said so)
-	 * @return                the request
-	 */
-	/**
 	 * @return the keys of the parameters of the post that are longer than PartyAssets takes, and which {@link #toAsset}
 	 *         therefore cuts, in the order of the parameters
 	 */
@@ -191,6 +181,16 @@ public class TargetMapper {
 			.toList();
 	}
 
+	/**
+	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4).
+	 *
+	 * @param  candidate      the candidate
+	 * @param  municipalityId the municipality the run is started for
+	 * @param  errandId       the id of the errand
+	 * @param  partyId        the partyId of the holder
+	 * @param  expired        true to create the post as EXPIRED (the exception list said so)
+	 * @return                the request
+	 */
 	public AssetCreateRequest toAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyId, final boolean expired) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
