@@ -29,6 +29,17 @@ class AlkolRepositoryTest {
 	}
 
 	@Test
+	void whatTheInspectionCoveredInTheOrderTheVisitShowsIt() throws SQLException {
+		final var rs = mock(ResultSet.class);
+		when(rs.getBoolean("TTypNIKOTIN")).thenReturn(true);
+		when(rs.getBoolean("TTypOL")).thenReturn(true);
+		when(rs.getBoolean("TTypTOBAK")).thenReturn(true);
+
+		assertThat(AlkolRepository.covered(rs)).containsExactly("Tobak", "Folköl", "Nikotin");
+		assertThat(AlkolRepository.covered(mock(ResultSet.class))).isEmpty();
+	}
+
+	@Test
 	void theUsersAreNamedByTheirNumberAndByTheirCode() throws SQLException {
 		final var jdbc = mock(JdbcTemplate.class);
 		final var rs = mock(ResultSet.class);

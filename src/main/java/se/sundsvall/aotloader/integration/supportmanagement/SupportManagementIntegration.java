@@ -9,6 +9,7 @@ import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.Role;
 import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -178,6 +179,13 @@ public class SupportManagementIntegration {
 	 */
 	public List<MeasureType> getMeasureTypes(final String municipalityId) {
 		return Optional.ofNullable(client.getMeasureTypes(municipalityId, namespace)).orElse(emptyList());
+	}
+
+	/**
+	 * @return the roles of the namespace
+	 */
+	public List<Role> getRoles(final String municipalityId) {
+		return Optional.ofNullable(client.getRoles(municipalityId, namespace)).orElse(emptyList());
 	}
 
 	private static boolean hasTag(final Errand errand, final String key, final String value) {

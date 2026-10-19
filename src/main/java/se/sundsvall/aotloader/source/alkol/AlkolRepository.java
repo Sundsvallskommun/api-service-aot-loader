@@ -4,7 +4,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,13 +137,6 @@ public class AlkolRepository {
 	// Kod is no key: an active row of a code gives its text before a passive one
 	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c ORDER BY c.Kod, ISNULL(c.Passiv, 0), c.Klartext";
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
-	// The marks of a visit of what the inspection covered, with their texts, in the order the visit shows them
-	private static final List<Map.Entry<String, String>> COVERED = List.of(
-		Map.entry("TTypTOBAK", "Tobak"),
-		Map.entry("TTypOL", "Folköl"),
-		Map.entry("TTypECIG", "E-cigaretter"),
-		Map.entry("TTypTobaksfriNikotin", "Tobaksfria nikotinprodukter"),
-		Map.entry("TTypNIKOTIN", "Nikotin"));
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String TILLSYNSTILLFALLE_NR = "TillsynsTillfalleNr";
 	private static final String BIFOGADFIL = "Bifogadfil";
@@ -301,16 +293,25 @@ public class AlkolRepository {
 	}
 
 	/**
-	 * @return what the inspection covered, by the marks of the visit, as texts (decision 50)
+	 * @return what the inspection covered, by the marks of the visit, as texts in the order the visit shows them (decision
+	 *         50)
 	 */
 	static List<String> covered(final ResultSet rs) throws SQLException {
-		final var covered = new ArrayList<String>();
-		for (final var mark : COVERED) {
-			if (flag(rs, mark.getKey())) {
-				covered.add(mark.getValue());
-			}
-		}
-		return covered;
+		return Stream.of(
+			markText(rs, "TTypTOBAK", "Tobak"),
+			markText(rs, "TTypOL", "Folköl"),
+			markText(rs, "TTypECIG", "E-cigaretter"),
+			markText(rs, "TTypTobaksfriNikotin", "Tobaksfria nikotinprodukter"),
+			markText(rs, "TTypNIKOTIN", "Nikotin"))
+			.filter(Objects::nonNull)
+			.toList();
+	}
+
+	/**
+	 * @return the text when the mark is set, otherwise null
+	 */
+	private static String markText(final ResultSet rs, final String column, final String text) throws SQLException {
+		return flag(rs, column) ? text : null;
 	}
 
 	static RemarkRow toRemark(final ResultSet rs) throws SQLException {

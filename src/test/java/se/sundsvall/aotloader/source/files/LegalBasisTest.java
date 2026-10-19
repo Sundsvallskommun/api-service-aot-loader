@@ -2,12 +2,14 @@ package se.sundsvall.aotloader.source.files;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class LegalBasisTest {
 
@@ -56,6 +58,13 @@ class LegalBasisTest {
 
 		assertThat(LegalBasis.text(new String(decision, StandardCharsets.ISO_8859_1))).isEqualTo("{8 kap. 2 § alkohollagen (2010:1622)} \\  fet");
 		assertThat(LegalBasis.of(decision)).hasValue("8 kap. 2 § alkohollagen (2010:1622)");
+	}
+
+	@Test
+	void aLongNumberIsSearchedInLinearTime() {
+		final var decision = rtf("{\\rtf1 " + "1".repeat(200_000) + " 8 kap. 2\\'a7alkohollagen (2010:1622)}");
+
+		assertThat(assertTimeoutPreemptively(Duration.ofSeconds(5), () -> LegalBasis.of(decision))).hasValue("8 kap. 2 § alkohollagen (2010:1622)");
 	}
 
 	@Test

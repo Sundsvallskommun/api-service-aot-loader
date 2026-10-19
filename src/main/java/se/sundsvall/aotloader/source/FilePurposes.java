@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.source;
 
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -81,7 +82,8 @@ public final class FilePurposes {
 		entry(Pattern.compile("milj[oö]"), ENVIRONMENT_OFFICE_RESPONSE),
 		entry(Pattern.compile("(?<![a-zåäö])syna(?![a-zåäö])|kreditupplys"), CREDIT_REPORT_RESPONSE));
 
-	private static final Pattern KITCHEN = Pattern.compile("kök|(?<![a-zåäö])kok(?![a-zåäö])");
+	private static final String KITCHEN = "kök";
+	private static final Pattern KITCHEN_ASCII = Pattern.compile("(?<![a-zåäö])kok(?![a-zåäö])");
 
 	private FilePurposes() {}
 
@@ -102,7 +104,9 @@ public final class FilePurposes {
 	 */
 	public static String ofAttachment(final Source source, final String eventType, final String name) {
 		final var type = Optional.ofNullable(Texts.trimToNull(eventType)).map(code -> code.toUpperCase(Locale.ROOT)).orElse("");
-		final var lowerCase = Optional.ofNullable(name).map(text -> text.toLowerCase(Locale.ROOT)).orElse("");
+		// Composed, so that an å, ä or ö written as a letter and a combining mark matches too. The flag CANON_EQ would
+		// do that in the patterns, but then their lookbehinds no longer stop a match after a letter.
+		final var lowerCase = Optional.ofNullable(name).map(text -> Normalizer.normalize(text, Normalizer.Form.NFC).toLowerCase(Locale.ROOT)).orElse("");
 		if (RESPONSE_EVENTS.get(source).contains(type)) {
 			return RESPONDENTS.stream()
 				.filter(respondent -> respondent.getKey().matcher(lowerCase).find())
@@ -114,7 +118,7 @@ public final class FilePurposes {
 			return SELF_MONITORING_PROGRAM;
 		}
 		if (PermitFiles.isDrawing(name)) {
-			if (KITCHEN.matcher(lowerCase).find()) {
+			if (lowerCase.contains(KITCHEN) || KITCHEN_ASCII.matcher(lowerCase).find()) {
 				return KITCHEN_FLOOR_PLAN;
 			}
 			return source == ALKT ? SERVING_AREA_DRAWING : SALES_PREMISES_DRAWING;

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -49,13 +50,13 @@ public final class Journal {
 	 * @param  event  the diary number of the event
 	 * @param  errand the diary number of its errand, null for an event without an errand
 	 * @return        the diary number of the event when it is another than that of its errand, which shows that it was
-	 *                registered in another case; null when it is the same, when it is blank or when there is no errand to
-	 *                compare with (decision 56)
+	 *                registered in another case; null when it is the same, compared as {@link DiaryNumbers} does, when it
+	 *                is blank or when there is no errand to compare with (decision 56)
 	 */
 	public static String otherDiaryNumber(final String event, final String errand) {
-		final var own = Texts.trimToNull(event);
-		final var errands = Texts.trimToNull(errand);
-		return own == null || errands == null || own.equalsIgnoreCase(errands) ? null : own;
+		final var own = DiaryNumbers.normalize(event);
+		final var errands = DiaryNumbers.normalize(errand);
+		return own == null || errands == null || own.equals(errands) ? null : Texts.trimToNull(event);
 	}
 
 	/**

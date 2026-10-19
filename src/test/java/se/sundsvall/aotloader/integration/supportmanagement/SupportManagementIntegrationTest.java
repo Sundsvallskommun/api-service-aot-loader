@@ -10,6 +10,7 @@ import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.Role;
 import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.net.URI;
 import java.time.OffsetDateTime;
@@ -145,6 +146,14 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).extracting(Investigation::getId).containsExactly("i");
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).isEmpty();
 		assertThat(integration.createInvestigation(MUNICIPALITY_ID, "a", investigation)).isEqualTo("i-1");
+	}
+
+	@Test
+	void roles() {
+		when(client.getRoles(MUNICIPALITY_ID, NAMESPACE)).thenReturn(List.of(new Role().name("PRIMARY")), null);
+
+		assertThat(integration.getRoles(MUNICIPALITY_ID)).extracting(Role::getName).containsExactly("PRIMARY");
+		assertThat(integration.getRoles(MUNICIPALITY_ID)).isEmpty();
 	}
 
 	@Test

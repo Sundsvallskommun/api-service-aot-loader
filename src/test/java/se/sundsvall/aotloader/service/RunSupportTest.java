@@ -46,7 +46,8 @@ class RunSupportTest {
 	void runContext() {
 		final var stop = new AtomicBoolean();
 		final var fileAreas = new AtomicInteger();
-		final var context = new RunContext("run", "2281", true, Map.of("2281", Map.of("A", "1")), Map.of("2281", Map.of("SERVING_AREA_DRAWING", new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"))), 2, stop, _ -> {
+		final var check = new Preflight.Result(List.of(), Map.of("2281", Map.of("A", "1")), Map.of("2281", Map.of("SERVING_AREA_DRAWING", new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"))));
+		final var context = new RunContext("run", "2281", true, check, 2, stop, _ -> {
 			fileAreas.incrementAndGet();
 			return new FileArea(null, 1);
 		});

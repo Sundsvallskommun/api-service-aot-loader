@@ -166,6 +166,42 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void aLegalBasisDocumentThatCannotBeReadFailsTheStepRatherThanLeavingThePostWithoutIt() throws IOException {
+		Files.writeString(documents.resolve("bevis.rtf"), "{\\rtf1 8 kap. 2 \\'a7 alkohollagen (2010:1622)}");
+		final var unreadable = new FileReference("beslut.rtf", DOCUMENTS);
+		final var gone = new FileReference("borta.rtf", DOCUMENTS);
+		final var certificate = new FileReference("bevis.rtf", DOCUMENTS);
+		final var fileArea = mock(FileArea.class);
+		when(fileArea.find(unreadable)).thenReturn(new FileArea.Lookup(LookupResult.UNREADABLE, "beslut.rtf", documents.resolve("beslut.rtf"), 0));
+		// Found before the file was removed
+		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "borta.rtf", documents.resolve("borta.rtf"), 6));
+		when(fileArea.find(certificate)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "bevis.rtf", documents.resolve("bevis.rtf"), 50));
+		final var notes = new ReportNotes();
+
+		assertThatThrownBy(() -> uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", unreadable, certificate), context(fileArea), notes))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Tillståndets beslut eller bevis på filarean för AlkT gick inte att läsa, och lagrummet läses i nästa körning");
+		assertThatThrownBy(() -> uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", gone, certificate), context(fileArea), notes))
+			.isInstanceOf(MigrationException.class);
+		// A document after the one that states the legal basis is not read
+		assertThat(uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", certificate, unreadable), context(fileArea), notes).asset().parameters())
+			.containsEntry("legalBasis", "8 kap. 2 § alkohollagen (2010:1622)");
+	}
+
+	@Test
+	void aDryRunTellsThatALegalBasisDocumentCannotBeRead() {
+		final var unreadable = new FileReference("beslut.rtf", DOCUMENTS);
+		final var fileArea = mock(FileArea.class);
+		when(fileArea.find(unreadable)).thenReturn(new FileArea.Lookup(LookupResult.DIRECTORY_UNAVAILABLE, "beslut.rtf", documents.resolve("beslut.rtf"), 0));
+		final var candidate = TestData.permitWithLegalBasisDocuments("1", unreadable);
+		final var dryRun = new RunContext("run-id", MUNICIPALITY_ID, true, check(), null, new AtomicBoolean(), _ -> fileArea);
+		final var notes = new ReportNotes();
+
+		assertThat(uploader.withLegalBasis(candidate, dryRun, notes)).isSameAs(candidate);
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Lagrum: tillståndets beslut eller bevis gick inte att läsa");
+	}
+
+	@Test
 	void aDryRunChecksTheFilesWithoutUploading() throws IOException {
 		Files.delete(attachments.resolve("ansokan.pdf"));
 		final var notes = new ReportNotes();
@@ -287,7 +323,7 @@ class FileUploaderTest {
 	@Test
 	void aPurposeNotReadForTheMunicipalityStopsTheFiles() {
 		final var candidate = withDetails(Map.of(new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(FilePurposes.POLICE_REQUEST, null)));
-		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(), null, new AtomicBoolean(),
+		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, new Preflight.Result(List.of(), Map.of(), Map.of()), null, new AtomicBoolean(),
 			source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
 		final var notes = new ReportNotes();
@@ -521,10 +557,14 @@ class FileUploaderTest {
 	}
 
 	private RunContext context(final FileArea fileArea) {
-		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(MUNICIPALITY_ID, TestData.purposes()), null, new AtomicBoolean(), _ -> fileArea);
+		return new RunContext("run-id", MUNICIPALITY_ID, false, check(), null, new AtomicBoolean(), _ -> fileArea);
 	}
 
 	private RunContext context() {
-		return new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(), Map.of(MUNICIPALITY_ID, TestData.purposes()), null, new AtomicBoolean(), source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
+		return new RunContext("run-id", MUNICIPALITY_ID, false, check(), null, new AtomicBoolean(), source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes()));
+	}
+
+	private static Preflight.Result check() {
+		return new Preflight.Result(List.of(), Map.of(), Map.of(MUNICIPALITY_ID, TestData.purposes()));
 	}
 }

@@ -35,20 +35,19 @@ public final class RunContext {
 	 * @param runId           the run
 	 * @param municipalityId  the municipality the run is started for, which every item is written to (decision 19)
 	 * @param dryRun          true for a dry run, which writes nothing to the target systems or the status table
-	 * @param labelIds        the ids of the labels by normalized resource path, per municipality
-	 * @param purposes        the attachment purposes a file can get, by name, per municipality
+	 * @param check           what the checks before the run found: the ids of the labels by normalized resource path
+	 *                        and the attachment purposes a file can get by name, per municipality
 	 * @param limit           the largest number of items the run writes, null for no limit
 	 * @param stopRequested   set when the run is to stop before its next item
 	 * @param fileAreaFactory creates the file area of a source, once per run
 	 */
-	public RunContext(final String runId, final String municipalityId, final boolean dryRun, final Map<String, Map<String, String>> labelIds,
-		final Map<String, Map<String, FilePurpose>> purposes, final Integer limit, final AtomicBoolean stopRequested,
-		final Function<Source, FileArea> fileAreaFactory) {
+	public RunContext(final String runId, final String municipalityId, final boolean dryRun, final Preflight.Result check, final Integer limit,
+		final AtomicBoolean stopRequested, final Function<Source, FileArea> fileAreaFactory) {
 		this.runId = runId;
 		this.municipalityId = municipalityId;
 		this.dryRun = dryRun;
-		this.labelIds = Map.copyOf(labelIds);
-		this.purposes = Map.copyOf(purposes);
+		this.labelIds = check.labelIds();
+		this.purposes = check.purposes();
 		this.limit = limit;
 		this.stopRequested = stopRequested;
 		this.fileAreaFactory = fileAreaFactory;

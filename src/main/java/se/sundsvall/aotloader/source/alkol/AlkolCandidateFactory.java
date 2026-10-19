@@ -24,9 +24,11 @@ import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
+import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
@@ -206,26 +208,15 @@ public final class AlkolCandidateFactory {
 	}
 
 	private Candidate permit(final Integer fsId, final SalesPlaceRow place) {
-		final var hits = new ArrayList<RuleHit>();
-		if (place == null) {
-			hits.add(RuleHit.of(PLACE_MISSING, "försäljningsstället finns inte"));
-		}
 		final var owner = ownerOf(place);
-		ownerHits(place, owner, hits);
-		if (place != null && place.upphort()) {
-			hits.add(RuleHit.of(SALES_PLACE_CEASED));
-		}
 		final var grant = latestGrant(fsId).orElse(null);
 		final var grantErrand = grant == null ? null : errandsById.get(grant.arendeId());
-		grantHits(fsId, grant, grantErrand, owner, hits);
-		openErrandHits(grantErrand == null ? List.of() : List.of(grantErrand), hits);
-		final var issued = grant == null ? null : Optional.ofNullable(grant.giltigtFrom()).orElse(grant.beslutsDatum());
-		if (grant != null && issued == null) {
-			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
-		}
+		final var issued = issued(grant);
+		final var hits = permitHits(fsId, place, owner, grant, grantErrand, issued);
 
 		final var placeName = place == null ? null : place.namn();
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SALES_PLACE);
+		final var notes = place == null ? null : place.notering();
 		final var diaryNumber = grantErrand == null ? null : grantErrand.diarieNr();
 		final var products = place == null ? List.<String>of() : notifiedProducts(place);
 		final var kindsText = Texts.join(", ", permitKinds(fsId, grant));
@@ -243,11 +234,9 @@ public final class AlkolCandidateFactory {
 			.ruleHits(hits)
 			.holder(holder)
 			.place(premises)
-			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.persons().getOrDefault(owner.id(), List.of()), code -> CodeTexts.textOf(snapshot.positions(), code), today))
+			.persons(persons(owner))
 			.title(title)
-			.investigation(PermitInvestigations.of(title, Stream.ofNullable(grantErrand).map(ErrandRow::oppnad).toList(),
-				Stream.ofNullable(grantErrand).map(ErrandRow::avslutad).toList(), grant == null ? null : grant.beslutsDatum(),
-				grantErrand == null ? InvestigationTexts.NONE : investigationTexts(grantErrand, place == null ? null : place.notering())))
+			.investigation(permitInvestigation(title, grant, grantErrand, notes))
 			.description(Texts.join("\n", Arrays.asList(
 				"Tobakstillstånd för " + name + ", migrerat från " + ALKOL.getDisplayName() + ".",
 				line("Tillståndstyp", kindsText),
@@ -264,7 +253,7 @@ public final class AlkolCandidateFactory {
 				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
 				.add("anmaldaProdukter", "Anmälda produkter", products)
-				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", place == null ? null : place.notering())
+				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", notes)
 				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.lines(log))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
@@ -272,6 +261,53 @@ public final class AlkolCandidateFactory {
 				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber), legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
+	}
+
+	/**
+	 * The rules about the tobacco permit that its place, its owner and its latest granting decision decide: G1, those of
+	 * the owner, G25, those of the grant, Ä1 and G9.
+	 *
+	 * @return the hits, to which the files of the permit add theirs
+	 */
+	private List<RuleHit> permitHits(final Integer fsId, final SalesPlaceRow place, final ContactRow owner, final DecisionRow grant, final ErrandRow grantErrand,
+		final LocalDate issued) {
+		final var hits = new ArrayList<RuleHit>();
+		if (place == null) {
+			hits.add(RuleHit.of(PLACE_MISSING, "försäljningsstället finns inte"));
+		}
+		ownerHits(place, owner, hits);
+		if (place != null && place.upphort()) {
+			hits.add(RuleHit.of(SALES_PLACE_CEASED));
+		}
+		grantHits(fsId, grant, grantErrand, owner, hits);
+		openErrandHits(grantErrand == null ? List.of() : List.of(grantErrand), hits);
+		if (grant != null && issued == null) {
+			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
+		}
+		return hits;
+	}
+
+	/**
+	 * @return the day the tobacco permit was issued: the first day of the latest grant, else the day it was decided; null
+	 *         without a grant
+	 */
+	private static LocalDate issued(final DecisionRow grant) {
+		return grant == null ? null : Optional.ofNullable(grant.giltigtFrom()).orElse(grant.beslutsDatum());
+	}
+
+	private List<Person> persons(final ContactRow owner) {
+		return owner == null ? List.of() : PartyRows.persons(snapshot.persons().getOrDefault(owner.id(), List.of()), code -> CodeTexts.textOf(snapshot.positions(), code), today);
+	}
+
+	/**
+	 * @param  shownNote the note of the place, which the permit already shows as a parameter; null when none
+	 * @return           the investigation of the tobacco permit from the errand of its latest grant (decision 46), without
+	 *                   the note already shown
+	 */
+	private InvestigationData permitInvestigation(final String title, final DecisionRow grant, final ErrandRow grantErrand, final String shownNote) {
+		return PermitInvestigations.of(title, Stream.ofNullable(grantErrand).map(ErrandRow::oppnad).toList(),
+			Stream.ofNullable(grantErrand).map(ErrandRow::avslutad).toList(), grant == null ? null : grant.beslutsDatum(),
+			grantErrand == null ? InvestigationTexts.NONE : investigationTexts(grantErrand, shownNote));
 	}
 
 	/**
@@ -327,8 +363,7 @@ public final class AlkolCandidateFactory {
 	/**
 	 * @return the documents that state the legal basis of the permit, which AlkOL keeps nowhere else (decision 58): the
 	 *         certificate, and then the document of the latest grant; none that the permit keeps on its errand only, such
-	 *         as
-	 *         the certificate of an earlier grant
+	 *         as the certificate of an earlier grant
 	 */
 	private List<FileReference> legalBasisDocuments(final Integer fsId, final DecisionRow grant, final FileList files) {
 		final var certificate = certificate(fsId).flatMap(found -> files.findOfHolder(found.name(), found.folder()));
@@ -358,15 +393,18 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * @return the events of the place that have no errand
-	 */
-	/**
 	 * @return the events of the place without an errand; an event whose errand is missing in Ärende counts as one without
-	 *         an
-	 *         errand, as in AlkT, so that its text and files are not lost
+	 *         an errand, as in AlkT, so that its text and files are not lost
 	 */
 	private Stream<EventRow> eventsWithoutErrand(final Integer fsId) {
-		return eventsByPlace.getOrDefault(fsId, List.of()).stream().filter(event -> event.arendeId() == null || !errandsById.containsKey(event.arendeId()));
+		return eventsByPlace.getOrDefault(fsId, List.of()).stream().filter(event -> !hasErrand(event));
+	}
+
+	/**
+	 * @return true for an event whose errand is in Ärende
+	 */
+	private boolean hasErrand(final EventRow event) {
+		return event.arendeId() != null && errandsById.containsKey(event.arendeId());
 	}
 
 	/**
@@ -791,13 +829,14 @@ public final class AlkolCandidateFactory {
 
 	/**
 	 * Every file reference of AlkOL with the sales place it belongs to: the place of the errand it goes to, or the errand
-	 * itself when the errand has no place. An event without an errand belongs to its own place, or is a place of its own.
+	 * itself when the errand has no place. An event without an errand, also one whose errand is missing (decision 54),
+	 * belongs to its own place, or is a place of its own.
 	 */
 	private SharedFileNames sharedFileNames() {
 		final var names = SharedFileNames.builder(properties.fileArea(ALKOL));
 		snapshot.events().forEach(event -> {
 			final var withoutErrand = event.fsId() != null ? "fs:" + event.fsId() : "handelse:" + event.handelseId();
-			final var place = placeKeyOfErrand(event.arendeId(), withoutErrand);
+			final var place = hasErrand(event) ? placeKeyOfErrand(event.arendeId(), withoutErrand) : withoutErrand;
 			names.add(place, event.worddokument(), DOCUMENTS).add(place, event.bifogadfil(), ATTACHMENTS);
 		});
 		snapshot.decisions().forEach(decision -> {

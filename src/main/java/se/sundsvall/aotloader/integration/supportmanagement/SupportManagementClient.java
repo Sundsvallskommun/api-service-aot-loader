@@ -8,6 +8,7 @@ import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
+import generated.se.sundsvall.supportmanagement.Role;
 import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -115,6 +116,11 @@ public interface SupportManagementClient {
 
 	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/measuretypes", produces = APPLICATION_JSON_VALUE)
 	List<MeasureType> getMeasureTypes(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/roles", produces = APPLICATION_JSON_VALUE)
+	List<Role> getRoles(
 		@PathVariable String municipalityId,
 		@PathVariable String namespace);
 }

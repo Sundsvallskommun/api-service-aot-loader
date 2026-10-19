@@ -42,6 +42,7 @@ public final class InspectionVisitCandidates {
 
 	private static final Pattern SECONDS = Pattern.compile("^(\\d{1,2}[:.]\\d{2})[:.]\\d{2}$");
 	private static final String REMARK = "Anmärkning";
+	private static final String ROUND = "Tillsynsomgång";
 
 	private final ErrandType type;
 	private final ErrandTypeSettings settings;
@@ -113,7 +114,7 @@ public final class InspectionVisitCandidates {
 		lines.add(Texts.joinWords("Tillsynsbesök på " + name, SourceValues.format(visit.datum())) + ", migrerat från " + type.getSource().getDisplayName() + ".");
 		lines.add(line("Tillsynsart", content.kind()));
 		lines.add(line("Tid", content.time()));
-		lines.add(line("Tillsynsomgång", roundName(content.round())));
+		lines.add(line(ROUND, roundName(content.round())));
 		lines.add(line("Tillsynen gällde", Texts.join(", ", visit.covered())));
 		lines.add(line("Anmält besök", announced(visit)));
 		lines.add(line("Handläggare", Texts.join(", ", content.handlers())));
@@ -134,7 +135,7 @@ public final class InspectionVisitCandidates {
 			.add("besoksdatum", "Besöksdatum", SourceValues.format(visit.datum()))
 			.add("besokstid", "Tid", content.time())
 			.add("tillsynsart", "Tillsynsart", content.kind())
-			.add("tillsynsomgang", "Tillsynsomgång", roundName(content.round()))
+			.add("tillsynsomgang", ROUND, roundName(content.round()))
 			.add("tillsynenGallde", "Tillsynen gällde", visit.covered())
 			.add("anmaltBesok", "Anmält besök", announced(visit))
 			.add(ErrandParameters.HANDLERS, "Handläggare i " + source.getDisplayName(), content.handlers())
@@ -194,7 +195,7 @@ public final class InspectionVisitCandidates {
 	 * its description (decision 50), the note of the visit its summary and the remarks its conclusion (decision 45).
 	 */
 	static InvestigationData investigation(final String title, final VisitRow visit, final List<String> remarks, final RoundRow round) {
-		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(line("Tillsynsomgång", roundName(round)), Texts.trimToNull(round.fritext())));
+		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(line(ROUND, roundName(round)), Texts.trimToNull(round.fritext())));
 		final var texts = new InvestigationTexts(roundText, Texts.trimToNull(visit.fritext()), Texts.join("\n", remarks));
 		if (visit.datum() == null) {
 			return new InvestigationData(title, null, null, texts);

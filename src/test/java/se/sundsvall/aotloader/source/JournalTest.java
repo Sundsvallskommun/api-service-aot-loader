@@ -43,6 +43,8 @@ class JournalTest {
 	void anEventTellsItsDiaryNumberOnlyWhenItIsAnotherThanThatOfItsErrand() {
 		assertThat(Journal.otherDiaryNumber(" IAN-2019-5 ", "IAN-2019-1")).isEqualTo("IAN-2019-5");
 		assertThat(Journal.otherDiaryNumber("ian-2019-1 ", "IAN-2019-1")).isNull();
+		// Blanks and hyphens are no difference, as when the diary numbers are compared elsewhere
+		assertThat(Journal.otherDiaryNumber("SN-2015-12345", "SN 2015-12345")).isNull();
 		assertThat(Journal.otherDiaryNumber(" ", "IAN-2019-1")).isNull();
 		assertThat(Journal.otherDiaryNumber("IAN-2019-5", null)).isNull();
 	}

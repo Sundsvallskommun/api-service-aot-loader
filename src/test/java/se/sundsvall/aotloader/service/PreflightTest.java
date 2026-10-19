@@ -5,6 +5,7 @@ import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import generated.se.sundsvall.supportmanagement.MeasureType;
+import generated.se.sundsvall.supportmanagement.Role;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -75,6 +76,7 @@ class PreflightTest {
 			.toList());
 		lenient().when(supportManagement.getMeasureTypes(MUNICIPALITY_ID))
 			.thenReturn(List.of(new MeasureType().name("TYPE_ALCOHOL_INSPECTION_VISIT"), new MeasureType().name("TYPE_TOBACCO_INSPECTION_VISIT")));
+		lenient().when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("MEASURER")));
 	}
 
 	@Test
@@ -93,6 +95,21 @@ class PreflightTest {
 
 		when(supportManagement.getMeasureTypes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly("Åtgärdstyperna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
+	}
+
+	@Test
+	void theRoleOfTheMeasuresMustBeARoleOfTheNamespace() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
+		final var visits = Map.of(Source.ALKT, Set.of(TILLSYNSBESOK));
+
+		// SupportManagement refuses a measure added by a role the namespace lacks
+		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY")));
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems())
+			.containsExactly("Rollen MEASURER finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (aot-loader.roles.measure-added-by, beslut 57)");
+
+		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly("Rollerna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
 	}
 
 	@Test

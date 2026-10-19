@@ -101,7 +101,7 @@ public class MigrationRunner {
 		final var progress = new Progress();
 		try {
 			checkBeforeRun(run, scope, progress).ifPresent(check -> {
-				final var context = new RunContext(run.getId(), run.getMunicipalityId(), run.isDryRun(), check.labelIds(), check.purposes(), run.getItemLimit(), stop, fileAreaFactory());
+				final var context = new RunContext(run.getId(), run.getMunicipalityId(), run.isDryRun(), check, run.getItemLimit(), stop, fileAreaFactory());
 				migrate(run, scope, single, context, progress);
 			});
 		} catch (final RuntimeException e) {

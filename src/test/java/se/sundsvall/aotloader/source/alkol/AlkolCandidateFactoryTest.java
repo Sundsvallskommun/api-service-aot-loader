@@ -366,7 +366,9 @@ class AlkolCandidateFactoryTest {
 			.event(new EventRow(302, 1, null, "061", LocalDateTime.of(2020, 3, 1, 9, 0), null, null, null, null, "Besök enligt plan"))
 			.event(new EventRow(303, 1, null, "024", LocalDateTime.of(2020, 4, 1, 9, 0), null, null, null, null))
 			// The errand of the event is missing, so the event counts as one of the place
-			.event(new EventRow(304, 1, 999, "024", LocalDateTime.of(2020, 6, 1, 9, 0), null, null, null, "borttaget.pdf", "Ärendet är borttaget"));
+			.event(new EventRow(304, 1, 999, "024", LocalDateTime.of(2020, 6, 1, 9, 0), null, null, null, "borttaget.pdf", "Ärendet är borttaget"))
+			// Another event of the place refers to the same file, which is therefore not shared with another place
+			.event(new EventRow(305, 1, null, "024", LocalDateTime.of(2020, 7, 1, 9, 0), null, null, null, "borttaget.pdf", null));
 
 		final var permit = data.factory().permits().candidates().getFirst();
 
@@ -379,7 +381,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(parameters(permit)).containsEntry("handelselogg",
 			List.of("2020-03-01 Tillsyn - Tillsynsbesök enl plan: Besök enligt plan", "2020-06-01 Anteckningar: Ärendet är borttaget",
 				"2021-01-02 Anteckningar (sekretess): Samtal med butiken"));
-		assertThat(permit.files()).extracting(FileReference::name).contains("borttaget.pdf");
+		assertThat(permit.files()).contains(new FileReference("borttaget.pdf", ATTACHMENTS));
 		// A handler AlkOL has no user for stands with the number
 		assertThat(parameters(permit)).containsEntry("handlaggare", List.of("Karin Andersson", "9"));
 		final var other = data.factory().permits().candidates().get(1);

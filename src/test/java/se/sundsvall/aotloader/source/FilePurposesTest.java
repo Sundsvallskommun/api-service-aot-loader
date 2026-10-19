@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.source;
 
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -60,6 +61,8 @@ class FilePurposesTest {
 		ALKT  | -     | Köksritning.pdf                | KITCHEN_FLOOR_PLAN
 		ALKT  | -     | ritning kok.pdf                | KITCHEN_FLOOR_PLAN
 		ALKT  | -     | ritning kokbok.pdf             | SERVING_AREA_DRAWING
+		ALKT  | -     | ritning skok.pdf               | SERVING_AREA_DRAWING
+		ALKT  | -     | ritning kök.pdf                | KITCHEN_FLOOR_PLAN
 		ALKOL | 016   | ritning butik.pdf              | SALES_PREMISES_DRAWING
 		ALKOL | 016   | ansokan.pdf                    | -
 		ALKOL | -     | -                              | -
@@ -67,6 +70,19 @@ class FilePurposesTest {
 	void anAttachmentIsAReferralAnswerOrASelfMonitoringProgramByItsEventAndADrawingByItsName(final Source source, final String eventType, final String name,
 		final String purpose) {
 		assertThat(FilePurposes.ofAttachment(source, eventType, name)).isEqualTo(purpose);
+	}
+
+	@Test
+	void aNameWithDecomposedLettersGetsThePurposeOfTheComposedName() {
+		final var kitchen = Normalizer.normalize("Köksritning.pdf", Normalizer.Form.NFD);
+		final var rescueService = Normalizer.normalize("Räddningstjänsten svar.pdf", Normalizer.Form.NFD);
+		final var noEnforcementAuthority = Normalizer.normalize("svar åkfm.pdf", Normalizer.Form.NFD);
+
+		assertThat(kitchen).isNotEqualTo("Köksritning.pdf");
+		assertThat(FilePurposes.ofAttachment(ALKT, null, kitchen)).isEqualTo(FilePurposes.KITCHEN_FLOOR_PLAN);
+		assertThat(FilePurposes.ofAttachment(ALKT, "REMS", rescueService)).isEqualTo(FilePurposes.RESCUE_SERVICE_RESPONSE);
+		// The letter before kfm still keeps it from being the abbreviation
+		assertThat(FilePurposes.ofAttachment(ALKT, "REMS", noEnforcementAuthority)).isEqualTo(FilePurposes.STATEMENT_RESPONSE);
 	}
 
 	@Test

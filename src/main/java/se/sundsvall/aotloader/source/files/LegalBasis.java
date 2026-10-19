@@ -18,8 +18,11 @@ public final class LegalBasis {
 
 	private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
 	private static final String RTF_START = "{\\rtf";
-	// A chapter and section followed by the name of the law and its number in the statute book
-	private static final Pattern REFERENCE = Pattern.compile("\\d+\\s*kap\\.?\\s*\\d+\\s*[a-z]?\\s*§[^.;§\\n]{0,80}?\\(\\d{4}:\\d+\\)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+	// A chapter and section followed by the name of the law and its number in the statute book. The word boundary and the
+	// possessive quantifiers keep the search linear: it never starts again inside a number, and backtracks only within the
+	// name of the law.
+	private static final Pattern REFERENCE = Pattern.compile("\\b\\d++\\s*+kap\\.?+\\s*+\\d++\\s*+(?:[a-z]\\s*+)?+§[^.;§\\n]{0,80}?\\(\\d{4}:\\d++\\)",
+		Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	// The groups whose content is no text of the document, such as pictures and embedded objects
 	private static final Set<String> HIDDEN_GROUPS = Set.of("pict", "shppict", "nonshppict", "object", "objdata", "datastore", "themedata", "colorschememapping", "fonttbl",
 		"colortbl", "stylesheet", "info", "listtable", "listoverridetable", "rsidtbl", "latentstyles", "generator", "xmlnstbl");
@@ -37,7 +40,7 @@ public final class LegalBasis {
 		}
 		final var references = new LinkedHashSet<String>();
 		REFERENCE.matcher(text(new String(content, WINDOWS_1252))).results()
-			.map(match -> match.group().replaceAll("\\s*§\\s*", " § ").replaceAll("\\s+", " ").strip())
+			.map(match -> match.group().replace("§", " § ").replaceAll("\\s+", " ").strip())
 			.forEach(references::add);
 		return Optional.ofNullable(Texts.join("; ", references));
 	}
@@ -78,11 +81,7 @@ public final class LegalBasis {
 		}
 		if (word < rtf.length() && rtf.charAt(word) == '\\') {
 			word++;
-			var end = word;
-			while (end < rtf.length() && Character.isLetter(rtf.charAt(end))) {
-				end++;
-			}
-			if (HIDDEN_GROUPS.contains(rtf.substring(word, end))) {
+			if (HIDDEN_GROUPS.contains(rtf.substring(word, endOfLetters(rtf, word)))) {
 				return groupEnd(rtf, start);
 			}
 		}
@@ -94,16 +93,16 @@ public final class LegalBasis {
 	 */
 	private static int groupEnd(final String rtf, final int start) {
 		var depth = 0;
-		for (var index = start; index < rtf.length(); index++) {
+		var index = start;
+		while (index < rtf.length()) {
 			final var current = rtf.charAt(index);
-			if (current == '\\') {
-				// An escaped brace or backslash is no brace of a group
-				index++;
-			} else if (current == '{') {
+			if (current == '{') {
 				depth++;
 			} else if (current == '}' && --depth == 0) {
 				return index + 1;
 			}
+			// An escaped brace or backslash is no brace of a group
+			index += current == '\\' ? 2 : 1;
 		}
 		return rtf.length();
 	}
@@ -125,25 +124,12 @@ public final class LegalBasis {
 			return next + 3;
 		}
 		if (!Character.isLetter(symbol)) {
-			if (symbol == '\\' || symbol == '{' || symbol == '}') {
-				text.append(symbol);
-			} else if (symbol == '~') {
-				text.append(' ');
-			}
+			appendSymbol(symbol, text);
 			return next + 1;
 		}
-		var end = next;
-		while (end < rtf.length() && Character.isLetter(rtf.charAt(end))) {
-			end++;
-		}
+		final var end = endOfLetters(rtf, next);
 		final var word = rtf.substring(next, end);
-		var parameterEnd = end;
-		if (parameterEnd < rtf.length() && rtf.charAt(parameterEnd) == '-') {
-			parameterEnd++;
-		}
-		while (parameterEnd < rtf.length() && Character.isDigit(rtf.charAt(parameterEnd))) {
-			parameterEnd++;
-		}
+		final var parameterEnd = endOfParameter(rtf, end);
 		final var parameter = rtf.substring(end, parameterEnd);
 		// A blank after a control word belongs to it
 		final var after = parameterEnd < rtf.length() && rtf.charAt(parameterEnd) == ' ' ? parameterEnd + 1 : parameterEnd;
@@ -158,6 +144,44 @@ public final class LegalBasis {
 			}
 		}
 		return after;
+	}
+
+	/**
+	 * Appends what a control symbol stands for: the escaped backslash or brace, a blank for a non-breaking space, nothing
+	 * for the others.
+	 */
+	private static void appendSymbol(final char symbol, final StringBuilder text) {
+		if (symbol == '\\' || symbol == '{' || symbol == '}') {
+			text.append(symbol);
+		} else if (symbol == '~') {
+			text.append(' ');
+		}
+	}
+
+	/**
+	 * @return the index after the letters that start at the index
+	 */
+	private static int endOfLetters(final String rtf, final int start) {
+		var end = start;
+		while (end < rtf.length() && Character.isLetter(rtf.charAt(end))) {
+			end++;
+		}
+		return end;
+	}
+
+	/**
+	 * @return the index after the parameter of a control word that starts at the index: an optional minus sign and the
+	 *         digits after it
+	 */
+	private static int endOfParameter(final String rtf, final int start) {
+		var end = start;
+		if (end < rtf.length() && rtf.charAt(end) == '-') {
+			end++;
+		}
+		while (end < rtf.length() && Character.isDigit(rtf.charAt(end))) {
+			end++;
+		}
+		return end;
 	}
 
 	/**

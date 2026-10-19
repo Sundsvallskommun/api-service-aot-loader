@@ -17,8 +17,7 @@ import static java.util.Collections.unmodifiableMap;
  * @param validTo             the last day of the permit, null when it has no end
  * @param parameters          the additional parameters, without errandId, which is added when the errand exists
  * @param legalBasisDocuments the documents of the source that state the legal basis of the permit, in the order they
- *                            are
- *                            read: the first that states one gives it (decision 58); none for a notification
+ *                            are read: the first that states one gives it (decision 58); none for a notification
  */
 public record AssetData(String titleSuffix, String description, LocalDate issued, LocalDate validTo, Map<String, String> parameters, List<FileReference> legalBasisDocuments) {
 

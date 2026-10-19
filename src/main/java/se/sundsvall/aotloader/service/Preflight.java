@@ -4,6 +4,7 @@ import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import generated.se.sundsvall.supportmanagement.MeasureType;
+import generated.se.sundsvall.supportmanagement.Role;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -189,10 +190,9 @@ public class Preflight {
 	}
 
 	/**
-	 * Adds a problem when the remarks of the inspection visits cannot become measures (decision 57): the role they are
-	 * added
-	 * by is not set, or the namespace lacks the measure type of a type of visit, the type of its errands, which
-	 * SupportManagement requires of every measure.
+	 * Adds a problem when the remarks of the inspection visits cannot become measures (decision 57): the namespace lacks
+	 * the role they are added by, or the measure type of a type of visit, the type of its errands. SupportManagement
+	 * requires both of every measure.
 	 */
 	private void checkMeasures(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
 		final var measureTypes = types.stream()
@@ -203,9 +203,26 @@ public class Preflight {
 		if (measureTypes.isEmpty()) {
 			return;
 		}
-		if (Texts.isBlank(properties.roles().measureAddedBy())) {
+		checkMeasureRole(municipalityId, problems);
+		checkMeasureTypes(municipalityId, measureTypes, problems);
+	}
+
+	private void checkMeasureRole(final String municipalityId, final List<String> problems) {
+		final var role = properties.roles().measureAddedBy();
+		if (Texts.isBlank(role)) {
 			problems.add("Rollen som tillsynsbesökens åtgärder läggs till med är inte angiven (aot-loader.roles.measure-added-by, beslut 57)");
+			return;
 		}
+		try {
+			if (supportManagement.getRoles(municipalityId).stream().map(Role::getName).noneMatch(role::equals)) {
+				problems.add("Rollen %s finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (aot-loader.roles.measure-added-by, beslut 57)".formatted(role));
+			}
+		} catch (final RuntimeException e) {
+			problems.add("Rollerna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+		}
+	}
+
+	private void checkMeasureTypes(final String municipalityId, final Set<String> measureTypes, final List<String> problems) {
 		final Set<String> found;
 		try {
 			found = supportManagement.getMeasureTypes(municipalityId).stream().map(MeasureType::getName).collect(Collectors.toSet());

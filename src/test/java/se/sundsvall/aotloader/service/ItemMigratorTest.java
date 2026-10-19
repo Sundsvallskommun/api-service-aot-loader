@@ -860,7 +860,8 @@ class ItemMigratorTest {
 
 	@Test
 	void theLimitStopsTheItemBeforeItIsWritten() {
-		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, Map.of(MUNICIPALITY_ID, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes()), 0, new AtomicBoolean(), this::fileArea);
+		final var context = new RunContext("run-id", MUNICIPALITY_ID, false, new Preflight.Result(List.of(), Map.of(MUNICIPALITY_ID, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes())), 0,
+			new AtomicBoolean(), this::fileArea);
 
 		final var result = migrator.process(TestData.permit("1"), context);
 
@@ -1074,7 +1075,8 @@ class ItemMigratorTest {
 	}
 
 	private RunContext context(final boolean dryRun) {
-		return new RunContext("run-id", MUNICIPALITY_ID, dryRun, Map.of(MUNICIPALITY_ID, TestData.labelIds(), TIMRA, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes(), TIMRA, TestData.purposes()), null, new AtomicBoolean(), this::fileArea);
+		final var check = new Preflight.Result(List.of(), Map.of(MUNICIPALITY_ID, TestData.labelIds(), TIMRA, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes(), TIMRA, TestData.purposes()));
+		return new RunContext("run-id", MUNICIPALITY_ID, dryRun, check, null, new AtomicBoolean(), this::fileArea);
 	}
 
 	private FileArea fileArea(final Source source) {
