@@ -28,6 +28,7 @@ import se.sundsvall.dept44.problem.ThrowableProblem;
 
 import static java.time.format.DateTimeFormatter.ISO_INSTANT;
 import static java.util.Collections.emptyList;
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Component
@@ -138,6 +139,23 @@ public class SupportManagementIntegration {
 			throw problem;
 		}
 		return Optional.of(Locations.idOf(response, "bilagan"));
+	}
+
+	/**
+	 * Links an attachment of the errand to its investigation (decision 60).
+	 *
+	 * @return true when the attachment was linked now, false when it already was
+	 */
+	public boolean linkInvestigationAttachment(final String municipalityId, final String errandId, final String investigationId, final String attachmentId) {
+		try {
+			client.linkInvestigationAttachment(municipalityId, namespace, errandId, investigationId, attachmentId);
+			return true;
+		} catch (final ThrowableProblem problem) {
+			if (problem.getStatus() == CONFLICT) {
+				return false;
+			}
+			throw problem;
+		}
 	}
 
 	/**

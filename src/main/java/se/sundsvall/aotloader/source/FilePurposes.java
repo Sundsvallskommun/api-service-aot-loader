@@ -20,7 +20,9 @@ import static se.sundsvall.aotloader.service.model.Source.ALKT;
 /**
  * Tells which attachment purpose of the namespace a file of the sources gets on its errand (decision 40): a referral
  * by the template it was made from, a referral answer or a self-monitoring program by the type of its event, and a
- * drawing by its name. Any other file gets none.
+ * drawing by its name. Any other file gets none. Also tells which files are material of the investigation of their
+ * errand (decision 60): referrals and their answers, investigations, the communication of them and proposed decisions
+ * by their template or the type of their event, and the reports of inspections.
  */
 public final class FilePurposes {
 
@@ -85,7 +87,64 @@ public final class FilePurposes {
 	private static final String KITCHEN = "kök";
 	private static final Pattern KITCHEN_ASCII = Pattern.compile("(?<![a-zåäö])kok(?![a-zåäö])");
 
+	/** The purposes of referrals and their answers, whose files are material of the investigation. */
+	private static final Set<String> REFERRALS = Set.of(POLICE_REQUEST, POLICE_RESPONSE, TAX_AGENCY_REQUEST, TAX_AGENCY_RESPONSE, ENFORCEMENT_AUTHORITY_REQUEST,
+		ENFORCEMENT_AUTHORITY_RESPONSE, RESCUE_SERVICE_REQUEST, RESCUE_SERVICE_RESPONSE, ENVIRONMENT_OFFICE_REQUEST, ENVIRONMENT_OFFICE_RESPONSE, CREDIT_REPORT_RESPONSE,
+		STATEMENT_REQUEST, STATEMENT_RESPONSE);
+
+	/**
+	 * The templates of the documents that are an investigation, the communication of one or of referral answers, or the
+	 * report of an inspection, by source, in upper case.
+	 */
+	private static final Map<Source, Set<String>> INVESTIGATION_TEMPLATES = Map.of(
+		ALKT, Set.of("TDU", "TDUT", "TNT", "TNA", "TNC", "KOUT", "KOMR", "KOMI"),
+		ALKOL, Set.of("UTRTOB", "UTRÄNDT", "UTRTIBT", "KOMU", "KOMR", "KIU", "TOBRAPP", "TIFÖTO"));
+
+	/**
+	 * The types of the events whose files are such material, by source, in upper case: communication, the answer to it
+	 * and a proposal to the board in AlkT; an investigation, communication, a proposed decision and an inspection
+	 * report in AlkOL. AlkOL's investigation of a possible measure has the code {@code <Kod>} in its code list.
+	 */
+	private static final Map<Source, Set<String>> INVESTIGATION_EVENTS = Map.of(
+		ALKT, Set.of("KOMU", "KOMS", "NAMF"),
+		ALKOL, Set.of("092", "019", "<KOD>", "025", "094", "063"));
+
 	private FilePurposes() {}
+
+	/**
+	 * @param  template  the code of the template the document was made from, null when none
+	 * @param  eventType the type of the event the document is on, null for a document of a decision
+	 * @param  received  when the event or decision was, null when unknown
+	 * @return           the details of a document the source generated: its purpose, when it came in and whether it is
+	 *                   material of the investigation of its errand
+	 */
+	public static FileDetails ofGenerated(final Source source, final String template, final String eventType, final LocalDateTime received) {
+		final var purpose = ofDocument(source, template);
+		return new FileDetails(purpose, received, isReferral(purpose) || isOneOf(template, INVESTIGATION_TEMPLATES.get(source))
+			|| isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
+	}
+
+	/**
+	 * @param  eventType the type of the event the attachment is on
+	 * @param  name      the name of the attachment
+	 * @param  received  when the event was, null when unknown
+	 * @return           the details of an attachment of an event: its purpose, when it came in and whether it is material
+	 *                   of the investigation of its errand
+	 */
+	public static FileDetails ofAttached(final Source source, final String eventType, final String name, final LocalDateTime received) {
+		final var purpose = ofAttachment(source, eventType, name);
+		return new FileDetails(purpose, received, isReferral(purpose) || isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
+	}
+
+	/**
+	 * @param  received when the visit was, null when unknown
+	 * @return          the details of a file of an inspection visit, its protocol or an attachment, which are material of
+	 *                  the investigation of the visit
+	 */
+	public static FileDetails ofVisit(final Source source, final FileFolder folder, final String name, final LocalDateTime received) {
+		final var details = detailsOf(source, folder, name, received);
+		return new FileDetails(details.purpose(), details.received(), true);
+	}
 
 	/**
 	 * @param  template the code of the template the document was made from, null when none
@@ -139,5 +198,13 @@ public final class FilePurposes {
 	 */
 	public static boolean isDrawing(final String purpose) {
 		return purpose != null && DRAWINGS.contains(purpose);
+	}
+
+	private static boolean isReferral(final String purpose) {
+		return purpose != null && REFERRALS.contains(purpose);
+	}
+
+	private static boolean isOneOf(final String code, final Set<String> codes) {
+		return Optional.ofNullable(Texts.trimToNull(code)).map(value -> codes.contains(value.toUpperCase(Locale.ROOT))).orElse(false);
 	}
 }

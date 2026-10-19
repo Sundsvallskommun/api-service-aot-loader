@@ -155,6 +155,7 @@ public record InspectionVisitRows(
 	 * @param tillfalleNr  TillsynsTillfalleNr, the id of the visit
 	 * @param objektId     the place: ObjektID of the serving place in AlkT, FSID of the sales place in AlkOL
 	 * @param datum        the day of the visit, StartDatum
+	 * @param slutDatum    the day the visit ended, SlutDatum, null when not set
 	 * @param startTid     the time the visit started, as AlkT writes it, or "hh:mm" from AlkOL
 	 * @param slutTid      the time the visit ended, the same way
 	 * @param tillsynsart  the code of the kind of inspection, Tillsynsform
@@ -171,6 +172,7 @@ public record InspectionVisitRows(
 		Integer tillfalleNr,
 		Integer objektId,
 		LocalDate datum,
+		LocalDate slutDatum,
 		String startTid,
 		String slutTid,
 		String tillsynsart,
@@ -190,11 +192,11 @@ public record InspectionVisitRows(
 		}
 
 		/**
-		 * A visit outside a round of inspection, without marks of what it covered.
+		 * A visit outside a round of inspection, without marks of what it covered and without an end day.
 		 */
 		public VisitRow(final Integer tillfalleNr, final Integer objektId, final LocalDate datum, final String startTid, final String slutTid, final String tillsynsart,
 			final String fritext, final String worddokument, final String bifogadfil, final List<String> handlaggare, final StaffMarks staff) {
-			this(tillfalleNr, objektId, datum, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, handlaggare, staff, null, List.of(), false);
+			this(tillfalleNr, objektId, datum, null, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, handlaggare, staff, null, List.of(), false);
 		}
 
 		/**

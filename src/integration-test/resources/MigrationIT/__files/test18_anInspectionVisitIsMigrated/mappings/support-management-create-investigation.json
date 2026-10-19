@@ -1,5 +1,8 @@
 {
 	"name": "support-management-create-investigation",
+	"scenarioName": "investigation",
+	"requiredScenarioState": "Started",
+	"newScenarioState": "Created",
 	"request": {
 		"method": "POST",
 		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations",

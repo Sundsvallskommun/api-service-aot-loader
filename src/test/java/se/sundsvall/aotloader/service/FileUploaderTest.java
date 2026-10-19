@@ -5,6 +5,7 @@ import generated.se.sundsvall.partyassets.AssetAttachment;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
+import generated.se.sundsvall.supportmanagement.Investigation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -163,6 +165,60 @@ class FileUploaderTest {
 			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
 
 		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), "Beslut");
+	}
+
+	@Test
+	void theMaterialOfTheInvestigationIsLinkedToItOnce() {
+		final var candidate = withInvestigation(Map.of(
+			new FileReference("Remissvar.pdf", ATTACHMENTS), new FileDetails(FilePurposes.POLICE_RESPONSE, null, true),
+			// A reference with a path names the file at its end, as the file area finds it
+			new FileReference("C:\\gammal\\utredning.rtf", DOCUMENTS), new FileDetails(null, null, true),
+			new FileReference("saknas.rtf", DOCUMENTS), new FileDetails(null, null, true),
+			new FileReference("ansokan.pdf", ATTACHMENTS), FileDetails.NONE));
+		// The investigation has the answer linked already, from an earlier run
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1")
+			.attachments(List.of(new ErrandAttachment().id("a1").fileName("remissvar.pdf")))));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new ErrandAttachment().id("a1").fileName("remissvar.pdf"),
+			new ErrandAttachment().id("a2").fileName("UTREDNING.rtf"),
+			new ErrandAttachment().id("a3").fileName("ansokan.pdf"),
+			new ErrandAttachment().id("a4")));
+		final var notes = new ReportNotes();
+
+		uploader.linkToInvestigation(candidate, MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		verify(supportManagement).linkInvestigationAttachment(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "a2");
+		verify(supportManagement, times(1)).linkInvestigationAttachment(anyString(), anyString(), anyString(), anyString());
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Underlag till utredningen: 2 filer");
+	}
+
+	@Test
+	void nothingIsLinkedWithoutMaterialOrAnInvestigation() {
+		final var material = Map.of(new FileReference("utredning.rtf", DOCUMENTS), new FileDetails(null, null, true));
+		final var notes = new ReportNotes();
+
+		// A candidate without an investigation, one without material, and an errand whose investigation is missing
+		uploader.linkToInvestigation(withDetails(material), MUNICIPALITY_ID, ERRAND_ID, notes);
+		uploader.linkToInvestigation(withInvestigation(Map.of(new FileReference("ansokan.pdf", ATTACHMENTS), FileDetails.NONE)), MUNICIPALITY_ID, ERRAND_ID, notes);
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		uploader.linkToInvestigation(withInvestigation(material), MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		verify(supportManagement, never()).getAttachments(anyString(), anyString());
+		verify(supportManagement, never()).linkInvestigationAttachment(anyString(), anyString(), anyString(), anyString());
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
+	}
+
+	@Test
+	void aDryRunTellsHowManyFilesWouldBeMaterialOfTheInvestigation() {
+		final var candidate = withInvestigation(Map.of(
+			new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(null, null, true),
+			new FileReference("saknas.rtf", DOCUMENTS), new FileDetails(null, null, true),
+			new FileReference("ansokan.pdf", ATTACHMENTS), FileDetails.NONE));
+		final var notes = new ReportNotes();
+
+		uploader.check(candidate, context(), notes);
+
+		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Underlag till utredningen: 1 fil; G14 1 fil saknas på filarean (saknas.rtf)");
 	}
 
 	@Test
@@ -553,6 +609,17 @@ class FileUploaderTest {
 		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
 			.files(List.copyOf(details.keySet()))
 			.fileDetails(details)
+			.build();
+	}
+
+	/**
+	 * @return a permit with an investigation, whose files are those given, each with its purpose and time
+	 */
+	private static Candidate withInvestigation(final Map<FileReference, FileDetails> details) {
+		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.files(List.copyOf(details.keySet()))
+			.fileDetails(details)
+			.investigation(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0)))
 			.build();
 	}
 

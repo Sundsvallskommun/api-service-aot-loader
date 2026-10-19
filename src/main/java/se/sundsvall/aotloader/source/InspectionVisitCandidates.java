@@ -19,7 +19,9 @@ import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
@@ -36,7 +38,8 @@ import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
 /**
  * Builds the candidates of the inspection visits of a source, the same way for both sources (section 7.7.2): which
  * visits are migrated, and their rules, title, description, labels and parameters. A visit gets no holder, since the
- * source does not tell which holder the place had at the time, and so no relation to the permit errand either.
+ * source does not tell which holder the place had at the time. Its day relates it to the permit errand instead
+ * (decision 61).
  */
 public final class InspectionVisitCandidates {
 
@@ -77,12 +80,13 @@ public final class InspectionVisitCandidates {
 	/**
 	 * Starts the candidate of a visit with what both sources give it. The source adds the rest, such as the files.
 	 *
-	 * @param  visit the visit
-	 * @param  rows  the visits of the source, with the remarks and the code lists
-	 * @param  place the place of the visit, null when it has none
-	 * @return       the builder of the candidate
+	 * @param  visit  the visit
+	 * @param  rows   the visits of the source, with the remarks and the code lists
+	 * @param  place  the place of the visit, null when it has none
+	 * @param  permit the current permit of the place, null when the place has none
+	 * @return        the builder of the candidate
 	 */
-	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place) {
+	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit) {
 		final var hits = new ArrayList<RuleHit>();
 		if (place == null) {
 			hits.add(RuleHit.of(PLACE_MISSING, placeMissing));
@@ -96,16 +100,18 @@ public final class InspectionVisitCandidates {
 		final var placeName = place == null ? null : place.name();
 		final var name = Optional.ofNullable(placeName).orElse(unknownPlace);
 		final var title = Texts.title("Tillsynsbesök", name);
+		final var investigation = investigation(title, visit, content.remarks(), content.round());
 		return Candidate.builder(new ItemKey(type.getSource(), TILLSYNSBESOK, String.valueOf(visit.tillfalleNr())), type)
 			.placeName(placeName)
 			.ruleHits(hits)
 			.place(place)
 			.title(title)
-			.investigation(investigation(title, visit, content.remarks(), content.round()))
-			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows))
+			.investigation(investigation)
+			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows, investigation.completedAt()))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
-			.parameters(parameters(content));
+			.parameters(parameters(content))
+			.permitLink(new PermitLink(permit, null, null, visit.datum()));
 	}
 
 	private String description(final String name, final VisitContent content) {
@@ -189,10 +195,13 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
-	 * The investigation of the visit (decision 41): it started on the date of the visit at its start time, or at the start
-	 * of that day without one, and was completed on that date at its end time, the day after when the visit went on past
-	 * midnight. A visit without an end time has no end. The round of inspection the visit was made in, with its note, is
-	 * its description (decision 50), the note of the visit its summary and the remarks its conclusion (decision 45).
+	 * The investigation of the visit (decisions 41 and 59): it started on the date of the visit at its start time, or at
+	 * the start of that day without one, and was completed at its end time on its end day, SlutDatum, or on the date of
+	 * the visit when it has no later end day; then an end time before the start time is the day after, as the visit went
+	 * on past midnight. A visit without an end time was completed at the start of a later end day, otherwise when it
+	 * started, so that both are set whenever the visit has a date. The round of inspection the visit was made in, with its
+	 * note, is its description (decision 50), the note of the visit its summary and the remarks its conclusion (decision
+	 * 45).
 	 */
 	static InvestigationData investigation(final String title, final VisitRow visit, final List<String> remarks, final RoundRow round) {
 		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(line(ROUND, roundName(round)), Texts.trimToNull(round.fritext())));
@@ -201,9 +210,12 @@ public final class InspectionVisitCandidates {
 			return new InvestigationData(title, null, null, texts);
 		}
 		final var started = at(visit.datum(), visit.startTid()).orElse(visit.datum().atStartOfDay());
-		final var completed = at(visit.datum(), visit.slutTid())
-			.map(end -> end.isBefore(started) ? end.plusDays(1) : end)
-			.orElse(null);
+		final var laterEndDay = Optional.ofNullable(visit.slutDatum()).filter(day -> day.isAfter(visit.datum()));
+		final var completed = at(laterEndDay.orElse(visit.datum()), visit.slutTid())
+			.map(end -> end.isBefore(started) && laterEndDay.isEmpty() ? end.plusDays(1) : end)
+			.or(() -> laterEndDay.map(LocalDate::atStartOfDay))
+			.filter(end -> !end.isBefore(started))
+			.orElse(started);
 		return new InvestigationData(title, started, completed, texts);
 	}
 
@@ -216,14 +228,16 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
-	 * @return each remark as a measure, as the AoT solution keeps the deficiencies of an inspection, headed by the text of
-	 *         its code, or "Anmärkning" for a remark with only a note (decision 57); a remark with neither is left out
+	 * @param  completedAt when the visit was, the end of its investigation; null when the visit has no date
+	 * @return             each remark as a measure, as the AoT solution keeps the deficiencies of an inspection, headed by
+	 *                     the text of its code, or "Anmärkning" for a remark with only a note, and completed when the visit
+	 *                     was (decision 57); a remark with neither a code nor a note is left out
 	 */
-	static List<MeasureData> measures(final List<RemarkRow> remarks, final InspectionVisitRows rows) {
+	static List<MeasureData> measures(final List<RemarkRow> remarks, final InspectionVisitRows rows, final LocalDateTime completedAt) {
 		return remarks.stream()
-			.map(remark -> new MeasureData(Texts.trimToNull(rows.remarkText(remark.code())), Texts.trimToNull(remark.notering())))
+			.map(remark -> new MeasureData(Texts.trimToNull(rows.remarkText(remark.code())), Texts.trimToNull(remark.notering()), completedAt))
 			.filter(measure -> measure.title() != null || measure.description() != null)
-			.map(measure -> measure.title() == null ? new MeasureData(REMARK, measure.description()) : measure)
+			.map(measure -> measure.title() == null ? new MeasureData(REMARK, measure.description(), completedAt) : measure)
 			.toList();
 	}
 

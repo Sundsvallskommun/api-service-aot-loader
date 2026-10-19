@@ -114,6 +114,25 @@ class TargetWriter {
 	}
 
 	/**
+	 * Finds the post of an item whose errand is active, which an earlier run then made and completed, without changing its
+	 * status, content or files: once the item is migrated the target systems are the facit (decision 11), and the new
+	 * system may have changed the post since.
+	 *
+	 * @param  partyAssetsId      the id of the post in the status table, null when it has none
+	 * @return                    the id PartyAssets gave the post
+	 * @throws MigrationException when the post cannot be found
+	 */
+	String findMigratedAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties,
+		final ReportNotes notes) {
+		final var words = AssetWords.of(candidate.key().kind());
+		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> partyAssets.getAsset(municipalityId, id))
+			.or(() -> parties.holderPartyId().flatMap(partyId -> partyAssets.findAsset(municipalityId, partyId, errandId)))
+			.orElseThrow(() -> new MigrationException("Ärendet är redan aktivt, men %s finns inte i PartyAssets".formatted(words.definite())));
+		notes.line("%s i PartyAssets från en tidigare körning ändras inte, eftersom ärendet redan är aktivt".formatted(words.capitalized()));
+		return found.getId();
+	}
+
+	/**
 	 * Gives an EXPIRED post the status ACTIVE while it gets its files, since an EXPIRED post takes none, and EXPIRED back
 	 * once it has them.
 	 *

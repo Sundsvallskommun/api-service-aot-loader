@@ -102,12 +102,21 @@ public record AlkolSnapshot(
 	 * @param noteringar  the notes of the errand, null when blank
 	 * @param handlaggare the handlers of the errand, HandlaggarID and HandlaggarID2, the numbers of the users (AnvID) as
 	 *                    text, those that are set
+	 * @param upplagd     the day the errand was registered, UpplagdDatum
 	 */
 	public record ErrandRow(Integer arendeId, Integer fsId, String arendetyp, String diarieNr, LocalDate oppnad, LocalDate avslutad, Integer sokandeId, String noteringar,
-		List<String> handlaggare) {
+		List<String> handlaggare, LocalDate upplagd) {
 
 		public ErrandRow {
 			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
+		}
+
+		/**
+		 * An errand without the day it was registered.
+		 */
+		public ErrandRow(final Integer arendeId, final Integer fsId, final String arendetyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
+			final Integer sokandeId, final String noteringar, final List<String> handlaggare) {
+			this(arendeId, fsId, arendetyp, diarieNr, oppnad, avslutad, sokandeId, noteringar, handlaggare, null);
 		}
 
 		/**

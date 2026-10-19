@@ -8,13 +8,16 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PermitLink;
+import se.sundsvall.aotloader.service.model.PermitLink.Basis;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SourceValues;
 
 import static se.sundsvall.aotloader.service.model.ItemStatus.KLAR;
 import static se.sundsvall.aotloader.service.model.ItemStatus.MIGRERAS_INTE;
 
 /**
- * Decides the relation from the permit errand of the place to an inspection errand (section 7.7.1).
+ * Decides the relation from the permit errand of the place to an inspection errand or visit (section 7.7.1, decision
+ * 61).
  */
 @Component
 class RelationPlanner {
@@ -26,9 +29,9 @@ class RelationPlanner {
 	}
 
 	/**
-	 * Decides the relation. An inspection errand that concerned the holder of the permit is related to the permit errand
-	 * once the permit is migrated, and waits while the permit may still be migrated. One that concerned another holder, or
-	 * whose holder or whose permit's holder cannot be seen, gets no relation and does not wait.
+	 * Decides the relation. An inspection that concerned the holder of the permit, as {@link PermitLink#basis()} tells, is
+	 * related to the permit errand once the permit is migrated, and waits while the permit may still be migrated. Any
+	 * other gets no relation and does not wait, and the report tells why.
 	 *
 	 * @param  candidate the item
 	 * @param  context   the run, which knows what it did with the permit earlier
@@ -40,15 +43,12 @@ class RelationPlanner {
 		if (link == null) {
 			return RelationPlan.none();
 		}
+		final var basis = link.basis();
+		if (!basis.relates()) {
+			notes.line(reason(link, basis));
+			return RelationPlan.none();
+		}
 		final var permitKey = link.permitKey();
-		if (permitKey == null) {
-			notes.line("Ingen relation: stället har inget gällande tillstånd");
-			return RelationPlan.none();
-		}
-		if (!link.sameHolder()) {
-			notes.line(noRelationReason(link));
-			return RelationPlan.none();
-		}
 		final var permitItem = itemRepository.findBySourceAndKindAndSourceId(permitKey.source(), permitKey.kind(), permitKey.sourceId());
 		final var permitStatus = permitItem.map(MigrationItemEntity::getStatus).orElse(null);
 		final var permitOutcome = context.outcomeOf(permitKey).orElse(null);
@@ -63,7 +63,7 @@ class RelationPlanner {
 				.orElse("inte migrerat");
 			return RelationPlan.waitFor("Väntar på tillståndet %s, som är %s".formatted(permitKey, state));
 		}
-		notes.line("Relation till tillståndsärendet " + permitKey);
+		notes.line(reason(link, basis));
 		if (context.dryRun()) {
 			return RelationPlan.none();
 		}
@@ -71,18 +71,28 @@ class RelationPlanner {
 			.orElseThrow(() -> new MigrationException("Tillståndet %s saknar ärende-id i statustabellen".formatted(permitKey))));
 	}
 
-	private static String noRelationReason(final PermitLink link) {
-		if (link.inspectionHolder() == null) {
-			return "Ingen relation: det går inte att se vilken tillståndshavare ärendet gällde";
-		}
-		if (link.permitHolder() == null) {
-			return "Ingen relation: det går inte att se vem som har tillståndet";
-		}
-		return "Ingen relation: ärendet gällde en tidigare tillståndshavare";
+	/**
+	 * @return what the report tells about the relation of the inspection, for the basis of its link
+	 */
+	private static String reason(final PermitLink link, final Basis basis) {
+		final var permit = link.permit();
+		return switch (basis) {
+			case SAME_HOLDER -> "Relation till tillståndsärendet " + permit.key();
+			case AFTER_ISSUE -> "Relation till tillståndsärendet %s, tillsynen gjordes efter att tillståndet utfärdades %s".formatted(permit.key(), SourceValues.format(permit.issued()));
+			case NO_PERMIT -> "Ingen relation: stället har inget gällande tillstånd";
+			case OTHER_HOLDER -> "Ingen relation: ärendet gällde en annan tillståndshavare än den som har tillståndet";
+			case NO_PERMIT_HOLDER -> "Ingen relation: det går inte att se vem som har tillståndet";
+			case NO_DATE -> "Ingen relation: tillsynen saknar datum, och det går inte att se vilken tillståndshavare den gällde";
+			case NO_ISSUE_DATE -> "Ingen relation: tillståndet saknar utfärdandedatum, och det går inte att se vilken tillståndshavare tillsynen gällde";
+			case ISSUED_TO_OTHER -> "Ingen relation: det går inte att se att tillståndet utfärdades till ställets nuvarande ägare, så dagen visar inte vilken tillståndshavare tillsynen gällde";
+			case BEFORE_ISSUE -> "Ingen relation: tillsynen gjordes före att tillståndet utfärdades %s, och det går inte att se vilken tillståndshavare den gällde"
+				.formatted(SourceValues.format(permit.issued()));
+			case AFTER_END -> "Ingen relation: tillsynen gjordes efter att tillståndet upphörde %s".formatted(SourceValues.format(permit.ended()));
+		};
 	}
 
 	/**
-	 * The relation an inspection errand gets, or why it waits.
+	 * The relation an inspection errand or visit gets, or why it waits.
 	 *
 	 * @param permitErrandId the permit errand to relate to, null for no relation
 	 * @param waitReason     why the item waits, null when it does not

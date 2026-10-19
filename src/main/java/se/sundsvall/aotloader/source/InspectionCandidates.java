@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.source;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -17,6 +18,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.support.SourceValues;
@@ -75,12 +77,12 @@ public final class InspectionCandidates {
 	 * @param  place     the place of the errand, null when it has none
 	 * @param  applicant the applicant of the errand, who is the holder it concerned; null when it has none
 	 * @param  owner     the owner of the place, null when it has none
-	 * @param  permitKey the permit of the place, null when the place has no current permit
+	 * @param  permit    the current permit of the place, null when the place has none
 	 * @param  decisions the decisions of the errand as texts, in order
 	 * @param  texts     the texts of the errand's investigation (decision 44)
 	 * @return           the builder of the candidate
 	 */
-	public Candidate.Builder builder(final InspectionErrand errand, final Place place, final ContactRow applicant, final ContactRow owner, final ItemKey permitKey,
+	public Candidate.Builder builder(final InspectionErrand errand, final Place place, final ContactRow applicant, final ContactRow owner, final PlacePermit permit,
 		final List<String> decisions, final InvestigationTexts texts) {
 		final var hits = new ArrayList<RuleHit>();
 		if (place == null) {
@@ -99,14 +101,29 @@ public final class InspectionCandidates {
 			.holder(holder)
 			.place(place)
 			.title(title)
-			// The errand was started when it was opened and completed when it was closed (decision 41)
-			.investigation(new InvestigationData(title, SourceValues.startOfDay(errand.opened()), SourceValues.startOfDay(errand.closed()), texts))
+			.investigation(investigation(title, errand, texts))
 			.description(description(errand, decisions))
 			.labelPaths(settings.labels())
 			.labelPath(settings.sourceErrandType(errand.typeCode()).orElse(null))
 			.externalTag(TAG_DIARY_NUMBER, errand.diaryNumber())
 			.parameters(parameters(errand, decisions))
-			.permitLink(new PermitLink(permitKey, ownerLegalId, holder == null ? null : holder.legalId()));
+			.permitLink(new PermitLink(permit, ownerLegalId, holder == null ? null : holder.legalId(), Optional.ofNullable(errand.opened()).orElse(errand.registered())));
+	}
+
+	/**
+	 * The investigation of an inspection errand (decisions 41 and 59): it started when the errand was opened, or when it
+	 * was registered without a day of opening but not after it was closed, and was completed when it was closed, at the
+	 * start of those days. An errand with only an end started then, so that both are set whenever the source has a date,
+	 * and an end before the start is the start. An errand still open in the source, which Ä1 keeps from being migrated,
+	 * is completed at its latest event or decision, otherwise when it started.
+	 */
+	static InvestigationData investigation(final String title, final InspectionErrand errand, final InvestigationTexts texts) {
+		final var closed = Optional.ofNullable(SourceValues.startOfDay(errand.closed())).orElse(errand.lastActivity());
+		final var started = Optional.ofNullable(SourceValues.startOfDay(errand.opened()))
+			.or(() -> Optional.ofNullable(SourceValues.startOfDay(errand.registered())).map(registered -> closed != null && closed.isBefore(registered) ? closed : registered))
+			.orElse(closed);
+		final var completed = Optional.ofNullable(closed).filter(end -> !end.isBefore(started)).orElse(started);
+		return new InvestigationData(title, started, completed, texts);
 	}
 
 	private static String description(final InspectionErrand errand, final List<String> decisions) {
@@ -136,17 +153,19 @@ public final class InspectionCandidates {
 	/**
 	 * What an inspection errand was in its source.
 	 *
-	 * @param source      the source
-	 * @param arendeId    the id of the errand in the source
-	 * @param typeCode    the code of the errand type, which picks the label of the errand
-	 * @param typeText    the text of the errand type
-	 * @param diaryNumber the diary number
-	 * @param opened      the day the errand was opened
-	 * @param closed      the day the errand was closed, null when it is open
-	 * @param handlers    the names of the handlers of the errand, or their codes when no name is found (decision 51)
+	 * @param source       the source
+	 * @param arendeId     the id of the errand in the source
+	 * @param typeCode     the code of the errand type, which picks the label of the errand
+	 * @param typeText     the text of the errand type
+	 * @param diaryNumber  the diary number
+	 * @param opened       the day the errand was opened
+	 * @param closed       the day the errand was closed, null when it is open
+	 * @param handlers     the names of the handlers of the errand, or their codes when no name is found (decision 51)
+	 * @param registered   the day the errand was registered, UpplagdDatum
+	 * @param lastActivity the time of the errand's latest event or decision, null when it has none
 	 */
 	public record InspectionErrand(Source source, Integer arendeId, String typeCode, String typeText, String diaryNumber, LocalDate opened, LocalDate closed,
-		List<String> handlers) {
+		List<String> handlers, LocalDate registered, LocalDateTime lastActivity) {
 
 		public InspectionErrand {
 			handlers = handlers == null ? List.of() : List.copyOf(handlers);

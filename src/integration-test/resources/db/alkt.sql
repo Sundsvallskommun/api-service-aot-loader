@@ -179,3 +179,10 @@ GO
 UPDATE dbo.[Ärende_Händelser] SET DiarieNr = 'TIL-2021-7' WHERE HandelseID = 10
 UPDATE dbo.[Ärende_Händelser] SET DiarieNr = 'TIL-2020-3' WHERE HandelseID = 12
 GO
+-- The end day of a visit and the day an errand was registered, which complete the dates of the investigations (decision 59)
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD SlutDatum datetime NULL
+ALTER TABLE dbo.[Ärende] ADD UpplagdDatum datetime NULL
+GO
+UPDATE dbo.[Tillsyn_Tillfälle] SET SlutDatum = '2023-11-04' WHERE TillsynsTillfalleNr = 900
+UPDATE dbo.[Ärende] SET UpplagdDatum = '2020-12-28' WHERE ArendeID = 700
+GO

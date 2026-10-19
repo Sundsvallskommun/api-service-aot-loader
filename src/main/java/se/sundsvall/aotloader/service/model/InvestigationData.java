@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  *
  * @param title       the heading of the investigation
  * @param startedAt   when the inspection or trial started, as the source dates it, null when the source has no date
- * @param completedAt when it was completed, null when the source has no end
+ * @param completedAt when it was completed, null when the source has no date to complete it at (decision 59)
  * @param texts       the texts of the investigation, never null
  */
 public record InvestigationData(String title, LocalDateTime startedAt, LocalDateTime completedAt, InvestigationTexts texts) {
@@ -23,12 +23,5 @@ public record InvestigationData(String title, LocalDateTime startedAt, LocalDate
 	 */
 	public InvestigationData(final String title, final LocalDateTime startedAt, final LocalDateTime completedAt) {
 		this(title, startedAt, completedAt, InvestigationTexts.NONE);
-	}
-
-	/**
-	 * @return true when the source tells when the inspection or trial was completed
-	 */
-	public boolean completed() {
-		return completedAt != null;
 	}
 }

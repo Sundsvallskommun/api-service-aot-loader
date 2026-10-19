@@ -27,6 +27,7 @@ import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
@@ -47,6 +48,9 @@ public final class TestData {
 	public static final LegalId PERSON_ID = new LegalId("198001011234", PRIVATE);
 	public static final String INTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION";
 	public static final String EXTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION";
+
+	private static final List<FileReference> PERMIT_FILES = List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS),
+		new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS));
 
 	private static final Map<ErrandType, List<String>> LABELS = Map.of(
 		ErrandType.TOBACCO_PERMIT, List.of("CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION"),
@@ -112,13 +116,20 @@ public final class TestData {
 	}
 
 	public static Candidate permit(final String objektId, final String area) {
-		return permitBuilder(objektId, area).build();
+		return permitBuilder(objektId, area).files(PERMIT_FILES).build();
 	}
 
 	/**
 	 * @return a permit with the rule hits the source showed
 	 */
 	public static Candidate permit(final String objektId, final RuleHit... hits) {
+		return permitBuilder(objektId, "City").ruleHits(List.of(hits)).files(PERMIT_FILES).build();
+	}
+
+	/**
+	 * @return a permit without files, whose migration uploads nothing, with the rule hits the source showed
+	 */
+	public static Candidate permitWithoutFiles(final String objektId, final RuleHit... hits) {
 		return permitBuilder(objektId, "City").ruleHits(List.of(hits)).build();
 	}
 
@@ -129,6 +140,7 @@ public final class TestData {
 	public static Candidate permitWithCertificate(final String objektId, final RuleHit... hits) {
 		return permitBuilder(objektId, "City")
 			.ruleHits(List.of(hits))
+			.files(PERMIT_FILES)
 			.assetFiles(List.of(new AssetFile(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS), "Tillståndsbevis")))
 			.build();
 	}
@@ -154,8 +166,7 @@ public final class TestData {
 			.labelPath("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING")
 			.externalTag("diarienummer", "IAN-2019-" + objektId)
 			.parameters(List.of(new Parameter("alktObjektId", "Id i AlkT", List.of(objektId))))
-			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, Map.of("migreradFran", "AlkT")))
-			.files(List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS), new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS)));
+			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, Map.of("migreradFran", "AlkT")));
 	}
 
 	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId inspectionHolder) {
@@ -163,13 +174,21 @@ public final class TestData {
 	}
 
 	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId permitHolder, final LegalId inspectionHolder) {
+		return inspection(arendeId, new PermitLink(permitKey == null ? null : new PlacePermit(permitKey, LocalDate.of(2019, 5, 1), null, true), permitHolder, inspectionHolder,
+			LocalDate.of(2020, 1, 1)));
+	}
+
+	/**
+	 * @return an inspection errand of 2020 whose relation to the permit the link decides
+	 */
+	public static Candidate inspection(final String arendeId, final PermitLink link) {
 		return Candidate.builder(new ItemKey(Source.ALKT, TILLSYN, arendeId), ErrandType.ALCOHOL_INSPECTION)
 			.placeName("Restaurang 1")
-			.holder(new Holder(inspectionHolder, "Bolaget AB", null, null, null, null, null, null))
+			.holder(new Holder(link.inspectionHolder(), "Bolaget AB", null, null, null, null, null, null))
 			.title("Tillsyn – Restaurang 1")
 			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0)))
 			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
-			.permitLink(new PermitLink(permitKey, permitHolder, inspectionHolder))
+			.permitLink(link)
 			.build();
 	}
 

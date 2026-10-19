@@ -39,7 +39,9 @@ public final class LegalBasis {
 			return Optional.empty();
 		}
 		final var references = new LinkedHashSet<String>();
-		REFERENCE.matcher(text(new String(content, WINDOWS_1252))).results()
+		// A non-breaking space, written as the escaped character a0 or as Unicode 160 in the document, separates the words as a
+		// space does
+		REFERENCE.matcher(text(new String(content, WINDOWS_1252)).replace(' ', ' ')).results()
 			.map(match -> match.group().replace("§", " § ").replaceAll("\\s+", " ").strip())
 			.forEach(references::add);
 		return Optional.ofNullable(Texts.join("; ", references));

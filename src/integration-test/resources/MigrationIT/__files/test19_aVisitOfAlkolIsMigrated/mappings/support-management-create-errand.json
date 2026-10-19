@@ -88,6 +88,12 @@
 				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Påträngande reklam i butik' && @.status == 'COMPLETED' && @.addedByRole == 'PRIMARY')]"
 			},
 			{
+				"matchesJsonPath": {
+					"expression": "$.measures[0].completedAt",
+					"matches": "2024-05-03T(14:20(:00)?\\+02:00|12:20(:00)?Z)"
+				}
+			},
+			{
 				"doesNotMatch": "(?s).*\"role\".*"
 			}
 		]

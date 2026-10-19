@@ -110,7 +110,7 @@ public class AlktRepository {
 	private static final String SELECT_ERRANDS = """
 		SELECT ar.ArendeID, ar.ObjektID, ar.ArendeTyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.SokandeID,
 		       ar.Noteringar, ar.Noteringar2, ar.Noteringar3, ar.Noteringar4, ar.Noteringar5, ar.Noteringar5B, ar.Noteringar6,
-		       ar.Noteringar7, ar.Noteringar8, ar.ArendeNotat, ar.HandlaggarID, ar.HandlaggarID2
+		       ar.Noteringar7, ar.Noteringar8, ar.ArendeNotat, ar.HandlaggarID, ar.HandlaggarID2, ar.UpplagdDatum
 		FROM dbo.[Ärende] ar
 		ORDER BY ar.ArendeID
 		""";
@@ -131,11 +131,13 @@ public class AlktRepository {
 		ORDER BY bi.BildID
 		""";
 
-	// Also the events without an errand, whose files go to the permit of their place (decision 37)
+	// Also the events without an errand, whose files go to the permit of their place (decision 37). Ordered, as the
+	// other file queries, since a file on two events keeps the date and purpose of the first from run to run
 	private static final String SELECT_EVENT_FILES = """
 		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.HandelseTyp, h.Dokument, h.HandelseDatumTid, h.Worddokument, h.Bifogadfil
 		FROM dbo.[Ärende_Händelser] h
 		WHERE h.Worddokument IS NOT NULL OR h.Bifogadfil IS NOT NULL
+		ORDER BY h.HandelseID
 		""";
 
 	private static final String SELECT_EVENT_EXTRA_FILES = """
@@ -143,6 +145,7 @@ public class AlktRepository {
 		FROM dbo.[Ärende_Händelser_Filer] f
 		JOIN dbo.[Ärende_Händelser] h ON h.HandelseID = f.HandelseID
 		WHERE f.Bifogadfil IS NOT NULL
+		ORDER BY f.ID
 		""";
 
 	private static final String SELECT_PICTURES = """
@@ -150,6 +153,7 @@ public class AlktRepository {
 		FROM dbo.[Ärende_Bilder] bi
 		WHERE bi.ArendeID IS NOT NULL
 		  AND bi.Bildfilnamn IS NOT NULL
+		ORDER BY bi.BildID
 		""";
 
 	private static final String SELECT_PERSONS = """
@@ -172,7 +176,7 @@ public class AlktRepository {
 		""";
 
 	private static final String SELECT_VISITS = """
-		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
+		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.SlutDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
 		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.ServPersAgarePaPlats, t.ServPersEjKollat, t.ServPersEjpaPlats,
 		       t.TillsynsOmgangsNr
 		FROM dbo.[Tillsyn_Tillfälle] t
@@ -377,7 +381,8 @@ public class AlktRepository {
 			date(rs, "AvslutsDatum"),
 			integer(rs, "SokandeID"),
 			texts(rs, "Noteringar", "Noteringar2", "Noteringar3", "Noteringar4", "Noteringar5", "Noteringar5B", "Noteringar6", "Noteringar7", "Noteringar8", "ArendeNotat"),
-			texts(rs, "HandlaggarID", "HandlaggarID2"));
+			texts(rs, "HandlaggarID", "HandlaggarID2"),
+			date(rs, "UpplagdDatum"));
 	}
 
 	static VisitRow toVisit(final ResultSet rs) throws SQLException {
@@ -385,6 +390,7 @@ public class AlktRepository {
 			integer(rs, "TillsynsTillfalleNr"),
 			integer(rs, "ObjektId"),
 			date(rs, "StartDatum"),
+			date(rs, "SlutDatum"),
 			text(rs, "StartTid"),
 			text(rs, "SlutTid"),
 			inspectionKind(rs),
@@ -441,8 +447,8 @@ public class AlktRepository {
 		 */
 		private Stream<FileRow> files(final Integer errand) {
 			return Stream.of(
-				new FileRow(errand, worddokument, true, new FileDetails(FilePurposes.ofDocument(ALKT, mall), tidpunkt)),
-				new FileRow(errand, bifogadfil, false, new FileDetails(FilePurposes.ofAttachment(ALKT, handelseTyp, bifogadfil), tidpunkt)))
+				new FileRow(errand, worddokument, true, FilePurposes.ofGenerated(ALKT, mall, handelseTyp, tidpunkt)),
+				new FileRow(errand, bifogadfil, false, FilePurposes.ofAttached(ALKT, handelseTyp, bifogadfil, tidpunkt)))
 				.filter(row -> row.name() != null);
 		}
 	}

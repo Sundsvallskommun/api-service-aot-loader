@@ -135,3 +135,9 @@ GO
 -- The event without a text was registered in another case, which the journal shows (decision 56)
 UPDATE dbo.[Händelser] SET DiarieNr = 'IAN-2019-99' WHERE HandelseID = 304
 GO
+-- The end day of a visit and the day an errand was registered, which complete the dates of the investigations (decision 59)
+ALTER TABLE dbo.[Tillsyn_Tillfälle] ADD SlutDatum datetime NULL
+ALTER TABLE dbo.[Ärende] ADD UpplagdDatum datetime NULL
+GO
+UPDATE dbo.[Tillsyn_Tillfälle] SET SlutDatum = '2024-05-03' WHERE TillsynsTillfalleNr = 950
+GO

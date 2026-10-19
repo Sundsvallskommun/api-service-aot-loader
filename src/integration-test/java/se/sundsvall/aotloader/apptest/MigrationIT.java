@@ -369,8 +369,8 @@ class MigrationIT extends AbstractAppTest {
 
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + VISIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName()).containsExactlyInAnyOrder("besöksrapport.pdf", "foto.jpg");
-		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*"))))
-			.as("A visit has no holder to look up, no permit and no relation")
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets)/.*"))))
+			.as("A visit has no holder to look up and no permit; its day relates it to the permit errand (decision 61)")
 			.isEmpty();
 		assertThat(investigationTimes(VISIT_ERRAND_ID)).as("The visit from 21.30 to 23:00 in winter time")
 			.containsExactly(Instant.parse("2023-11-04T20:30:00Z"), Instant.parse("2023-11-04T22:00:00Z"));
@@ -384,7 +384,7 @@ class MigrationIT extends AbstractAppTest {
 		// AlkOL keeps the times of a visit as datetime, and its remarks have no note
 		migrateItem("ALKOL/TILLSYNSBESOK/950", false);
 
-		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets|relation)/.*")))).isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets)/.*")))).isEmpty();
 		assertThat(investigationTimes("11111111-aaaa-bbbb-cccc-000000000011")).as("The visit from 14:00 to 14:20 in summer time")
 			.containsExactly(Instant.parse("2024-05-03T12:00:00Z"), Instant.parse("2024-05-03T12:20:00Z"));
 		verifyStubs();

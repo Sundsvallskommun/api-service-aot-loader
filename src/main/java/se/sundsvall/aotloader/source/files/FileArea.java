@@ -112,7 +112,7 @@ public final class FileArea {
 	/**
 	 * The file name of a reference: the part after the last slash or backslash, should the database hold a path.
 	 */
-	static String fileNameOf(final String reference) {
+	public static String fileNameOf(final String reference) {
 		final var trimmed = Texts.trimToNull(reference);
 		if (trimmed == null) {
 			return null;

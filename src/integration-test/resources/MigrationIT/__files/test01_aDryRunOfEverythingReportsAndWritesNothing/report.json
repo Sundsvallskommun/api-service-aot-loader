@@ -76,7 +76,8 @@
 		"placeNumber": "12345678",
 		"placeName": "Krogen Ett",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": ""
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-05-01; Underlag till utredningen: 2 filer"
 	},
 	{
 		"source": "ALKOL",
@@ -110,6 +111,7 @@
 		"sourceId": "950",
 		"placeName": "Kiosken",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": ""
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKOL/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-07-02"
 	}
 ]

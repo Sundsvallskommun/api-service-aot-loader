@@ -1,5 +1,7 @@
 {
 	"name": "support-management-get-investigations",
+	"scenarioName": "investigation",
+	"requiredScenarioState": "Started",
 	"request": {
 		"method": "GET",
 		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations",

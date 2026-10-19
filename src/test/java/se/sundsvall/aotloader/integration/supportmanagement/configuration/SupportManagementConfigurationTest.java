@@ -21,7 +21,7 @@ class SupportManagementConfigurationTest {
 		assertThat(statusOf(decoder, 413)).isEqualTo(413);
 		assertThat(statusOf(decoder, 415)).isEqualTo(415);
 		assertThat(statusOf(decoder, 422)).isEqualTo(422);
-		assertThat(statusOf(decoder, 409)).isEqualTo(502);
+		assertThat(statusOf(decoder, 409)).isEqualTo(409);
 		assertThat(statusOf(decoder, 500)).isEqualTo(502);
 	}
 

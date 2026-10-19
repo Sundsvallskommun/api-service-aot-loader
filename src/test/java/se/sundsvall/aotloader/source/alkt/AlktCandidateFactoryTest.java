@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.PermitLink.Basis;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -662,7 +663,7 @@ class AlktCandidateFactoryTest {
 		assertThat(closed.externalTags()).containsEntry("diarienummer", "TIL-2020-1");
 		assertThat(closed.asset()).isNull();
 		assertThat(closed.permitLink().permitKey()).isEqualTo(new ItemKey(ALKT, TILLSTAND, "1"));
-		assertThat(closed.permitLink().sameHolder()).isTrue();
+		assertThat(closed.permitLink().basis()).isEqualTo(Basis.SAME_HOLDER);
 		assertThat(closed.holder().name()).isEqualTo("Sökande 70 AB");
 		// A handler AlkT has no name for stands with the code
 		assertThat(parameters(closed)).containsEntry("beslut", List.of("Erinran, 2020-02-01")).containsEntry("arendetyp", List.of("Tillsyn, ifrågasatt åtgärd"))
@@ -684,12 +685,30 @@ class AlktCandidateFactoryTest {
 		final var open = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("701")).findFirst().orElseThrow();
 		assertThat(open.ruleHits()).extracting(RuleHit::rule).containsExactly(ERRAND_OPEN);
 		assertThat(open.labelPaths()).containsExactly("TAGROOT/ALCOHOL_INSPECTION");
-		assertThat(open.permitLink().sameHolder()).isFalse();
+		assertThat(open.permitLink().basis()).isEqualTo(Basis.OTHER_HOLDER);
+		// Still open in the source and without events, so it ended when it started (decision 59)
 		assertThat(open.investigation().startedAt()).isEqualTo(LocalDateTime.of(2021, 1, 1, 0, 0));
-		assertThat(open.investigation().completed()).isFalse();
+		assertThat(open.investigation().completedAt()).isEqualTo(LocalDateTime.of(2021, 1, 1, 0, 0));
 		assertThat(open.investigation().texts()).isEqualTo(InvestigationTexts.NONE);
 		assertThat(parameters(open)).doesNotContainKey("handlaggare");
 		assertThat(open.description()).doesNotContain("Handläggare");
+	}
+
+	@Test
+	void anInspectionErrandStillOpenEndsAtItsLatestEventOrDecision() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.place(place(1, 10, "12345678"))
+			.errand(new ErrandRow(701, 1, "09", null, LocalDate.of(2021, 1, 1), null, null))
+			.decision(new DecisionRow(801, 701, "ER", LocalDateTime.of(2021, 3, 1, 9, 0), null, null, null, null, null, null))
+			.errandText(701, new TextRow(LocalDateTime.of(2021, 2, 10, 13, 0), "ANT", false, "Ringde bolaget."))
+			.errandText(701, new TextRow(null, "ANT", false, "Utan datum"))
+			.build();
+
+		final var investigation = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).inspections().candidates().getFirst().investigation();
+
+		assertThat(investigation.startedAt()).isEqualTo(LocalDateTime.of(2021, 1, 1, 0, 0));
+		assertThat(investigation.completedAt()).isEqualTo(LocalDateTime.of(2021, 3, 1, 9, 0));
 	}
 
 	@Test
@@ -753,12 +772,12 @@ class AlktCandidateFactoryTest {
 			.place(place(2, 12, "12345679"))
 			.owner(owner(10, "556677-8899"))
 			// The code of a handler AlkT has no name for stands as it is, and a handler named twice is named once
-			.visit(new VisitRow(900, 1, LocalDate.of(2023, 11, 4), "21.30", "23", "04", "Mycket folk i baren.", "66666666.rtf", "protokoll.pdf", List.of("ABE", "XYZ", "abe"),
+			.visit(new VisitRow(900, 1, LocalDate.of(2023, 11, 4), null, "21.30", "23", "04", "Mycket folk i baren.", "66666666.rtf", "protokoll.pdf", List.of("ABE", "XYZ", "abe"),
 				new StaffMarks(true, false, true), 40, List.of(), false))
 			.visit(new VisitRow(901, 2, LocalDate.of(2023, 11, 4), null, null, "04", null, null, "PROTOKOLL.pdf"))
 			.visit(new VisitRow(902, 1, null, null, null, null, null, null, null))
 			// The round of the visit is missing
-			.visit(new VisitRow(903, 5, LocalDate.of(2022, 3, 1), "09:15:00", "10:00:00", "99", null, null, null, List.of(), null, 41, List.of(), false))
+			.visit(new VisitRow(903, 5, LocalDate.of(2022, 3, 1), null, "09:15:00", "10:00:00", "99", null, null, null, List.of(), null, 41, List.of(), false))
 			.round(new RoundRow(40, "Krogrunda", LocalDate.of(2023, 11, 4), LocalDate.of(2023, 11, 5), "Tillsammans med polisen."))
 			.remark(new RemarkRow(900, "05", "Ungdomar i baren", "bild.jpg"))
 			.remark(new RemarkRow(900, "77", null, null))
@@ -773,14 +792,17 @@ class AlktCandidateFactoryTest {
 		assertThat(visit.type()).isEqualTo(ErrandType.ALCOHOL_INSPECTION_VISIT);
 		assertThat(visit.ruleHits()).isEmpty();
 		assertThat(visit.holder()).isNull();
-		assertThat(visit.permitLink()).isNull();
+		// A visit after the permit was issued concerned its holder (decision 61), one without a day cannot tell, and the permit
+		// of
+		// a place that is missing may be another owner's
+		assertThat(candidates).extracting(candidate -> candidate.permitLink().basis()).containsExactly(Basis.AFTER_ISSUE, Basis.NO_DATE, Basis.ISSUED_TO_OTHER);
 		assertThat(visit.placeName()).isEqualTo("Restaurang 1");
 		assertThat(visit.placeNumber()).isEqualTo("12345678");
 		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Restaurang 1");
-		// The end time 23 cannot be read, so the visit has no end
+		// The end time 23 cannot be read, so the visit ended when it started
 		// The round of inspection is the description of its investigation, the note of the visit the summary and the remarks
 		// the conclusion
-		assertThat(visit.investigation()).isEqualTo(new InvestigationData("Tillsynsbesök – Restaurang 1", LocalDateTime.of(2023, 11, 4, 21, 30), null,
+		assertThat(visit.investigation()).isEqualTo(new InvestigationData("Tillsynsbesök – Restaurang 1", LocalDateTime.of(2023, 11, 4, 21, 30), LocalDateTime.of(2023, 11, 4, 21, 30),
 			new InvestigationTexts("Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05\nTillsammans med polisen.", "Mycket folk i baren.",
 				"Servering till minderårig: Ungdomar i baren\n77")));
 		assertThat(visit.labelPaths()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
@@ -809,7 +831,10 @@ class AlktCandidateFactoryTest {
 			.containsEntry("anmarkningar", List.of("Servering till minderårig: Ungdomar i baren", "77"))
 			.containsEntry("anteckning", List.of("Mycket folk i baren."));
 		// The remarks are also measures, as the AoT solution keeps the deficiencies of an inspection (decision 57)
-		assertThat(visit.measures()).containsExactly(new MeasureData("Servering till minderårig", "Ungdomar i baren"), new MeasureData("77", null));
+		final var visited = LocalDateTime.of(2023, 11, 4, 21, 30);
+		assertThat(visit.measures()).containsExactly(new MeasureData("Servering till minderårig", "Ungdomar i baren", visited), new MeasureData("77", null, visited));
+		// Every file of the visit is material of its investigation (decision 60)
+		assertThat(visit.files()).allSatisfy(file -> assertThat(visit.detailsOf(file).investigation()).isTrue());
 		// The attachment shares its name with the visit to another place, which is not migrated but still refers to it
 		assertThat(visit.files()).containsExactly(
 			new FileReference("66666666.rtf", DOCUMENTS),

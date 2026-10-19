@@ -109,6 +109,14 @@ public interface SupportManagementClient {
 		@PathVariable String errandId,
 		@RequestBody Investigation investigation);
 
+	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/attachments/{attachmentId}", produces = ALL_VALUE)
+	ResponseEntity<Void> linkInvestigationAttachment(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String attachmentId);
+
 	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/attachmentpurposes", produces = APPLICATION_JSON_VALUE)
 	List<AttachmentPurpose> getAttachmentPurposes(
 		@PathVariable String municipalityId,

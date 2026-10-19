@@ -18,7 +18,6 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 
 /**
@@ -36,7 +35,7 @@ class PersonalDataTest {
 		assertHidden(legalId);
 		assertHidden(new Holder(legalId, NAME, "Gatan 1", "85230", "Sundsvall", "tolvan@example.com", "070-1", NAME));
 		assertHidden(new Person(NAME, legalId, List.of("VD")));
-		assertHidden(new PermitLink(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), legalId, legalId));
+		assertHidden(new PermitLink(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true), legalId, legalId, null));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
 		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
 		assertHidden(new InvestigationData("Tillsyn", null, null, new InvestigationTexts(NAME, NAME + " " + NUMBER, NUMBER)));
@@ -51,7 +50,7 @@ class PersonalDataTest {
 		assertHidden(new AlkolSnapshot.ErrandRow(1, 1, "IT", null, null, null, null, NAME + " " + NUMBER));
 		assertHidden(new AlkolSnapshot.DecisionRow(1, 1, "VT", null, null, null, null, null, NAME + " " + NUMBER));
 		assertHidden(new AlkolSnapshot.EventRow(1, 1, 1, "024", null, null, null, null, null, NAME + " " + NUMBER));
-		assertHidden(new MeasureData("Servering till minderårig", NAME + " " + NUMBER));
+		assertHidden(new MeasureData("Servering till minderårig", NAME + " " + NUMBER, null));
 	}
 
 	@Test
@@ -68,17 +67,6 @@ class PersonalDataTest {
 		assertHidden(remark);
 		assertHidden(round);
 		assertHidden(new InspectionVisitRows(List.of(visit), Map.of(1, List.of(remark)), Map.of(), Map.of(), Map.of(), Map.of("TT", NAME), Map.of(1, round)));
-	}
-
-	@Test
-	void permitLink() {
-		final var holder = new LegalId("5566778899", ENTERPRISE);
-		final var other = new LegalId("5566778800", ENTERPRISE);
-
-		assertThat(new PermitLink(null, holder, holder).sameHolder()).isTrue();
-		assertThat(new PermitLink(null, holder, other).sameHolder()).isFalse();
-		assertThat(new PermitLink(null, null, holder).sameHolder()).isFalse();
-		assertThat(new PermitLink(null, holder, null).sameHolder()).isFalse();
 	}
 
 	@Test

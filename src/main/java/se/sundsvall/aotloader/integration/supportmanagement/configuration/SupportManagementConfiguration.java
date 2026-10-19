@@ -14,6 +14,7 @@ import se.sundsvall.dept44.configuration.feign.FeignConfiguration;
 import se.sundsvall.dept44.configuration.feign.FeignMultiCustomizer;
 import se.sundsvall.dept44.configuration.feign.decoder.ProblemErrorDecoder;
 
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Import(FeignConfiguration.class)
@@ -31,8 +32,9 @@ public class SupportManagementConfiguration {
 	FeignBuilderCustomizer feignBuilderCustomizer(final ClientRegistrationRepository clientRepository, final SupportManagementProperties properties, final AotLoaderProperties aotLoaderProperties,
 		final NoResendCapability noResend) {
 		return FeignMultiCustomizer.create()
-			// An errand that is gone is an answer: the migration then looks for it by its tag, or creates it. The decoder makes
-			// every other status 502, so the statuses that refuse a file must be let through to be told apart.
+			// An errand that is gone is an answer: the migration then looks for it by its tag, or creates it. So is an attachment
+			// already linked to the investigation. The decoder makes every other status 502, so these and the statuses that
+			// refuse a file must be let through to be told apart.
 			.withErrorDecoder(new ProblemErrorDecoder(CLIENT_ID, bypassedStatuses()))
 			.withRequestTimeoutsInSeconds(properties.connectTimeout(), properties.readTimeout())
 			.withRetryableOAuth2InterceptorForClientRegistration(clientRepository.findByRegistrationId(CLIENT_ID))
@@ -45,6 +47,6 @@ public class SupportManagementConfiguration {
 	}
 
 	static List<Integer> bypassedStatuses() {
-		return Stream.concat(Stream.of(NOT_FOUND.value()), FileRefusal.STATUSES.stream()).sorted().toList();
+		return Stream.concat(Stream.of(NOT_FOUND.value(), CONFLICT.value()), FileRefusal.STATUSES.stream()).sorted().toList();
 	}
 }

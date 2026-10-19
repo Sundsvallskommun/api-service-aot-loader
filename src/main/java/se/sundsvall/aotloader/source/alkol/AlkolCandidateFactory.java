@@ -30,6 +30,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -509,9 +510,8 @@ public final class AlkolCandidateFactory {
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
 		final var place = errand.fsId() == null ? null : placesById.get(errand.fsId());
 		final var source = new InspectionErrand(ALKOL, errand.arendeId(), errand.arendetyp(), CodeTexts.textOf(snapshot.errandTypes(), errand.arendetyp()), errand.diarieNr(), errand.oppnad(),
-			errand.avslutad(), snapshot.visits().handlerNames(errand.handlaggare()));
+			errand.avslutad(), snapshot.visits().handlerNames(errand.handlaggare()), errand.upplagd(), latestActivity(errand.arendeId()));
 		final var applicant = errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId());
-		final var permitKey = hasPermit(errand.fsId()) ? new ItemKey(ALKOL, TILLSTAND, String.valueOf(errand.fsId())) : null;
 		final var decisions = decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()
 			.sorted(DECISION_ORDER)
 			.map(this::decisionText)
@@ -519,16 +519,27 @@ public final class AlkolCandidateFactory {
 			.toList();
 
 		final var files = addErrandFiles(List.of(errand.arendeId()), new FileList(sharedFileNames));
-		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), permitKey, decisions, investigationTexts(errand))
+		return inspections.builder(source, place == null ? null : place(place), applicant, ownerOf(place), placePermit(errand.fsId()), decisions, investigationTexts(errand))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
+	}
+
+	/**
+	 * @return the time of the errand's latest event or decision, null when it has none with a time
+	 */
+	private LocalDateTime latestActivity(final Integer arendeId) {
+		return Stream.concat(eventsByErrand.getOrDefault(arendeId, List.of()).stream().map(EventRow::tidpunkt),
+			decisionsByErrand.getOrDefault(arendeId, List.of()).stream().map(DecisionRow::beslutad))
+			.filter(Objects::nonNull)
+			.max(Comparator.naturalOrder())
+			.orElse(null);
 	}
 
 	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
 		final var place = visit.objektId() == null ? null : placesById.get(visit.objektId());
 		final var files = new FileList(sharedFileNames);
-		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.detailsOf(ALKOL, folder, name, SourceValues.startOfDay(visit.datum()))));
-		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place))
+		snapshot.visits().forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.ofVisit(ALKOL, folder, name, SourceValues.startOfDay(visit.datum()))));
+		return visits.builder(visit, snapshot.visits(), place == null ? null : place(place), placePermit(visit.objektId()))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -565,23 +576,52 @@ public final class AlkolCandidateFactory {
 			hits.add(RuleHit.of(DIARY_NUMBER_MISSING, "inget beviljande beslut hittades"));
 			return;
 		}
-		decisionsOf(fsId).stream()
-			.filter(decision -> isOneOf(decision.beslutsTyp(), ENDING_DECISIONS))
-			.filter(decision -> DECISION_ORDER.compare(decision, grant) > 0)
-			.max(DECISION_ORDER)
-			.ifPresent(ending -> hits.add(RuleHit.of(PERMIT_ENDED, Texts.joinWords(ending.beslutsTyp(), SourceValues.format(ending.beslutsDatum())))));
+		endingAfter(fsId, grant).ifPresent(ending -> hits.add(RuleHit.of(PERMIT_ENDED, Texts.joinWords(ending.beslutsTyp(), SourceValues.format(ending.beslutsDatum())))));
 		final var diaryNumber = grantErrand == null ? null : DiaryNumbers.normalize(grantErrand.diarieNr());
 		if (diaryNumber == null) {
 			hits.add(RuleHit.of(DIARY_NUMBER_MISSING, "det beviljande ärendet saknar diarienummer"));
 		} else if (permitsByDiaryNumber.getOrDefault(diaryNumber, 0) > 1) {
 			hits.add(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, grantErrand.diarieNr()));
 		}
+		if (applicantIsNotOwner(grantErrand, owner)) {
+			hits.add(RuleHit.of(APPLICANT_NOT_OWNER));
+		}
+	}
+
+	/**
+	 * @return the latest decision that ended the permit after it was granted (G18), empty when there is none or no grant
+	 */
+	private Optional<DecisionRow> endingAfter(final Integer fsId, final DecisionRow grant) {
+		return grant == null ? Optional.empty()
+			: decisionsOf(fsId).stream()
+				.filter(decision -> isOneOf(decision.beslutsTyp(), ENDING_DECISIONS))
+				.filter(decision -> DECISION_ORDER.compare(decision, grant) > 0)
+				.max(DECISION_ORDER);
+	}
+
+	/**
+	 * @return true when the applicant of the granting errand is not the current owner of the place, both with a number
+	 *         that can be read (G19)
+	 */
+	private boolean applicantIsNotOwner(final ErrandRow grantErrand, final ContactRow owner) {
 		final var applicantNumber = Optional.ofNullable(grantErrand).map(ErrandRow::sokandeId).map(snapshot.applicants()::get)
 			.flatMap(applicant -> PartyRows.numberKey(applicant.organisationsNr(), today));
 		final var ownerNumber = Optional.ofNullable(owner).flatMap(found -> PartyRows.numberKey(found.organisationsNr(), today));
-		if (applicantNumber.isPresent() && ownerNumber.isPresent() && !applicantNumber.equals(ownerNumber)) {
-			hits.add(RuleHit.of(APPLICANT_NOT_OWNER));
+		return applicantNumber.isPresent() && ownerNumber.isPresent() && !applicantNumber.equals(ownerNumber);
+	}
+
+	/**
+	 * @return the current tobacco permit of the sales place, which its inspections are related to (decision 61); null when
+	 *         the place has none
+	 */
+	private PlacePermit placePermit(final Integer fsId) {
+		if (!hasPermit(fsId)) {
+			return null;
 		}
+		final var grant = latestGrant(fsId).orElse(null);
+		final var grantErrand = grant == null ? null : errandsById.get(grant.arendeId());
+		return new PlacePermit(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), issued(grant), endingAfter(fsId, grant).map(DecisionRow::beslutsDatum).orElse(null),
+			placesById.containsKey(fsId) && !applicantIsNotOwner(grantErrand, ownerOf(placesById.get(fsId))));
 	}
 
 	/**
@@ -808,7 +848,7 @@ public final class AlkolCandidateFactory {
 		for (final var arendeId : arendeIds) {
 			eventsByErrand.getOrDefault(arendeId, List.of()).forEach(event -> addEventFiles(files, event));
 			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> files
-				.add(decision.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKOL, decision.mall()), decision.beslutad()))
+				.add(decision.worddokument(), DOCUMENTS, FilePurposes.ofGenerated(ALKOL, decision.mall(), null, decision.beslutad()))
 				.add(decision.bifogadfil(), ATTACHMENTS, FilePurposes.detailsOf(ALKOL, ATTACHMENTS, decision.bifogadfil(), decision.beslutad())));
 		}
 		return files;
@@ -819,8 +859,8 @@ public final class AlkolCandidateFactory {
 	 */
 	private static FileList addEventFiles(final FileList files, final EventRow event) {
 		return files
-			.add(event.worddokument(), DOCUMENTS, new FileDetails(FilePurposes.ofDocument(ALKOL, event.mall()), event.tidpunkt()))
-			.add(event.bifogadfil(), ATTACHMENTS, new FileDetails(attachmentPurpose(event), event.tidpunkt()));
+			.add(event.worddokument(), DOCUMENTS, FilePurposes.ofGenerated(ALKOL, event.mall(), event.handelseTyp(), event.tidpunkt()))
+			.add(event.bifogadfil(), ATTACHMENTS, FilePurposes.ofAttached(ALKOL, event.handelseTyp(), event.bifogadfil(), event.tidpunkt()));
 	}
 
 	private static String attachmentPurpose(final EventRow event) {
@@ -946,7 +986,7 @@ public final class AlkolCandidateFactory {
 
 		FileDetails details() {
 			return folder == DOCUMENTS
-				? new FileDetails(FilePurposes.ofDocument(ALKOL, decision.mall()), decision.beslutad())
+				? FilePurposes.ofGenerated(ALKOL, decision.mall(), null, decision.beslutad())
 				: FilePurposes.detailsOf(ALKOL, folder, name, decision.beslutad());
 		}
 	}

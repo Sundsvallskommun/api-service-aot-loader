@@ -22,6 +22,7 @@ import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.PermitLink.Basis;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FilePurposes;
@@ -263,9 +264,10 @@ class AlkolCandidateFactoryTest {
 			new AssetFile(new FileReference("anmalan 2016.pdf", ATTACHMENTS), null),
 			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), null),
 			new AssetFile(new FileReference("44444444.rtf", DOCUMENTS), null));
-		// Each file gets its purpose and the time of its event or decision
+		// Each file gets its purpose and the time of its event or decision, and a referral answer is material of the
+		// investigation
 		assertThat(notification.detailsOf(new FileReference("remissvar polisen.pdf", ATTACHMENTS)))
-			.isEqualTo(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2015, 1, 5, 9, 0)));
+			.isEqualTo(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2015, 1, 5, 9, 0), true));
 		assertThat(notification.detailsOf(new FileReference("Planritning.pdf", ATTACHMENTS)))
 			.isEqualTo(new FileDetails(FilePurposes.SALES_PREMISES_DRAWING, LocalDateTime.of(2015, 1, 6, 9, 0)));
 		assertThat(notification.detailsOf(new FileReference("44444444.rtf", DOCUMENTS))).isEqualTo(new FileDetails(null, LocalDateTime.of(2015, 1, 20, 10, 0)));
@@ -583,7 +585,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.labelPaths()).containsExactly("TAGROOT/TOBACCO_INSPECTION");
 		assertThat(external.asset()).isNull();
 		assertThat(external.permitLink().permitKey()).isEqualTo(new ItemKey(ALKOL, TILLSTAND, "1"));
-		assertThat(external.permitLink().sameHolder()).isTrue();
+		assertThat(external.permitLink().basis()).isEqualTo(Basis.SAME_HOLDER);
 		assertThat(parameters(external)).containsEntry("beslut", List.of("Varning, 2020-01-20")).containsEntry("handlaggare", List.of("Karin Andersson"));
 		assertThat(external.description()).contains("\nHandläggare: Karin Andersson\n");
 		assertThat(external.files()).containsExactly(new FileReference("varning.pdf", DOCUMENTS));
@@ -597,6 +599,38 @@ class AlkolCandidateFactoryTest {
 		assertThat(internal.labelPaths()).containsExactly("TAGROOT/TOBACCO_INSPECTION", "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION");
 		assertThat(internal.asset()).isNull();
 		assertThat(internal.holder()).isNull();
+	}
+
+	@Test
+	void theFilesOfAnInspectionReportAreMaterialOfTheInvestigation() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.view(new PermitViewRow(1, true, false, false))
+			.errand(new ErrandRow(400, 1, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.event(new EventRow(600, 1, 400, "063", LocalDateTime.of(2020, 1, 10, 9, 0), null, null, null, "rapport.pdf"))
+			.event(new EventRow(601, 1, 400, "024", LocalDateTime.of(2020, 1, 11, 9, 0), null, null, null, "anteckning.pdf"));
+
+		final var errand = data.factory().inspections().candidates().getFirst();
+
+		// The type of the event tells, whatever the file is called (decision 60)
+		assertThat(errand.detailsOf(new FileReference("rapport.pdf", ATTACHMENTS)).investigation()).isTrue();
+		assertThat(errand.detailsOf(new FileReference("anteckning.pdf", ATTACHMENTS)).investigation()).isFalse();
+	}
+
+	@Test
+	void anInspectionErrandStillOpenEndsAtItsLatestEventOrDecision() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.view(new PermitViewRow(1, true, false, false))
+			.errand(new ErrandRow(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
+			.decision(new DecisionRow(500, 401, "VT", LocalDateTime.of(2020, 3, 1, 9, 0), null, null, null, null))
+			.event(new EventRow(600, 1, 401, "024", LocalDateTime.of(2020, 3, 5, 10, 0), null, null, null, null))
+			.event(new EventRow(601, 1, 401, "024", null, null, null, null, null));
+
+		final var investigation = data.factory().inspections().candidates().getFirst().investigation();
+
+		assertThat(investigation.startedAt()).isEqualTo(LocalDateTime.of(2020, 1, 1, 0, 0));
+		assertThat(investigation.completedAt()).isEqualTo(LocalDateTime.of(2020, 3, 5, 10, 0));
 	}
 
 	@Test
@@ -637,7 +671,7 @@ class AlkolCandidateFactoryTest {
 			.place(place(3, 10).ceased())
 			.view(new PermitViewRow(1, true, false, false))
 			.view(new PermitViewRow(3, true, false, false))
-			.visit(new VisitRow(900, 1, LocalDate.of(2024, 5, 3), "21:30", "22:15", "Kontr", "Köpet nekades.", "55555555.rtf", "protokoll.pdf", List.of("4"), null, 7,
+			.visit(new VisitRow(900, 1, LocalDate.of(2024, 5, 3), null, "21:30", "22:15", "Kontr", "Köpet nekades.", "55555555.rtf", "protokoll.pdf", List.of("4"), null, 7,
 				List.of("Tobak", "E-cigaretter"), true))
 			.round(new RoundRow(7, "Kontrollköp vecka 18", LocalDate.of(2024, 5, 3), LocalDate.of(2024, 5, 3), null))
 			.visit(new VisitRow(901, 2, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null))
@@ -653,7 +687,9 @@ class AlkolCandidateFactoryTest {
 		assertThat(visit.type()).isEqualTo(ErrandType.TOBACCO_INSPECTION_VISIT);
 		assertThat(visit.ruleHits()).isEmpty();
 		assertThat(visit.holder()).isNull();
-		assertThat(visit.permitLink()).isNull();
+		// The sales place has no granting decision, so the day of the visit cannot tell which holder it concerned (decision 61)
+		assertThat(visit.permitLink().permitKey()).isEqualTo(new ItemKey(ALKOL, TILLSTAND, "1"));
+		assertThat(visit.permitLink().basis()).isEqualTo(Basis.NO_ISSUE_DATE);
 		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Butik 1");
 		assertThat(visit.description()).isEqualTo("""
 			Tillsynsbesök på Butik 1 2024-05-03, migrerat från AlkOL.
@@ -680,7 +716,9 @@ class AlkolCandidateFactoryTest {
 			.containsEntry("anteckning", List.of("Köpet nekades."))
 			.containsEntry("migrerad", List.of(TODAY + " från AlkOL"));
 		assertThat(visit.investigation().texts()).isEqualTo(new InvestigationTexts("Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03", "Köpet nekades.", "Påträngande reklam i butik"));
-		assertThat(visit.measures()).containsExactly(new MeasureData("Påträngande reklam i butik", null));
+		assertThat(visit.measures()).containsExactly(new MeasureData("Påträngande reklam i butik", null, LocalDateTime.of(2024, 5, 3, 22, 15)));
+		// Every file of the visit is material of its investigation (decision 60)
+		assertThat(visit.files()).allSatisfy(file -> assertThat(visit.detailsOf(file).investigation()).isTrue());
 		assertThat(candidates.get(1).measures()).isEmpty();
 		assertThat(parameters(candidates.get(1))).doesNotContainKeys("tillsynsomgang", "tillsynenGallde", "anmaltBesok");
 		assertThat(visit.place().name()).isEqualTo("Butik 1");

@@ -17,6 +17,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
+import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -189,6 +190,7 @@ public class ItemMigrator {
 			if (context.dryRun()) {
 				fileUploader.check(candidate, context, notes);
 				fileUploader.withLegalBasis(candidate, context, notes);
+				noteTruncatedParameters();
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -223,27 +225,17 @@ public class ItemMigrator {
 			step = Step.BILAGOR;
 			if (!active) {
 				fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
+				fileUploader.linkToInvestigation(candidate, municipalityId, errand.getId(), notes);
 			}
 			saveAs(BILAGOR_KLARA);
 
 			step = Step.TILLSTAND;
 			if (candidate.asset() != null) {
-				final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
-				final var partyAssetsId = targets.ensureAsset(withLegalBasis, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, expired, notes);
-				entity.setPartyAssetsId(partyAssetsId);
-				entity.setAssetId(errand.getId());
-				if (!expired) {
-					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-				} else if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) > 0) {
-					// An EXPIRED post takes no files, so it is ACTIVE while it gets those it lacks
-					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
-					try {
-						fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-					} catch (final RuntimeException e) {
-						restoreExpired(municipalityId, partyAssetsId, e);
-						throw e;
-					}
-					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
+				if (active) {
+					entity.setPartyAssetsId(targets.findMigratedAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, notes));
+					entity.setAssetId(errand.getId());
+				} else {
+					writeAsset(municipalityId, errand.getId(), parties, expired);
 				}
 				saveAs(TILLSTAND_SKAPAT);
 			}
@@ -261,6 +253,41 @@ public class ItemMigrator {
 				targets.activate(municipalityId, errand.getId());
 			}
 			saveAs(KLAR);
+		}
+
+		/**
+		 * Tells in the report which parameters of the post PartyAssets takes only cut to 255 characters, since a certificate
+		 * the
+		 * new system renders from them would show them cut.
+		 */
+		private void noteTruncatedParameters() {
+			Optional.ofNullable(candidate.asset()).map(TargetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
+				.ifPresent(keys -> notes.line("Parametrar som kortas till 255 tecken i PartyAssets: " + String.join(", ", keys)));
+		}
+
+		/**
+		 * Makes the post in PartyAssets of an item whose errand is a draft, or brings the one an earlier run made up to date,
+		 * with its legal basis and its files. An EXPIRED post is ACTIVE while it gets the files it lacks, since an EXPIRED
+		 * post takes none.
+		 */
+		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired) {
+			final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
+			noteTruncatedParameters();
+			final var partyAssetsId = targets.ensureAsset(withLegalBasis, municipalityId, errandId, entity.getPartyAssetsId(), parties, expired, notes);
+			entity.setPartyAssetsId(partyAssetsId);
+			entity.setAssetId(errandId);
+			if (!expired) {
+				fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+			} else if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) > 0) {
+				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
+				try {
+					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+				} catch (final RuntimeException e) {
+					restoreExpired(municipalityId, partyAssetsId, e);
+					throw e;
+				}
+				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
+			}
 		}
 
 		/**

@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.InvestigationData;
@@ -145,11 +146,10 @@ public class TargetMapper {
 
 	/**
 	 * @param  type the type of the measures, the type of the errand, as the AoT solution gives the measures of an
-	 *              inspection
-	 *              of the kind
+	 *              inspection of the kind
 	 * @return      the measures of an inspection visit, its remarks (decision 57): added by the migration in the role
-	 *              Draken
-	 *              gives every measure, and completed, so that no remark of a closed visit counts as an open deficiency
+	 *              Draken gives every measure, and completed when the visit was, so that no remark of a closed visit
+	 *              counts as an open deficiency
 	 */
 	private List<Measure> measures(final Candidate candidate, final String type) {
 		return candidate.measures().stream()
@@ -159,7 +159,8 @@ public class TargetMapper {
 				.description(Texts.truncate(measure.description(), MEASURE_DESCRIPTION_MAX_LENGTH, null))
 				.addedByUser(properties.reporterUserId())
 				.addedByRole(properties.roles().measureAddedBy())
-				.status(MEASURE_COMPLETED))
+				.status(MEASURE_COMPLETED)
+				.completedAt(untilNow(measure.completedAt())))
 			.toList();
 	}
 
@@ -180,6 +181,17 @@ public class TargetMapper {
 	 * @param  expired        true to create the post as EXPIRED (the exception list said so)
 	 * @return                the request
 	 */
+	/**
+	 * @return the keys of the parameters of the post that are longer than PartyAssets takes, and which {@link #toAsset}
+	 *         therefore cuts, in the order of the parameters
+	 */
+	public static List<String> truncatedParameters(final AssetData asset) {
+		return asset.parameters().entrySet().stream()
+			.filter(parameter -> parameter.getValue() != null && parameter.getValue().length() > ASSET_TEXT_MAX_LENGTH)
+			.map(Map.Entry::getKey)
+			.toList();
+	}
+
 	public AssetCreateRequest toAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyId, final boolean expired) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
@@ -259,9 +271,7 @@ public class TargetMapper {
 	 *         it active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
-		final var completedAt = Optional.ofNullable(inSwedishTime(investigation.completedAt()))
-			.filter(time -> !time.toInstant().isAfter(clock.instant()))
-			.orElse(null);
+		final var completedAt = untilNow(investigation.completedAt());
 		final var texts = investigation.texts();
 		return new Investigation()
 			.status(completedAt == null ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
@@ -275,6 +285,16 @@ public class TargetMapper {
 
 	private static OffsetDateTime inSwedishTime(final LocalDateTime time) {
 		return time == null ? null : time.atZone(SWEDISH_TIME).toOffsetDateTime();
+	}
+
+	/**
+	 * @return the time in Swedish time; null when it is later than now, which the source has in error or for a planned
+	 *         inspection
+	 */
+	private OffsetDateTime untilNow(final LocalDateTime time) {
+		return Optional.ofNullable(inSwedishTime(time))
+			.filter(at -> !at.toInstant().isAfter(clock.instant()))
+			.orElse(null);
 	}
 
 	/**

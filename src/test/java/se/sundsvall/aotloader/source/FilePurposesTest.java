@@ -85,6 +85,55 @@ class FilePurposesTest {
 		assertThat(FilePurposes.ofAttachment(ALKT, "REMS", noEnforcementAuthority)).isEqualTo(FilePurposes.STATEMENT_RESPONSE);
 	}
 
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
+		ALKT  | tdu     | -     | -                       | true
+		ALKT  | TNT     | ANT   | -                       | true
+		ALKT  | KOUT    | -     | -                       | true
+		ALKT  | REMP    | UTSKR | REFERRAL_POLICE_REQUEST | true
+		ALKT  | TDBV2   | UTSKR | -                       | false
+		ALKT  | -       | KOMU  | -                       | true
+		ALKT  | -       | NAMF  | -                       | true
+		ALKT  | -       | ANT   | -                       | false
+		ALKOL | UtrÄndT | -     | -                       | true
+		ALKOL | TOBrapp | -     | -                       | true
+		ALKOL | TillstT | -     | -                       | false
+		ALKOL | -       | 092   | -                       | true
+		ALKOL | -       | <Kod> | -                       | true
+		ALKOL | -       | 063   | -                       | true
+		ALKOL | -       | 024   | -                       | false
+		""")
+	void aDocumentIsMaterialOfTheInvestigationByItsTemplateOrItsEvent(final Source source, final String template, final String eventType, final String purpose,
+		final boolean investigation) {
+		final var received = LocalDateTime.of(2020, 1, 10, 9, 0);
+
+		assertThat(FilePurposes.ofGenerated(source, template, eventType, received)).isEqualTo(new FileDetails(purpose, received, investigation));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
+		ALKT  | REMS | svar polisen.pdf | REFERRAL_POLICE_RESPONSE | true
+		ALKT  | REMS | svar.pdf         | STATEMENT_RESPONSE       | true
+		ALKT  | KOMS | svar.pdf         | -                        | true
+		ALKT  | HAND | ritning.pdf      | SERVING_AREA_DRAWING     | false
+		ALKOL | 029  | svar.pdf         | STATEMENT_RESPONSE       | true
+		ALKOL | 094  | förslag.pdf      | -                        | true
+		ALKOL | 035  | program.pdf      | SELF_MONITORING_PROGRAM  | false
+		ALKOL | -    | ansokan.pdf      | -                        | false
+		""")
+	void anAttachmentIsMaterialOfTheInvestigationByItsPurposeOrItsEvent(final Source source, final String eventType, final String name, final String purpose,
+		final boolean investigation) {
+		assertThat(FilePurposes.ofAttached(source, eventType, name, null)).isEqualTo(new FileDetails(purpose, null, investigation));
+	}
+
+	@Test
+	void everyFileOfAVisitIsMaterialOfItsInvestigation() {
+		final var visited = LocalDateTime.of(2023, 11, 4, 0, 0);
+
+		assertThat(FilePurposes.ofVisit(ALKT, ATTACHMENTS, "ritning.pdf", visited)).isEqualTo(new FileDetails(FilePurposes.SERVING_AREA_DRAWING, visited, true));
+		assertThat(FilePurposes.ofVisit(ALKOL, DOCUMENTS, "protokoll.rtf", null)).isEqualTo(new FileDetails(null, null, true));
+	}
+
 	@Test
 	void theDetailsOfAFileOnNoEvent() {
 		final var received = LocalDateTime.of(2019, 6, 1, 0, 0);
@@ -102,5 +151,8 @@ class FilePurposesTest {
 		assertThat(first.orElse(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2019, 6, 1, 0, 0))))
 			.isEqualTo(new FileDetails(FilePurposes.STATEMENT_RESPONSE, LocalDateTime.of(2019, 6, 1, 0, 0)));
 		assertThat(first.orElse(null)).isSameAs(first);
+		// A file is material of the investigation when it is so on either of its events
+		assertThat(first.orElse(new FileDetails(null, null, true)).investigation()).isTrue();
+		assertThat(new FileDetails(null, null, true).orElse(first).investigation()).isTrue();
 	}
 }

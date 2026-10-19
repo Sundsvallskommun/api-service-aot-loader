@@ -12,6 +12,7 @@ import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
+import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,18 +21,23 @@ class InspectionVisitCandidatesTest {
 
 	@ParameterizedTest
 	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
-		2023-11-04 | 21:30    | 23:15    | 2023-11-04T21:30 | 2023-11-04T23:15
-		2023-11-04 | 9.15     | 10:00:00 | 2023-11-04T09:15 | 2023-11-04T10:00
-		2023-11-04 | 22:00    | 01:30    | 2023-11-04T22:00 | 2023-11-05T01:30
-		2023-11-04 | 22:00    | 24:00    | 2023-11-04T22:00 | 2023-11-05T00:00
-		2023-11-04 | 14:00:00 | -        | 2023-11-04T14:00 | -
-		2023-11-04 | -        | 10:00    | 2023-11-04T00:00 | 2023-11-04T10:00
-		2023-11-04 | kväll    | sent     | 2023-11-04T00:00 | -
-		-          | 21:30    | 23:15    | -                | -
+		2023-11-04 | -          | 21:30    | 23:15    | 2023-11-04T21:30 | 2023-11-04T23:15
+		2023-11-04 | -          | 9.15     | 10:00:00 | 2023-11-04T09:15 | 2023-11-04T10:00
+		2023-11-04 | -          | 22:00    | 01:30    | 2023-11-04T22:00 | 2023-11-05T01:30
+		2023-11-04 | 2023-11-04 | 22:00    | 01:30    | 2023-11-04T22:00 | 2023-11-05T01:30
+		2023-11-04 | 2023-11-05 | 22:00    | 01:30    | 2023-11-04T22:00 | 2023-11-05T01:30
+		2023-11-04 | 2023-11-06 | 22:00    | 01:30    | 2023-11-04T22:00 | 2023-11-06T01:30
+		2023-11-04 | 2023-11-03 | 14:00    | 15:00    | 2023-11-04T14:00 | 2023-11-04T15:00
+		2023-11-04 | -          | 22:00    | 24:00    | 2023-11-04T22:00 | 2023-11-05T00:00
+		2023-11-04 | -          | 14:00:00 | -        | 2023-11-04T14:00 | 2023-11-04T14:00
+		2023-11-04 | 2023-11-05 | 14:00    | -        | 2023-11-04T14:00 | 2023-11-05T00:00
+		2023-11-04 | -          | -        | 10:00    | 2023-11-04T00:00 | 2023-11-04T10:00
+		2023-11-04 | -          | kväll    | sent     | 2023-11-04T00:00 | 2023-11-04T00:00
+		-          | 2023-11-05 | 21:30    | 23:15    | -                | -
 		""")
-	void aVisitStartsOnItsDateAtItsStartTimeAndEndsAtItsEndTime(final LocalDate date, final String start, final String end, final LocalDateTime startedAt,
-		final LocalDateTime completedAt) {
-		final var visit = new VisitRow(900, 1, date, start, end, "04", null, null, null);
+	void aVisitStartsOnItsDateAtItsStartTimeAndEndsAtItsEndTimeOnItsEndDayOrWhenItStarted(final LocalDate date, final LocalDate endDay, final String start, final String end,
+		final LocalDateTime startedAt, final LocalDateTime completedAt) {
+		final var visit = new VisitRow(900, 1, date, endDay, start, end, "04", null, null, null, List.of(), StaffMarks.NONE, null, List.of(), false);
 
 		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of(), null)).isEqualTo(new InvestigationData("Tillsynsbesök", startedAt, completedAt));
 	}
@@ -59,11 +65,13 @@ class InspectionVisitCandidatesTest {
 			new RemarkRow(900, null, "Bara en notering", null),
 			new RemarkRow(900, null, " ", "bild.jpg"));
 
+		final var visited = LocalDateTime.of(2023, 11, 4, 23, 0);
+
 		// A remark without a code is headed "Anmärkning", and one with neither a code nor a note is no measure
-		assertThat(InspectionVisitCandidates.measures(remarks, rows)).containsExactly(
-			new MeasureData("Servering till minderårig", "Ungdomar i baren"),
-			new MeasureData("77", null),
-			new MeasureData("Anmärkning", "Bara en notering"));
+		assertThat(InspectionVisitCandidates.measures(remarks, rows, visited)).containsExactly(
+			new MeasureData("Servering till minderårig", "Ungdomar i baren", visited),
+			new MeasureData("77", null, visited),
+			new MeasureData("Anmärkning", "Bara en notering", visited));
 	}
 
 	@Test

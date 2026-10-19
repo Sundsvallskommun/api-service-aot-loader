@@ -61,6 +61,13 @@ class LegalBasisTest {
 	}
 
 	@Test
+	void aNonBreakingSpaceIsASpace() {
+		final var decision = rtf("{\\rtf1 Enligt 8\\'a0kap.\\'a02\\'a0\\'a7 alkohollagen (2010:1622) och 4\\u160\\'a0kap. 3 \\'a7 lagen (2010:1622)}");
+
+		assertThat(LegalBasis.of(decision)).hasValue("8 kap. 2 § alkohollagen (2010:1622); 4 kap. 3 § lagen (2010:1622)");
+	}
+
+	@Test
 	void aLongNumberIsSearchedInLinearTime() {
 		final var decision = rtf("{\\rtf1 " + "1".repeat(200_000) + " 8 kap. 2\\'a7alkohollagen (2010:1622)}");
 

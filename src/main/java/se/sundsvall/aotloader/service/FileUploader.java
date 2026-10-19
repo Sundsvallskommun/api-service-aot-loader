@@ -13,9 +13,11 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
@@ -31,6 +33,7 @@ import se.sundsvall.aotloader.source.files.LegalBasis;
 import se.sundsvall.aotloader.support.MigrationException;
 
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toSet;
 import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FILE_NOT_UPLOADED;
@@ -80,6 +83,57 @@ class FileUploader {
 				() -> uploadFile(municipalityId, errandId, lookup, wanted(candidate.detailsOf(reference), context, municipalityId), attached, problems));
 		}
 		reportAndFailOnUnreadable(problems, notes, candidate);
+	}
+
+	/**
+	 * Links the errand's attachments of the files that are material of its investigation to the investigation (decision
+	 * 60), found on the errand by name regardless of case. An attachment already linked is left as it is, and a file that
+	 * is not on the errand is left out; the upload lists it. An errand without an investigation links nothing.
+	 */
+	void linkToInvestigation(final Candidate candidate, final String municipalityId, final String errandId, final ReportNotes notes) {
+		final var names = investigationFileNames(candidate);
+		if (names.isEmpty()) {
+			return;
+		}
+		final var investigation = supportManagement.getInvestigations(municipalityId, errandId).stream().findFirst();
+		if (investigation.isEmpty()) {
+			return;
+		}
+		final var linked = Optional.ofNullable(investigation.get().getAttachments()).orElse(List.of()).stream().map(ErrandAttachment::getId).collect(toSet());
+		final var material = supportManagement.getAttachments(municipalityId, errandId).stream()
+			.filter(attachment -> attachment.getFileName() != null && names.contains(attachment.getFileName().toLowerCase(Locale.ROOT)))
+			.toList();
+		material.stream()
+			.filter(attachment -> !linked.contains(attachment.getId()))
+			.forEach(attachment -> supportManagement.linkInvestigationAttachment(municipalityId, errandId, investigation.get().getId(), attachment.getId()));
+		notes.line(investigationMaterial(material.size()));
+	}
+
+	private static String investigationMaterial(final int count) {
+		return "Underlag till utredningen: " + (count == 1 ? "1 fil" : count + " filer");
+	}
+
+	/**
+	 * @return the names of the files that are material of the investigation, as {@link #nameKey} gives them, when the
+	 *         candidate has an investigation to link them to
+	 */
+	private static Set<String> investigationFileNames(final Candidate candidate) {
+		if (candidate.investigation() == null) {
+			return Set.of();
+		}
+		return candidate.files().stream()
+			.filter(reference -> candidate.detailsOf(reference).investigation())
+			.map(FileUploader::nameKey)
+			.filter(Objects::nonNull)
+			.collect(toSet());
+	}
+
+	/**
+	 * @return the name of the file a reference names, as the file area finds it and the attachment gets it, in lower case;
+	 *         null when it names none
+	 */
+	private static String nameKey(final FileReference reference) {
+		return Optional.ofNullable(FileArea.fileNameOf(reference.name())).map(name -> name.toLowerCase(Locale.ROOT)).orElse(null);
 	}
 
 	/**
@@ -152,12 +206,21 @@ class FileUploader {
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var problems = new FileProblems();
+		final var investigationNames = investigationFileNames(candidate);
+		var material = 0;
 		for (final var reference : candidate.files()) {
 			final var lookup = fileArea.find(reference);
-			problemOf(reference, lookup).ifPresent(problem -> problems.add(problem, lookup.name()));
+			final var problem = problemOf(reference, lookup);
+			problem.ifPresent(found -> problems.add(found, lookup.name()));
+			if (problem.isEmpty() && investigationNames.contains(nameKey(reference))) {
+				material++;
+			}
 		}
 		if (candidate.asset() != null && !candidate.assetFiles().isEmpty()) {
 			notes.line("Till %s i PartyAssets: %s".formatted(AssetWords.of(candidate.key().kind()).definite(), categoryCounts(candidate, context, context.municipalityId())));
+		}
+		if (!investigationNames.isEmpty()) {
+			notes.line(investigationMaterial(material));
 		}
 		problems.report(notes, maxFileSizeText());
 	}

@@ -134,18 +134,28 @@ class TargetMapperTest {
 	 * A new draft of a permit with a holder, its contact person and two persons, the second without a party id.
 	 */
 	@Test
+	void theParametersOfThePostThatPartyAssetsTakesOnlyCutAreTold() {
+		final var asset = new AssetData(null, "Serveringstillstånd", null, null, Map.of("conditions", "x".repeat(256), "omrade", "x".repeat(255)));
+
+		assertThat(TargetMapper.truncatedParameters(asset)).containsExactly("conditions");
+	}
+
+	@Test
 	void theRemarksOfAVisitAreCompletedMeasuresOfTheTypeOfTheErrand() {
 		final var visit = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "900"), ErrandType.ALCOHOL_INSPECTION_VISIT)
 			.title("Tillsynsbesök – Restaurang 1")
-			.measures(List.of(new MeasureData("Servering till minderårig", "Ungdomar i baren"), new MeasureData("x".repeat(300), null)))
+			// The second visit has a time later than now, which the source has in error or for a planned inspection
+			.measures(List.of(new MeasureData("Servering till minderårig", "Ungdomar i baren", LocalDateTime.of(2023, 11, 4, 23, 0)),
+				new MeasureData("x".repeat(300), null, LocalDateTime.of(2026, 10, 15, 12, 1))))
 			.build();
 
 		final var errand = mapper.toNewDraft(visit, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
 
-		assertThat(errand.getMeasures()).extracting(Measure::getType, Measure::getTitle, Measure::getDescription, Measure::getAddedByUser, Measure::getAddedByRole, Measure::getStatus)
+		assertThat(errand.getMeasures()).extracting(Measure::getType, Measure::getTitle, Measure::getDescription, Measure::getAddedByUser, Measure::getAddedByRole, Measure::getStatus,
+			Measure::getCompletedAt)
 			.containsExactly(
-				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "Servering till minderårig", "Ungdomar i baren", "alkt-migration", "MEASURER", "COMPLETED"),
-				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "x".repeat(254) + "…", null, "alkt-migration", "MEASURER", "COMPLETED"));
+				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "Servering till minderårig", "Ungdomar i baren", "alkt-migration", "MEASURER", "COMPLETED", OffsetDateTime.parse("2023-11-04T23:00+01:00")),
+				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "x".repeat(254) + "…", null, "alkt-migration", "MEASURER", "COMPLETED", null));
 		// A visit without remarks sends an empty list, so that an update of a draft removes the measures of an earlier run
 		final var withoutRemarks = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "901"), ErrandType.ALCOHOL_INSPECTION_VISIT).build();
 		assertThat(mapper.toDraftUpdate(withoutRemarks, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getMeasures()).isEmpty();

@@ -39,6 +39,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.CONTENT_TOO_LARGE;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -146,6 +147,18 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).extracting(Investigation::getId).containsExactly("i");
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).isEmpty();
 		assertThat(integration.createInvestigation(MUNICIPALITY_ID, "a", investigation)).isEqualTo("i-1");
+	}
+
+	@Test
+	void anAttachmentLinkedToTheInvestigationAlreadyIsNoError() {
+		when(client.linkInvestigationAttachment(MUNICIPALITY_ID, NAMESPACE, "a", "i", "att-1"))
+			.thenReturn(ResponseEntity.status(201).build())
+			.thenThrow(Problem.valueOf(CONFLICT, "Redan länkad"))
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"));
+
+		assertThat(integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isTrue();
+		assertThat(integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isFalse();
+		assertThatThrownBy(() -> integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Saknas");
 	}
 
 	@Test

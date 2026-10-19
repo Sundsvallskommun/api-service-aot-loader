@@ -25,6 +25,17 @@ import static org.mockito.Mockito.when;
 class AlktRepositoryTest {
 
 	@Test
+	void theFilesOfAnEventOfCommunicationAreMaterialOfTheInvestigation() {
+		final var events = List.of(new EventFile(1, 500, 1, "KOMU", "BALLM", LocalDateTime.of(2020, 1, 1, 9, 0), "11111111.rtf", "svar.pdf"),
+			new EventFile(2, 500, 1, "ANT", "BALLM", LocalDateTime.of(2020, 1, 2, 9, 0), "22222222.rtf", null));
+
+		final var split = EventFiles.of(events, List.of(), Set.of(500));
+
+		// The type of the event tells, for its document and its attachment alike (decision 60)
+		assertThat(split.errandFiles().get(500)).extracting(row -> row.details().investigation()).containsExactly(true, true, false);
+	}
+
+	@Test
 	void theFilesOfTheEventsGoToTheirErrandOrElseToTheirPlace() {
 		final var events = List.of(
 			new EventFile(1, 500, 1, "GTILL", "TDBV2", LocalDateTime.of(2020, 1, 1, 14, 35), "11111111.rtf", "ansokan.pdf"),
@@ -42,10 +53,10 @@ class AlktRepositoryTest {
 		assertThat(split.placeFiles()).containsOnlyKeys(1);
 		// The attachment of an event of a referral answer is one
 		assertThat(split.placeFiles().get(1)).containsExactly(new FileRow(null, "22222222.rtf", true, new FileDetails(null, LocalDateTime.of(2020, 1, 2, 9, 0))),
-			new FileRow(null, "remissvar.pdf", false, new FileDetails(FilePurposes.STATEMENT_RESPONSE, null)));
+			new FileRow(null, "remissvar.pdf", false, new FileDetails(FilePurposes.STATEMENT_RESPONSE, null, true)));
 		assertThat(split.unplacedFiles()).containsOnlyKeys(4);
 		// A document made from the template of a referral to the police is one
-		assertThat(split.unplacedFiles().get(4)).containsExactly(new FileRow(null, "33333333.rtf", true, new FileDetails(FilePurposes.POLICE_REQUEST, null)), new FileRow(null, "ingenstans.pdf", false));
+		assertThat(split.unplacedFiles().get(4)).containsExactly(new FileRow(null, "33333333.rtf", true, new FileDetails(FilePurposes.POLICE_REQUEST, null, true)), new FileRow(null, "ingenstans.pdf", false));
 		assertThat(split.documents()).containsExactly(
 			new DocumentRow(1, 500, 1, "TDBV2", LocalDateTime.of(2020, 1, 1, 14, 35), "11111111.rtf"),
 			new DocumentRow(2, null, 1, "TDBBS", LocalDateTime.of(2020, 1, 2, 9, 0), "22222222.rtf"),

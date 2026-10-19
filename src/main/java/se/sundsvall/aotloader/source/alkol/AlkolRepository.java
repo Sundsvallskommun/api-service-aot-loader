@@ -65,7 +65,7 @@ public class AlkolRepository {
 
 	private static final String SELECT_ERRANDS = """
 		SELECT ar.ArendeID, ar.ObjektID, ar.Arendetyp, ar.DiarieNr, ar.OppnandeDatum, ar.AvslutsDatum, ar.Sokandeid, ar.Noteringar,
-		       ar.HandlaggarID, ar.HandlaggarID2
+		       ar.HandlaggarID, ar.HandlaggarID2, ar.UpplagdDatum
 		FROM dbo.[Ärende] ar
 		ORDER BY ar.ArendeID
 		""";
@@ -100,7 +100,7 @@ public class AlkolRepository {
 		""";
 
 	private static final String SELECT_VISITS = """
-		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
+		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.SlutDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
 		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.TillsynsOmgangsNr, t.AnmaltBesok,
 		       t.TTypOL, t.TTypTOBAK, t.TTypNIKOTIN, t.TTypECIG, t.TTypTobaksfriNikotin
 		FROM dbo.[Tillsyn_Tillfälle] t
@@ -257,7 +257,8 @@ public class AlkolRepository {
 			date(rs, "AvslutsDatum"),
 			integer(rs, "Sokandeid"),
 			text(rs, "Noteringar"),
-			Stream.of(integer(rs, "HandlaggarID"), integer(rs, "HandlaggarID2")).filter(Objects::nonNull).map(String::valueOf).toList());
+			Stream.of(integer(rs, "HandlaggarID"), integer(rs, "HandlaggarID2")).filter(Objects::nonNull).map(String::valueOf).toList(),
+			date(rs, "UpplagdDatum"));
 	}
 
 	static DecisionRow toDecision(final ResultSet rs) throws SQLException {
@@ -279,6 +280,7 @@ public class AlkolRepository {
 			integer(rs, TILLSYNSTILLFALLE_NR),
 			integer(rs, "ObjektId"),
 			date(rs, "StartDatum"),
+			date(rs, "SlutDatum"),
 			time(rs, "StartTid"),
 			time(rs, "SlutTid"),
 			text(rs, "Tillsynsform"),
