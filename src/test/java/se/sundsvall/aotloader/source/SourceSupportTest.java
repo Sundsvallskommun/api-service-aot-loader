@@ -268,7 +268,7 @@ class SourceSupportTest {
 		final var subtypeLabels = new EnumMap<ServingPermitSubtype, String>(ServingPermitSubtype.class);
 		subtypeLabels.put(ServingPermitSubtype.PERMANENT_SERVING, " B ");
 		subtypeLabels.put(ServingPermitSubtype.TASTING, null);
-		final var settings = new ErrandTypeSettings(null, null, null, null, Arrays.asList(" A ", null, " "), subtypeLabels, Map.of(" Tills ", " C ", "IT", " "), true);
+		final var settings = new ErrandTypeSettings(null, null, null, null, null, Arrays.asList(" A ", null, " "), subtypeLabels, Map.of(" Tills ", " C ", "IT", " "), true);
 
 		assertThat(settings.labels()).containsExactly("A");
 		assertThat(settings.subtypeLabel(ServingPermitSubtype.PERMANENT_SERVING)).contains("B");

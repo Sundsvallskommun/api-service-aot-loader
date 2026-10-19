@@ -75,21 +75,21 @@ class PreflightTest {
 			.map(name -> new AttachmentPurpose().id("id-" + name).name(name).displayName(name.toLowerCase(Locale.ROOT)))
 			.toList());
 		lenient().when(supportManagement.getMeasureTypes(MUNICIPALITY_ID))
-			.thenReturn(List.of(new MeasureType().name("TYPE_ALCOHOL_INSPECTION_VISIT"), new MeasureType().name("TYPE_TOBACCO_INSPECTION_VISIT")));
+			.thenReturn(List.of(new MeasureType().name("MEASURE_ALCOHOL_INSPECTION_VISIT"), new MeasureType().name("MEASURE_TOBACCO_INSPECTION_VISIT")));
 		lenient().when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("MEASURER")));
 	}
 
 	@Test
-	void theVisitsNeedTheMeasureTypeOfTheirErrandsAndTheRoleOfTheMeasures() {
+	void theVisitsNeedTheirMeasureTypeAndTheRoleOfTheMeasures() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 		final var visits = Map.of(Source.ALKT, Set.of(TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSYNSBESOK));
 
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).isEmpty();
 
-		when(supportManagement.getMeasureTypes(MUNICIPALITY_ID)).thenReturn(List.of(new MeasureType().name("TYPE_ALCOHOL_INSPECTION_VISIT")));
+		when(supportManagement.getMeasureTypes(MUNICIPALITY_ID)).thenReturn(List.of(new MeasureType().name("MEASURE_ALCOHOL_INSPECTION_VISIT")));
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems())
-			.containsExactly("Åtgärdstypen TYPE_TOBACCO_INSPECTION_VISIT finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (beslut 57)");
+			.containsExactly("Åtgärdstypen MEASURE_TOBACCO_INSPECTION_VISIT finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (beslut 57)");
 		// A run without visits gives no measures and needs no measure type
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).isEmpty();
 
@@ -211,10 +211,10 @@ class PreflightTest {
 	void whatIsMissing() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(List.of(new Label().id("x").resourcePath("/TAGROOT/MIGRATED_ERRAND")
 			.attributes(List.of(new LabelAttribute().key("processBlocked").value("false")))));
-		final var inspection = new ErrandTypeSettings(null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
+		final var inspection = new ErrandTypeSettings(null, null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
 		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null, null),
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection, ErrandType.ALCOHOL_INSPECTION_VISIT,
-				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true)),
+				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true)),
 			Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
 			Map.of("Timrå", "22620"));
 		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
@@ -227,6 +227,7 @@ class PreflightTest {
 			"Klassificering saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Typ i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 20)",
 			"Namn i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 4)",
+			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Etikett saknas för TOBACCO_PERMIT (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Rollen för tillståndshavaren på tillsynsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7)",
@@ -259,6 +260,8 @@ class PreflightTest {
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).onlyPlacesWithPermit()).isTrue();
 		assertThat(properties.errandType(ErrandType.ALCOHOL_INSPECTION_VISIT).labels()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION_VISIT).onlyPlacesWithPermit()).isTrue();
+		// The remarks of every visit are deficiencies for the holder to put right (decision 57)
+		assertThat(Stream.of(ErrandType.ALCOHOL_INSPECTION_VISIT, ErrandType.TOBACCO_INSPECTION_VISIT).map(type -> properties.errandType(type).measureType())).containsOnly("EXTERNAL");
 		// The holder must not see an inspection errand on Mina sidor (decision 27)
 		assertThat(properties.roles().inspectionHolder()).isEqualTo("CONTACT").isNotEqualTo(properties.roles().permitHolder());
 	}

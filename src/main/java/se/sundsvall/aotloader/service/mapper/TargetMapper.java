@@ -139,14 +139,13 @@ public class TargetMapper {
 				.toList());
 		// A visit always sends its list, also an empty one, so that an update of a draft replaces what an earlier run gave it
 		if (candidate.type().getKind() == Kind.TILLSYNSBESOK) {
-			errand.measures(measures(candidate, settings.type()));
+			errand.measures(measures(candidate, settings.measureType()));
 		}
 		return errand;
 	}
 
 	/**
-	 * @param  type the type of the measures, the type of the errand, as the AoT solution gives the measures of an
-	 *              inspection of the kind
+	 * @param  type the measure type of the measures, that of the settings of the errand type
 	 * @return      the measures of an inspection visit, its remarks (decision 57): added by the migration in the role
 	 *              Draken gives every measure, and completed when the visit was, so that no remark of a closed visit
 	 *              counts as an open deficiency

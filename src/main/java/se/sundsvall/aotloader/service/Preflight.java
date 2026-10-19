@@ -110,6 +110,9 @@ public class Preflight {
 			if (type.isWithAsset() && Texts.isBlank(settings.assetTitle())) {
 				problems.add("Namn i PartyAssets saknas för %s (aot-loader.errand-types, beslut 4)".formatted(type));
 			}
+			if (type.getKind() == TILLSYNSBESOK && Texts.isBlank(settings.measureType())) {
+				problems.add("Åtgärdstyp för anmärkningarna saknas för %s (aot-loader.errand-types, beslut 57)".formatted(type));
+			}
 			checkTypeLabel(type, settings, problems);
 		});
 	}
@@ -191,20 +194,23 @@ public class Preflight {
 
 	/**
 	 * Adds a problem when the remarks of the inspection visits cannot become measures (decision 57): the namespace lacks
-	 * the role they are added by, or the measure type of a type of visit, the type of its errands. SupportManagement
-	 * requires both of every measure.
+	 * the role they are added by, or the measure type of a type of visit. SupportManagement requires both of every
+	 * measure.
 	 */
 	private void checkMeasures(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
-		final var measureTypes = types.stream()
-			.filter(type -> type.getKind() == TILLSYNSBESOK)
-			.map(type -> properties.errandType(type).type())
-			.filter(type -> !Texts.isBlank(type))
-			.collect(toCollection(TreeSet::new));
-		if (measureTypes.isEmpty()) {
+		final var visitTypes = types.stream().filter(type -> type.getKind() == TILLSYNSBESOK).toList();
+		if (visitTypes.isEmpty()) {
 			return;
 		}
 		checkMeasureRole(municipalityId, problems);
-		checkMeasureTypes(municipalityId, measureTypes, problems);
+		// A blank measure type is reported with the settings of the errand type
+		final var measureTypes = visitTypes.stream()
+			.map(type -> properties.errandType(type).measureType())
+			.filter(type -> !Texts.isBlank(type))
+			.collect(toCollection(TreeSet::new));
+		if (!measureTypes.isEmpty()) {
+			checkMeasureTypes(municipalityId, measureTypes, problems);
+		}
 	}
 
 	private void checkMeasureRole(final String municipalityId, final List<String> problems) {

@@ -192,6 +192,8 @@ aot-loader:
     alcohol-inspection-visit:
       category: INSPECTION
       type: EXTERNAL_INSPECTION
+      # The measure type of the measures the remarks become, a deficiency for the holder to put right (decision 57)
+      measure-type: EXTERNAL
       labels:
         - CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION
         - TAGROOT/ALCOHOL_INSPECTION
@@ -199,6 +201,7 @@ aot-loader:
     tobacco-inspection-visit:
       category: INSPECTION
       type: EXTERNAL_INSPECTION
+      measure-type: EXTERNAL
       labels:
         - CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION
         - TAGROOT/TOBACCO_INSPECTION

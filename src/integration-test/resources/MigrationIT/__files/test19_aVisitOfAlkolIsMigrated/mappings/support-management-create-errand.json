@@ -85,7 +85,7 @@
 				"matchesJsonPath": "$[?(@.measures.length() == 1)]"
 			},
 			{
-				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Påträngande reklam i butik' && @.status == 'COMPLETED' && @.addedByRole == 'PRIMARY')]"
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL' && @.title == 'Påträngande reklam i butik' && @.status == 'COMPLETED' && @.addedByRole == 'PRIMARY')]"
 			},
 			{
 				"matchesJsonPath": {

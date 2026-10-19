@@ -96,7 +96,7 @@ public record AotLoaderProperties(
 	 * @return the settings of the errand type, with every setting blank when none are configured
 	 */
 	public ErrandTypeSettings errandType(final ErrandType type) {
-		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null, null, null, null, false));
+		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null, null, null, null, null, false));
 	}
 
 	/**
@@ -137,6 +137,8 @@ public record AotLoaderProperties(
 	 *
 	 * @param category             the category of the classification (decision 5)
 	 * @param type                 the type of the classification (decision 5)
+	 * @param measureType          for inspection visits, the measure type of the measures their remarks become (decision
+	 *                             57)
 	 * @param assetType            the type of the post in PartyAssets (decision 20)
 	 * @param assetTitle           the title of the post in PartyAssets (decision 4)
 	 * @param labels               the resource paths of the labels every errand of the type gets (section 7.3.4)
@@ -151,6 +153,7 @@ public record AotLoaderProperties(
 	public record ErrandTypeSettings(
 		String category,
 		String type,
+		String measureType,
 		String assetType,
 		String assetTitle,
 		List<String> labels,

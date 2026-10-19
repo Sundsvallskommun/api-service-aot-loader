@@ -36,6 +36,7 @@ import se.sundsvall.aotloader.source.FilePurposes;
 import static java.util.function.Function.identity;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 
@@ -84,7 +85,7 @@ public final class TestData {
 	public static AotLoaderProperties properties(final ErrandType inspectionType, final boolean onlyPlacesWithPermit, final Map<String, String> sourceErrandTypes) {
 		final var types = errandTypes();
 		final var settings = types.get(inspectionType);
-		types.put(inspectionType, new ErrandTypeSettings(settings.category(), settings.type(), settings.assetType(), settings.assetTitle(), settings.labels(), settings.subtypeLabels(),
+		types.put(inspectionType, new ErrandTypeSettings(settings.category(), settings.type(), settings.measureType(), settings.assetType(), settings.assetTitle(), settings.labels(), settings.subtypeLabels(),
 			sourceErrandTypes, onlyPlacesWithPermit));
 		return properties(types, "documents", "attachments");
 	}
@@ -95,7 +96,7 @@ public final class TestData {
 	public static Map<ErrandType, ErrandTypeSettings> errandTypes() {
 		final var types = new EnumMap<ErrandType, ErrandTypeSettings>(ErrandType.class);
 		for (final var type : ErrandType.values()) {
-			types.put(type, new ErrandTypeSettings("CATEGORY_" + type, "TYPE_" + type, type.isWithAsset() ? "Asset" + type : null, type.isWithAsset() ? "Titel " + type : null,
+			types.put(type, new ErrandTypeSettings("CATEGORY_" + type, "TYPE_" + type, type.getKind() == TILLSYNSBESOK ? "MEASURE_" + type : null, type.isWithAsset() ? "Asset" + type : null, type.isWithAsset() ? "Titel " + type : null,
 				LABELS.getOrDefault(type, List.of()), type == ErrandType.SERVING_PERMIT ? SUBTYPE_LABELS : Map.of(), SOURCE_ERRAND_TYPES.getOrDefault(type, Map.of()), true));
 		}
 		return types;

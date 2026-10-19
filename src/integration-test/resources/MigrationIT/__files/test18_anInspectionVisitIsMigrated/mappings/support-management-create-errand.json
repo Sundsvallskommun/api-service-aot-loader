@@ -97,10 +97,10 @@
 				"matchesJsonPath": "$[?(@.measures.length() == 2)]"
 			},
 			{
-				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Servering till minderårig' && @.description == 'Ungdomar i baren' && @.status == 'COMPLETED' && @.addedByUser == 'alkt-migration' && @.addedByRole == 'PRIMARY')]"
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL' && @.title == 'Servering till minderårig' && @.description == 'Ungdomar i baren' && @.status == 'COMPLETED' && @.addedByUser == 'alkt-migration' && @.addedByRole == 'PRIMARY')]"
 			},
 			{
-				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL_INSPECTION' && @.title == 'Servering utom tillåten serveringstid' && @.status == 'COMPLETED')]"
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL' && @.title == 'Servering utom tillåten serveringstid' && @.status == 'COMPLETED')]"
 			},
 			{
 				"matchesJsonPath": {

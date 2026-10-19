@@ -141,7 +141,7 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void theRemarksOfAVisitAreCompletedMeasuresOfTheTypeOfTheErrand() {
+	void theRemarksOfAVisitAreCompletedMeasuresOfTheMeasureTypeOfItsSettings() {
 		final var visit = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "900"), ErrandType.ALCOHOL_INSPECTION_VISIT)
 			.title("Tillsynsbesök – Restaurang 1")
 			// The second visit has a time later than now, which the source has in error or for a planned inspection
@@ -154,8 +154,8 @@ class TargetMapperTest {
 		assertThat(errand.getMeasures()).extracting(Measure::getType, Measure::getTitle, Measure::getDescription, Measure::getAddedByUser, Measure::getAddedByRole, Measure::getStatus,
 			Measure::getCompletedAt)
 			.containsExactly(
-				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "Servering till minderårig", "Ungdomar i baren", "alkt-migration", "MEASURER", "COMPLETED", OffsetDateTime.parse("2023-11-04T23:00+01:00")),
-				tuple("TYPE_ALCOHOL_INSPECTION_VISIT", "x".repeat(254) + "…", null, "alkt-migration", "MEASURER", "COMPLETED", null));
+				tuple("MEASURE_ALCOHOL_INSPECTION_VISIT", "Servering till minderårig", "Ungdomar i baren", "alkt-migration", "MEASURER", "COMPLETED", OffsetDateTime.parse("2023-11-04T23:00+01:00")),
+				tuple("MEASURE_ALCOHOL_INSPECTION_VISIT", "x".repeat(254) + "…", null, "alkt-migration", "MEASURER", "COMPLETED", null));
 		// A visit without remarks sends an empty list, so that an update of a draft removes the measures of an earlier run
 		final var withoutRemarks = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "901"), ErrandType.ALCOHOL_INSPECTION_VISIT).build();
 		assertThat(mapper.toDraftUpdate(withoutRemarks, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getMeasures()).isEmpty();

@@ -20,14 +20,14 @@
 		},
 		"jsonBody": [
 			{
-				"id": "measure-type-internal",
-				"name": "INTERNAL_INSPECTION",
-				"displayName": "Inre tillsyn"
+				"id": "measure-type-external",
+				"name": "EXTERNAL",
+				"displayName": "Extern (sökande)"
 			},
 			{
-				"id": "measure-type-external",
-				"name": "EXTERNAL_INSPECTION",
-				"displayName": "Yttre tillsyn"
+				"id": "measure-type-internal",
+				"name": "INTERNAL",
+				"displayName": "Intern (handläggare)"
 			}
 		]
 	}
