@@ -34,7 +34,7 @@ class PersonalDataTest {
 
 		assertHidden(legalId);
 		assertHidden(new Holder(legalId, NAME, "Gatan 1", "85230", "Sundsvall", "tolvan@example.com", "070-1", NAME));
-		assertHidden(new Person(NAME, legalId, List.of("VD")));
+		assertHidden(new Person(NAME, legalId, false, List.of("VD")));
 		assertHidden(new PermitLink(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true), legalId, legalId, null));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
 		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));

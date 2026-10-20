@@ -135,6 +135,13 @@ public final class TestData {
 	}
 
 	/**
+	 * @return a permit without files whose holder has the given persons with significant influence
+	 */
+	public static Candidate permitWithPersons(final String objektId, final Person... persons) {
+		return permitBuilder(objektId, "City").persons(List.of(persons)).build();
+	}
+
+	/**
 	 * @return a permit whose certificate, beslut.rtf, also goes on the post in PartyAssets, with the rule hits the source
 	 *         showed
 	 */
@@ -161,7 +168,7 @@ public final class TestData {
 			.placeNumber("12345678")
 			.holder(new Holder(HOLDER_ID, "Bolaget AB", "Gatan 1", "85230", "Sundsvall", "bolag@example.com", "060-1", "Kontakt Person"))
 			.place(new Place("Restaurang " + objektId, "Storgatan 1", "85230", "Sundsvall", "060-2", null, area, List.of(new Parameter("restaurantNumber", "Serveringsställenummer", List.of("12345678")))))
-			.persons(List.of(new Person("Person Ett", PERSON_ID, List.of("Ledamot")), new Person("Utländsk Person", null, List.of())))
+			.persons(List.of(new Person("Person Ett", PERSON_ID, false, List.of("Ledamot")), new Person("Utländsk Person", null, true, List.of())))
 			.title("Serveringstillstånd – Restaurang " + objektId)
 			.description("Beskrivning")
 			.labelPath("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING")

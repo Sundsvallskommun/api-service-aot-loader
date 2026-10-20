@@ -34,14 +34,23 @@ public final class Constants {
 	 * picks e.g. the document templates (decision 19).
 	 */
 	public static final String PARAMETER_PREMISES_MUNICIPALITY_ID = "premisesMunicipalityId";
-	/** The parameter that tells a person with significant influence apart from other stakeholders with the same role. */
+	/**
+	 * The parameter that tells a person with significant influence apart from other stakeholders with the same role, as
+	 * Draken writes it, with the value true and no display name.
+	 */
 	public static final String PARAMETER_PBI = "PBI";
-	/** The display name of {@link #PARAMETER_PBI}. */
-	public static final String PARAMETER_PBI_DISPLAY_NAME = "Person med betydande inflytande";
-	/** The parameter of a person with significant influence with the person's positions, e.g. VD. */
-	public static final String PARAMETER_POSITION = "befattning";
-	/** The display name of {@link #PARAMETER_POSITION}. */
-	public static final String PARAMETER_POSITION_DISPLAY_NAME = "Befattning";
+	/**
+	 * The parameter of a person with significant influence that tells where the stakeholder came from, as Draken writes it.
+	 */
+	public static final String PARAMETER_PBI_SOURCE = "PBI_SOURCE";
+	/** The value of {@link #PARAMETER_PBI_SOURCE} for a stakeholder that a case handler added. */
+	public static final String PBI_SOURCE_MANUAL = "MANUAL";
+	/** The parameter of a person with significant influence with the person's roles in one value, e.g. "Ledamot, VD". */
+	public static final String PARAMETER_PBI_ROLE = "PBI_ROLE";
+	/** The parameter of a company stakeholder with its organization number, as new errands in AOT have it. */
+	public static final String PARAMETER_ORGANIZATION_NUMBER = "organizationNumber";
+	/** The display name of {@link #PARAMETER_ORGANIZATION_NUMBER}. */
+	public static final String PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME = "Organisationsnummer";
 	/** The parameter of the permit that links it to its errand, as pw-alkt writes it. */
 	public static final String ASSET_PARAMETER_ERRAND_ID = "errandId";
 	/** The parameter of the permit with its conditions, as pw-alkt writes it. */

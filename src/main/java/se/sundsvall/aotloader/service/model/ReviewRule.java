@@ -43,6 +43,7 @@ public enum ReviewRule {
 	CERTIFICATE_MISSING("G29", "Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets", INFO, true),
 	CERTIFICATE_OLDER("G29", "Det senaste tillståndsbeviset är äldre än tillståndet, eller saknar datum, och kan höra till en tidigare tillståndshavare. Det läggs bara på ärendet, inte på tillståndet i PartyAssets",
 		INFO, true),
+	PERSON_LOOKUP_FAILED("G30", "En person med betydande inflytande gick inte att slå upp i Party. Undantagslistan kan låta personen läggas in utan partyId", BLOCKING, true),
 	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false),
 	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true);
 

@@ -45,6 +45,21 @@ public final class LegalIds {
 	}
 
 	/**
+	 * @return true when the last digit is the check digit of the ten digits the number ends with, by the Luhn algorithm
+	 *         that every Swedish personal identity number and organization number follows
+	 */
+	public static boolean hasValidCheckDigit(final LegalId legalId) {
+		final var number = legalId.number();
+		final var digits = number.substring(number.length() - 10);
+		var sum = 0;
+		for (var i = 0; i < 9; i++) {
+			final var product = (digits.charAt(i) - '0') * (i % 2 == 0 ? 2 : 1);
+			sum += product > 9 ? product - 9 : product;
+		}
+		return (10 - sum % 10) % 10 == digits.charAt(9) - '0';
+	}
+
+	/**
 	 * @return the number as it is printed, with a hyphen before the last four digits, e.g. 556677-8899 or 19121212-1212;
 	 *         null for null
 	 */

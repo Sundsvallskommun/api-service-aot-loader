@@ -68,13 +68,18 @@ public final class PartyRows {
 	 * @param  rows         the persons of an owner
 	 * @param  positionText the text of a position code
 	 * @param  today        the date the century of a personal identity number is chosen from
-	 * @return              the persons, without number when it is foreign or not a personal identity number
+	 * @return              the persons, without number when it cannot be normalized; an organization number, e.g. of an
+	 *                      owning company, is kept, while a person the source marks as foreign keeps only a Swedish
+	 *                      personal identity number with a valid check digit
 	 */
 	public static List<Person> persons(final List<PersonRow> rows, final UnaryOperator<String> positionText, final LocalDate today) {
 		return rows.stream()
 			.map(person -> new Person(
 				person.namn(),
-				person.foreign() ? null : LegalIds.normalize(person.personnr(), today).filter(id -> id.type() == PRIVATE).orElse(null),
+				LegalIds.normalize(person.personnr(), today)
+					.filter(id -> !person.foreign() || (id.type() == PRIVATE && LegalIds.hasValidCheckDigit(id)))
+					.orElse(null),
+				person.foreign(),
 				person.positionCodes().stream().map(positionText).toList()))
 			.toList();
 	}

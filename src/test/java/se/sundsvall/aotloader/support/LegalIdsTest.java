@@ -7,6 +7,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import se.sundsvall.aotloader.service.model.LegalId;
+import se.sundsvall.aotloader.service.model.PartyType;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
@@ -70,6 +71,18 @@ class LegalIdsTest {
 		assertThat(LegalIds.digitsOf("19800101+1234")).contains("198001011234");
 		assertThat(LegalIds.digitsOf(" - ")).isEmpty();
 		assertThat(LegalIds.digitsOf(null)).isEmpty();
+	}
+
+	@ParameterizedTest
+	@CsvSource({
+		"198112189876, PRIVATE, true",
+		"198112189875, PRIVATE, false",
+		"198001011234, PRIVATE, false",
+		"5566778899, ENTERPRISE, true",
+		"5566778898, ENTERPRISE, false"
+	})
+	void theCheckDigitOfTheLastTenDigits(final String number, final PartyType type, final boolean valid) {
+		assertThat(LegalIds.hasValidCheckDigit(new LegalId(number, type))).isEqualTo(valid);
 	}
 
 	@Test

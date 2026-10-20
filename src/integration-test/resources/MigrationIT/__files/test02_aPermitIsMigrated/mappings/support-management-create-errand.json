@@ -82,7 +82,7 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Anna Berg')]"
 			},
 			{
-				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'ENTERPRISE')]"
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'COMPANY')]"
 			},
 			{
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan Tolvansson')]"
@@ -91,9 +91,12 @@
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person')]"
 			},
 			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000003' && @.externalIdType == 'COMPANY' && @.organizationName == 'Ägarbolaget AB')]"
+			},
+			{
 				"matchesJsonPath": {
 					"expression": "$.stakeholders.length()",
-					"equalTo": "3"
+					"equalTo": "4"
 				}
 			},
 			{

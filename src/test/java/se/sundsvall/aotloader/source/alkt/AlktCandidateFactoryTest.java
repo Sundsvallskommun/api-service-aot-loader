@@ -108,10 +108,22 @@ class AlktCandidateFactoryTest {
 			tuple("restaurantNumber", List.of("12345678")),
 			tuple("typAvServeringsstalle", List.of("Kvartersrestaurang")),
 			tuple("omrade", List.of("Centrum")));
-		assertThat(candidate.persons()).hasSize(2);
+		assertThat(candidate.persons()).hasSize(7);
 		assertThat(candidate.persons().getFirst().legalId()).isEqualTo(new LegalId("198001011234", PRIVATE));
 		assertThat(candidate.persons().getFirst().positions()).containsExactly("Verkställande direktör");
 		assertThat(candidate.persons().get(1).legalId()).isNull();
+		assertThat(candidate.persons().get(1).foreign()).isTrue();
+		// An owning company keeps its organization number, so that it is looked up as a company
+		assertThat(candidate.persons().get(2).legalId()).isEqualTo(new LegalId("5599887766", ENTERPRISE));
+		assertThat(candidate.persons().get(2).isCompany()).isTrue();
+		assertThat(candidate.persons().get(3).legalId()).isNull();
+		assertThat(candidate.persons().get(3).foreign()).isFalse();
+		// A person marked as foreign whose number is still a Swedish personal identity number, check digit and all, is
+		// looked up; another number, which may be a foreign one, is not
+		assertThat(candidate.persons().get(4).legalId()).isEqualTo(new LegalId("199001011239", PRIVATE));
+		assertThat(candidate.persons().get(4).foreign()).isTrue();
+		assertThat(candidate.persons().get(5).legalId()).isNull();
+		assertThat(candidate.persons().get(6).legalId()).isNull();
 	}
 
 	@Test
@@ -214,6 +226,11 @@ class AlktCandidateFactoryTest {
 			.document(new DocumentRow(1, 500, null, "TDBV2", LocalDate.of(2019, 5, 2).atStartOfDay(), "33333333.rtf"))
 			.person(new PersonRow(10, "Person Ett", "800101-1234", List.of("VD"), false))
 			.person(new PersonRow(10, "Person Två", null, List.of(), true))
+			.person(new PersonRow(10, "Ägarbolaget AB", "559988-7766", List.of(), false))
+			.person(new PersonRow(10, "Person Tre", "800101", List.of(), false))
+			.person(new PersonRow(10, "Person Fyra", "900101-1239", List.of(), true))
+			.person(new PersonRow(10, "Person Fem", "900101-1234", List.of(), true))
+			.person(new PersonRow(10, "Utländskt Bolag", "559988-7766", List.of(), true))
 			.condition(new ConditionRow(1, "0100", "Bord", null, null))
 			.condition(new ConditionRow(1, null, "Utgånget villkor", null, "2020-01-01"))
 			.build();

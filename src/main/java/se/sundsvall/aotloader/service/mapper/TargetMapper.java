@@ -33,13 +33,17 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.Kind;
+import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
+import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.source.ParameterList;
+import se.sundsvall.aotloader.support.LegalIds;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -54,11 +58,13 @@ import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_CODE;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_STREET_ADDRESS;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
+import static se.sundsvall.aotloader.Constants.PARAMETER_ORGANIZATION_NUMBER;
+import static se.sundsvall.aotloader.Constants.PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI;
-import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_DISPLAY_NAME;
-import static se.sundsvall.aotloader.Constants.PARAMETER_POSITION;
-import static se.sundsvall.aotloader.Constants.PARAMETER_POSITION_DISPLAY_NAME;
+import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_ROLE;
+import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_SOURCE;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
+import static se.sundsvall.aotloader.Constants.PBI_SOURCE_MANUAL;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
@@ -332,43 +338,105 @@ public class TargetMapper {
 
 	private List<Stakeholder> stakeholders(final Candidate candidate, final PartyIds parties) {
 		final var stakeholders = new ArrayList<Stakeholder>();
-		Optional.ofNullable(candidate.holder()).ifPresent(holder -> {
-			final var stakeholder = new Stakeholder()
-				.role(holderRole(candidate.type()))
-				.organizationName(holder.name())
-				.address(holder.address())
-				.zipCode(holder.zipCode())
-				.city(holder.city())
-				.contactChannels(contactChannels(holder.email(), holder.phone()));
-			parties.holderPartyId().ifPresent(partyId -> stakeholder.externalId(partyId).externalIdType(holder.legalId().type().name()));
-			stakeholders.add(stakeholder);
+		final var holder = candidate.holder();
+		if (holder != null) {
+			stakeholders.add(holderStakeholder(candidate, holder, parties));
 			// The holder's contact person has only a name; it lacks the parameter PBI that marks a person with significant
 			// influence
 			Optional.ofNullable(Texts.trimToNull(holder.contactPerson())).ifPresent(name -> stakeholders.add(new Stakeholder()
 				.role(properties.roles().contact())
 				.firstName(name)));
-		});
+		}
 		for (var i = 0; i < candidate.persons().size(); i++) {
 			final var person = candidate.persons().get(i);
-			final var stakeholder = new Stakeholder()
-				.role(properties.roles().contact())
-				.firstName(person.name())
-				.parameters(toParameters(personParameters(person)));
-			parties.personPartyId(i).ifPresent(partyId -> stakeholder.externalId(partyId).externalIdType(person.legalId().type().name()));
-			stakeholders.add(stakeholder);
+			if (!isHolder(holder, person)) {
+				stakeholders.add(personStakeholder(person, parties.personPartyId(i).orElse(null)));
+			}
 		}
 		return stakeholders;
 	}
 
 	/**
-	 * The parameter PBI = true, which tells a person with significant influence apart from other contacts, and the
-	 * positions when there are any.
+	 * The holder, with its partyId when Party knows it. A holder that does not become a company has its name also as first
+	 * name, since Draken names such a stakeholder by its first and last name. A sole trader who is also among the persons
+	 * with significant influence is marked as one here, the way Draken marks a stakeholder that is already on the errand:
+	 * without a source.
 	 */
-	private static List<Parameter> personParameters(final Person person) {
+	private Stakeholder holderStakeholder(final Candidate candidate, final Holder holder, final PartyIds parties) {
+		final var stakeholder = new Stakeholder()
+			.role(holderRole(candidate.type()))
+			.organizationName(holder.name())
+			.address(holder.address())
+			.zipCode(holder.zipCode())
+			.city(holder.city())
+			.contactChannels(contactChannels(holder.email(), holder.phone()));
+		parties.holderPartyId().ifPresent(partyId -> identify(stakeholder, partyId, holder.legalId(), List.of()));
+		if (!PartyType.ENTERPRISE.getExternalIdType().equals(stakeholder.getExternalIdType())) {
+			stakeholder.firstName(holder.name());
+		}
+		final var asPerson = candidate.persons().stream().filter(person -> isHolder(holder, person)).toList();
+		if (!asPerson.isEmpty()) {
+			final var parameters = new ArrayList<>(Optional.ofNullable(stakeholder.getParameters()).orElse(List.of()));
+			parameters.addAll(toParameters(pbiParameters(asPerson.stream().flatMap(person -> person.positions().stream()).toList(), null)));
+			stakeholder.parameters(parameters);
+		}
+		return stakeholder;
+	}
+
+	private static boolean isHolder(final Holder holder, final Person person) {
+		return holder != null && holder.legalId() != null && holder.legalId().equals(person.legalId());
+	}
+
+	/**
+	 * A person with significant influence, which can also be a company. The name is the first name, which Draken shows for
+	 * such a person, and a company has it also as organization name.
+	 *
+	 * @param partyId the partyId of the person, null when it has none
+	 */
+	private Stakeholder personStakeholder(final Person person, final String partyId) {
+		final var parameters = pbiParameters(person.positions(), PBI_SOURCE_MANUAL);
+		final var stakeholder = new Stakeholder()
+			.role(properties.roles().contact())
+			.firstName(person.name())
+			.parameters(toParameters(parameters));
+		if (person.isCompany()) {
+			stakeholder.organizationName(person.name());
+		}
+		if (partyId != null) {
+			identify(stakeholder, partyId, person.legalId(), parameters);
+		}
+		return stakeholder;
+	}
+
+	/**
+	 * Gives a stakeholder its partyId. A company also gets its organization number in clear text, as the parameter
+	 * organizationNumber after the given parameters, the way new errands in AOT have it.
+	 */
+	private static void identify(final Stakeholder stakeholder, final String partyId, final LegalId legalId, final List<Parameter> parameters) {
+		stakeholder.externalId(partyId).externalIdType(legalId.type().getExternalIdType());
+		if (legalId.type() == PartyType.ENTERPRISE) {
+			final var withNumber = new ArrayList<>(parameters);
+			withNumber.add(new Parameter(PARAMETER_ORGANIZATION_NUMBER, PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME, List.of(LegalIds.format(legalId))));
+			stakeholder.parameters(toParameters(withNumber));
+		}
+	}
+
+	/**
+	 * The parameters of a person with significant influence under the keys Draken writes, without display names: PBI =
+	 * true, which tells the person apart from other contacts, the source when there is one, and the positions as the role
+	 * in one value when there are any.
+	 *
+	 * @param source MANUAL for a stakeholder that is on the errand only as a person with significant influence, since a
+	 *               case handler entered it in the source; null for one that is on the errand anyway
+	 */
+	private static List<Parameter> pbiParameters(final List<String> positions, final String source) {
 		final var parameters = new ArrayList<Parameter>();
-		parameters.add(new Parameter(PARAMETER_PBI, PARAMETER_PBI_DISPLAY_NAME, List.of(Boolean.TRUE.toString())));
-		if (!person.positions().isEmpty()) {
-			parameters.add(new Parameter(PARAMETER_POSITION, PARAMETER_POSITION_DISPLAY_NAME, person.positions()));
+		parameters.add(new Parameter(PARAMETER_PBI, null, List.of(Boolean.TRUE.toString())));
+		if (source != null) {
+			parameters.add(new Parameter(PARAMETER_PBI_SOURCE, null, List.of(source)));
+		}
+		if (!positions.isEmpty()) {
+			parameters.add(new Parameter(PARAMETER_PBI_ROLE, null, List.of(String.join(", ", positions.stream().distinct().toList()))));
 		}
 		return parameters;
 	}

@@ -6,5 +6,5 @@
 	"placeName": "Timråkrogen",
 	"outcome": "GRANSKAS",
 	"rules": "G13,G29,G10",
-	"detail": "G10 Tillståndshavaren finns inte i Party; Stället hör till kommun 2262 (område Timrå); 1 person(er) med betydande inflytande finns inte i Party och läggs in utan partyId; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
+	"detail": "G10 Tillståndshavaren finns inte i Party; Stället hör till kommun 2262 (område Timrå); 2 person(er) med betydande inflytande finns inte i Party och läggs in utan partyId; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
 }

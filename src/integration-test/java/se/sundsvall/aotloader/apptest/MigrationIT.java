@@ -104,7 +104,8 @@ class MigrationIT extends AbstractAppTest {
 		final var log = Stream.of(events)
 			.filter(event -> !event.lines().findFirst().orElse("").contains(" WireMock."))
 			.collect(Collectors.joining());
-		assertThat(log).doesNotContain("191212121212", "1212121212", "121212-1212", "5566778899", "556677-8899", "Tolvan", "Testbolaget", "Förra ägaren", "Kontakt Person", "Avgången");
+		assertThat(log).doesNotContain("191212121212", "1212121212", "121212-1212", "5566778899", "556677-8899", "Tolvan", "Testbolaget", "Förra ägaren", "Kontakt Person", "Avgången",
+			"5599887766", "559988-7766", "Ägarbolaget");
 		// The free text of the visits may name persons as well
 		assertThat(log).doesNotContain("Mycket folk", "Ungdomar i baren", "Köpet nekades");
 	}
@@ -174,7 +175,8 @@ class MigrationIT extends AbstractAppTest {
 			.containsExactlyInAnyOrder(tuple("55555555.rtf", "Tillståndsbevis"), tuple("22222222.rtf", "Beslut"));
 		final var created = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands"))).getFirst().getBodyAsString();
 		final List<Map<String, Object>> personParameters = JsonPath.read(created, "$.stakeholders[?(@.externalId == '22222222-aaaa-bbbb-cccc-000000000002')].parameters[*]");
-		assertThat(personParameters).extracting(parameter -> parameter.get("key")).containsExactly("PBI", "befattning");
+		assertThat(personParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
+			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Verkställande direktör")));
 		// The holder's contact person is a contact of its own, without the parameter PBI
 		final List<Map<String, Object>> contacts = JsonPath.read(created, "$.stakeholders[?(@.firstName == 'Kontakt Person')]");
 		assertThat(contacts).singleElement().satisfies(contact -> {
@@ -182,6 +184,14 @@ class MigrationIT extends AbstractAppTest {
 			assertThat(contact.get("externalId")).isNull();
 			assertThat((List<?>) contact.get("parameters")).isNullOrEmpty();
 		});
+		// A company has its organization number in clear text as well as its partyId, as new errands in AOT have it
+		final List<Map<String, Object>> holderParameters = JsonPath.read(created, "$.stakeholders[?(@.role == 'PRIMARY')].parameters[*]");
+		assertThat(holderParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("displayName"), parameter -> parameter.get("values"))
+			.containsExactly(tuple("organizationNumber", "Organisationsnummer", List.of("556677-8899")));
+		final List<Map<String, Object>> companyParameters = JsonPath.read(created, "$.stakeholders[?(@.organizationName == 'Ägarbolaget AB')].parameters[*]");
+		assertThat(companyParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
+			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Ägarbolag")),
+				tuple("organizationNumber", List.of("559988-7766")));
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/1");

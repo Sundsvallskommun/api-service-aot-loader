@@ -51,6 +51,7 @@ import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.PermitLink;
+import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Source;
@@ -242,6 +243,40 @@ class ItemMigratorTest {
 		assertThat(result.rules()).containsExactly("G10");
 		assertThat(result.detail()).contains("G10 Tillståndshavaren finns inte i Party", "1 person(er) med betydande inflytande finns inte i Party");
 		assertThat(savedStatuses).containsExactly(ItemStatus.GRANSKAS);
+	}
+
+	@Test
+	void anOwningCompanyIsLookedUpAndAPersonWithoutANumberThatCanBeUsedIsCounted() {
+		final var company = new LegalId("5599887766", PartyType.ENTERPRISE);
+		when(party.getPartyId(MUNICIPALITY_ID, company)).thenReturn(Optional.of("company-party-id"));
+		final var candidate = TestData.permitWithPersons("1",
+			new Person("Ägarbolaget AB", company, false, List.of("Ägarbolag")),
+			new Person("Utan Nummer", null, false, List.of()),
+			// The source marks the person as foreign, so the missing number is expected and not counted
+			new Person("Utländsk Person", null, true, List.of()));
+
+		final var result = migrator.process(candidate, context(true));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(result.detail()).isEqualTo("1 person(er) med betydande inflytande saknar nummer eller har ett nummer med fel format och läggs in utan partyId");
+		verify(party).getPartyId(MUNICIPALITY_ID, company);
+	}
+
+	@Test
+	void aPersonWhoseLookupFailsIsReviewedAndTheExceptionListLetsTheItemThrough() {
+		when(party.getPartyId(MUNICIPALITY_ID, TestData.PERSON_ID)).thenThrow(new MigrationException("Uppslaget i Party misslyckades (502 BAD_GATEWAY)"));
+
+		final var reviewed = migrator.process(TestData.permitWithoutFiles("1"), context(false));
+
+		assertThat(reviewed.outcome()).isEqualTo(Outcome.GRANSKAS);
+		assertThat(reviewed.rules()).containsExactly("G30");
+		assertThat(reviewed.detail()).contains("G30 En person med betydande inflytande gick inte att slå upp i Party", "1 person(er), Uppslaget i Party misslyckades (502 BAD_GATEWAY)");
+
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA);
+		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+
+		assertThat(migrator.process(TestData.permitWithoutFiles("1"), context(true)).outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
 	}
 
 	@Test

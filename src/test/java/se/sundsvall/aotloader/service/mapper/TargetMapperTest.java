@@ -30,9 +30,12 @@ import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
+import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
+import se.sundsvall.aotloader.service.model.PartyType;
+import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.support.MigrationException;
 
@@ -91,13 +94,15 @@ class TargetMapperTest {
 		assertThat(stakeholders.getFirst()).satisfies(holder -> {
 			assertThat(holder.getRole()).isEqualTo("PRIMARY");
 			assertThat(holder.getExternalId()).isEqualTo("party-id");
-			assertThat(holder.getExternalIdType()).isEqualTo("ENTERPRISE");
+			assertThat(holder.getExternalIdType()).isEqualTo("COMPANY");
 			assertThat(holder.getOrganizationName()).isEqualTo("Bolaget AB");
+			assertThat(holder.getFirstName()).isNull();
 			assertThat(holder.getAddress()).isEqualTo("Gatan 1");
 			assertThat(holder.getZipCode()).isEqualTo("85230");
 			assertThat(holder.getCity()).isEqualTo("Sundsvall");
 			assertThat(holder.getContactChannels()).extracting(ContactChannel::getType, ContactChannel::getValue).containsExactly(tuple("EMAIL", "bolag@example.com"), tuple("PHONE", "060-1"));
-			assertThat(holder.getParameters()).isNullOrEmpty();
+			// The organization number in clear text, as new errands in AOT have it
+			assertThat(holder.getParameters()).extracting("key", "displayName", "values").containsExactly(tuple("organizationNumber", "Organisationsnummer", List.of("556677-8899")));
 		});
 		// The holder's contact person, without PBI
 		assertThat(stakeholders.get(1)).satisfies(contact -> {
@@ -118,15 +123,118 @@ class TargetMapperTest {
 			assertThat(person.getFirstName()).isEqualTo("Person Ett");
 			assertThat(person.getExternalId()).isEqualTo("person-party-id");
 			assertThat(person.getExternalIdType()).isEqualTo("PRIVATE");
+			// The keys Draken writes, without display names
 			assertThat(person.getParameters()).extracting("key", "displayName", "values").containsExactly(
-				tuple("PBI", "Person med betydande inflytande", List.of("true")),
-				tuple("befattning", "Befattning", List.of("Ledamot")));
+				tuple("PBI", null, List.of("true")),
+				tuple("PBI_SOURCE", null, List.of("MANUAL")),
+				tuple("PBI_ROLE", null, List.of("Ledamot")));
 		});
 		assertThat(stakeholders.get(3)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
 			assertThat(person.getExternalId()).isNull();
 			assertThat(person.getExternalIdType()).isNull();
-			assertThat(person.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")));
+			assertThat(person.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")));
+		});
+	}
+
+	@Test
+	void aSoleTraderAmongThePersonsIsTheHolderMarkedInPlace() {
+		final var soleTrader = new LegalId("191212121212", PartyType.PRIVATE);
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
+			.holder(new Holder(soleTrader, "Tolvans Tobak", null, null, null, null, null, null))
+			.persons(List.of(new Person("Tolvan Tolvansson", soleTrader, false, List.of("Enskild firma")), new Person("Person Ett", TestData.PERSON_ID, false, List.of("VD"))))
+			.build();
+		final var personIds = new ArrayList<String>();
+		personIds.add("holder-party-id");
+		personIds.add("person-party-id");
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds("holder-party-id", personIds), TestData.labelIds()).getStakeholders();
+
+		// Without a source, since the holder is on the errand anyway
+		assertThat(stakeholders).hasSize(2);
+		assertThat(stakeholders.getFirst()).satisfies(holder -> {
+			assertThat(holder.getRole()).isEqualTo("PRIMARY");
+			assertThat(holder.getExternalId()).isEqualTo("holder-party-id");
+			assertThat(holder.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")), tuple("PBI_ROLE", List.of("Enskild firma")));
+		});
+		assertThat(stakeholders.get(1)).satisfies(person -> {
+			assertThat(person.getExternalId()).isEqualTo("person-party-id");
+			assertThat(person.getParameters()).extracting("key").containsExactly("PBI", "PBI_SOURCE", "PBI_ROLE");
+		});
+	}
+
+	@Test
+	void aHolderWithoutPartyIdHasItsNameAlsoAsFirstName() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "700"), ErrandType.ALCOHOL_INSPECTION)
+			.holder(new Holder(TestData.HOLDER_ID, "Förra Bolaget AB", null, null, null, null, null, null))
+			.build();
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders();
+
+		assertThat(stakeholders).singleElement().satisfies(holder -> {
+			assertThat(holder.getExternalIdType()).isNull();
+			assertThat(holder.getFirstName()).isEqualTo("Förra Bolaget AB");
+			assertThat(holder.getOrganizationName()).isEqualTo("Förra Bolaget AB");
+		});
+	}
+
+	@Test
+	void theRolesOfAPersonAreOneValue() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.persons(List.of(new Person("Person Ett", null, false, List.of("Ledamot", "Verkställande direktör", "Ledamot"))))
+			.build();
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders();
+
+		// Draken reads only the first value of PBI_ROLE, so the positions are one value, each once
+		assertThat(stakeholders).singleElement().satisfies(person -> assertThat(person.getParameters()).extracting("key", "values")
+			.contains(tuple("PBI_ROLE", List.of("Ledamot, Verkställande direktör"))));
+	}
+
+	@Test
+	void anOwningCompanyAmongThePersonsIsACompanyAndASoleTraderGetsNoOrganizationNumber() {
+		final var soleTrader = new LegalId("191212121212", PartyType.PRIVATE);
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.holder(new Holder(soleTrader, "Tolvans Krog", null, null, null, null, null, null))
+			.persons(List.of(
+				new Person("Ägarbolaget AB", new LegalId("5599887766", PartyType.ENTERPRISE), false, List.of("Ägarbolag")),
+				new Person("Okänt Bolag AB", new LegalId("5599887700", PartyType.ENTERPRISE), false, List.of())))
+			.build();
+		final var personIds = new ArrayList<String>();
+		personIds.add("company-party-id");
+		personIds.add(null);
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds("holder-party-id", personIds), TestData.labelIds()).getStakeholders();
+
+		assertThat(stakeholders).hasSize(3);
+		// The personal identity number of a sole trader never goes to SupportManagement, and Draken names the holder by the
+		// first name, since it is not a company
+		assertThat(stakeholders.getFirst()).satisfies(holder -> {
+			assertThat(holder.getExternalId()).isEqualTo("holder-party-id");
+			assertThat(holder.getExternalIdType()).isEqualTo("PRIVATE");
+			assertThat(holder.getFirstName()).isEqualTo("Tolvans Krog");
+			assertThat(holder.getOrganizationName()).isEqualTo("Tolvans Krog");
+			assertThat(holder.getParameters()).isNullOrEmpty();
+		});
+		// The name is also the first name, which Draken shows for a person with significant influence
+		assertThat(stakeholders.get(1)).satisfies(company -> {
+			assertThat(company.getRole()).isEqualTo("CONTACT");
+			assertThat(company.getOrganizationName()).isEqualTo("Ägarbolaget AB");
+			assertThat(company.getFirstName()).isEqualTo("Ägarbolaget AB");
+			assertThat(company.getExternalId()).isEqualTo("company-party-id");
+			assertThat(company.getExternalIdType()).isEqualTo("COMPANY");
+			assertThat(company.getParameters()).extracting("key", "values").containsExactly(
+				tuple("PBI", List.of("true")),
+				tuple("PBI_SOURCE", List.of("MANUAL")),
+				tuple("PBI_ROLE", List.of("Ägarbolag")),
+				tuple("organizationNumber", List.of("559988-7766")));
+		});
+		// A company that Party does not know gets neither partyId nor organization number
+		assertThat(stakeholders.get(2)).satisfies(company -> {
+			assertThat(company.getOrganizationName()).isEqualTo("Okänt Bolag AB");
+			assertThat(company.getExternalId()).isNull();
+			assertThat(company.getExternalIdType()).isNull();
+			assertThat(company.getParameters()).extracting("key").containsExactly("PBI", "PBI_SOURCE");
 		});
 	}
 

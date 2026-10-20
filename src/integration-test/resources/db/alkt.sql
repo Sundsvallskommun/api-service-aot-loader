@@ -79,11 +79,14 @@ INSERT INTO dbo.[Ärende_Händelser] VALUES (5, NULL, NULL, 'serveringsansvarig.
 INSERT INTO dbo.[Sökande] VALUES (70, '5566778899', 'Testbolaget AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvan Tolvansson', '191212121212', 'VD', 0, 0)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Avgången Ledamot', '191212121212', 'LE', 1, 0)
+-- An owning company among the persons, which is looked up as a company
+INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Ägarbolaget AB', '559988-7766', 'ÄB', 0, 0)
 INSERT INTO dbo.Klartext VALUES ('A', '07', 'Tillsyn, ifrågasatt åtgärd')
 INSERT INTO dbo.Klartext VALUES ('B', 'GT', 'Serveringstillstånd')
 INSERT INTO dbo.Klartext VALUES ('G', '01', 'Centrum')
 INSERT INTO dbo.Klartext VALUES ('O', '0100', 'Krav på bordsservering')
 INSERT INTO dbo.Klartext VALUES ('P', 'VD', 'Verkställande direktör')
+INSERT INTO dbo.Klartext VALUES ('P', 'ÄB', 'Ägarbolag')
 INSERT INTO dbo.Klartext VALUES ('Q', '12', 'Kvartersrestaurang')
 -- A place whose files have Swedish letters in their names, in every table that names files, for the run interrupted at the activation
 INSERT INTO dbo.Objekt VALUES (3, 10, '12345680', '12', 'Krogen Tre', 'Storgatan 3', '85230', 'Sundsvall', NULL, NULL, '01', 'Översiktskarta.pdf', NULL)
