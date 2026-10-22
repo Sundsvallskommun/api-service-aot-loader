@@ -9,6 +9,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
@@ -44,12 +45,12 @@ class InspectionVisitCandidatesTest {
 
 	@ParameterizedTest
 	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
-		Krogrunda | 2023-11-04 | 2023-11-05 | Krogrunda, 2023-11-04–2023-11-05
+		Krogrunda | 2023-11-04 | 2023-11-05 | Krogrunda, 2023-11-04 – 2023-11-05
 		Krogrunda | 2023-11-04 | 2023-11-04 | Krogrunda, 2023-11-04
 		Krogrunda | 2023-11-04 | -          | Krogrunda, 2023-11-04
 		Krogrunda | -          | 2023-11-05 | Krogrunda, 2023-11-05
 		Krogrunda | -          | -          | Krogrunda
-		-         | 2023-11-04 | 2023-11-05 | 2023-11-04–2023-11-05
+		-         | 2023-11-04 | 2023-11-05 | 2023-11-04 – 2023-11-05
 		' '       | -          | -          | -
 		""")
 	void aRoundIsNamedWithItsDays(final String name, final LocalDate start, final LocalDate end, final String expected) {
@@ -75,14 +76,14 @@ class InspectionVisitCandidatesTest {
 	}
 
 	@Test
-	void theRoundOfAVisitIsTheDescriptionOfItsInvestigation() {
+	void theTextsOfTheInvestigationOfAVisitAreItsRoundItsNoteAndItsRemarks() {
 		final var visit = new VisitRow(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
 
 		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of("Anmärkning"), new RoundRow(40, "Krogrunda", null, null, "Med polisen.")).texts())
-			.isEqualTo(new InvestigationTexts("Tillsynsomgång: Krogrunda\nMed polisen.", "Lugnt i baren.", "Anmärkning"));
+			.isEqualTo(InvestigationTexts.of(new Part("Tillsynsomgång", "Krogrunda\nMed polisen."), new Part("Anteckning", "Lugnt i baren."), new Part("Anmärkningar", "Anmärkning")));
 		// A round without a name, days or a note tells nothing
 		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of(), new RoundRow(41, null, null, null, " ")).texts())
-			.isEqualTo(new InvestigationTexts(null, "Lugnt i baren.", null));
+			.isEqualTo(InvestigationTexts.of(new Part("Anteckning", "Lugnt i baren.")));
 		assertThat(InspectionVisitCandidates.roundName(null)).isNull();
 	}
 }

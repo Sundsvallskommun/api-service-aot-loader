@@ -103,7 +103,7 @@ public final class TestData {
 	}
 
 	private static AotLoaderProperties properties(final Map<ErrandType, ErrandTypeSettings> types, final String documents, final String attachments) {
-		return new AotLoaderProperties("AOT", "alkt-migration; type=migration", "alkt-migration", "MIGRATED", "SOLVED",
+		return new AotLoaderProperties("AOT", "alkt-migration; type=migration", "alkt-migration", "MIGRATION", "SOLVED", "CLOSED",
 			new Roles("PRIMARY", "CONTACT", "INSPECTED", "MEASURER"),
 			types,
 			Map.of(Source.ALKT, new AotLoaderProperties.Database("jdbc:sqlserver://alkt", null, null, null), Source.ALKOL, new AotLoaderProperties.Database("jdbc:sqlserver://alkol", null, null, null)),
@@ -167,7 +167,7 @@ public final class TestData {
 			.placeName("Restaurang " + objektId)
 			.placeNumber("12345678")
 			.holder(new Holder(HOLDER_ID, "Bolaget AB", "Gatan 1", "85230", "Sundsvall", "bolag@example.com", "060-1", "Kontakt Person"))
-			.place(new Place("Restaurang " + objektId, "Storgatan 1", "85230", "Sundsvall", "060-2", null, area, List.of(new Parameter("restaurantNumber", "Serveringsställenummer", List.of("12345678")))))
+			.place(new Place("Restaurang " + objektId, "Storgatan 1", "85230", "Sundsvall", "060-2", null, area, List.of(new Parameter("restaurantNumber", "Valt restaurangnummer", List.of("12345678")))))
 			.persons(List.of(new Person("Person Ett", PERSON_ID, false, List.of("Ledamot")), new Person("Utländsk Person", null, true, List.of())))
 			.title("Serveringstillstånd – Restaurang " + objektId)
 			.description("Beskrivning")

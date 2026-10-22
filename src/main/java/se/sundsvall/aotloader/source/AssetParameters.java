@@ -95,7 +95,8 @@ public final class AssetParameters {
 	}
 
 	/**
-	 * Adds the serving place or sales place: its name, street, postal address, phone and restaurant number.
+	 * Adds the serving place or sales place: its name, street, postal address, phone and restaurant number. The postal code
+	 * is without blanks, as on the errand.
 	 */
 	public AssetParameters premises(final Place place, final String restaurantNumber) {
 		if (place == null) {
@@ -103,7 +104,7 @@ public final class AssetParameters {
 		}
 		return text(PREMISES_NAME, place.name())
 			.text(PREMISES_STREET, place.address())
-			.text(PREMISES_POSTAL_ADDRESS, postalAddress(place.zipCode(), place.city()))
+			.text(PREMISES_POSTAL_ADDRESS, postalAddress(Texts.withoutBlanks(place.zipCode()), place.city()))
 			.text(PREMISES_PHONE, place.phone())
 			.text(PREMISES_RESTAURANT_NUMBER, restaurantNumber);
 	}

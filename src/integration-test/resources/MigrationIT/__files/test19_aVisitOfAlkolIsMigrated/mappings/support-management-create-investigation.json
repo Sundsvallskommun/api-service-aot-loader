@@ -21,20 +21,8 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.description",
-					"equalTo": "Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.summary",
-					"equalTo": "Köpet nekades."
-				}
-			},
-			{
-				"matchesJsonPath": {
 					"expression": "$.conclusion",
-					"equalTo": "Påträngande reklam i butik"
+					"equalTo": "<p><strong>Tillsynsomgång</strong></p><p>Kontrollköp vecka 18, 2024-05-03</p><p><strong>Anteckning</strong></p><p>Köpet nekades.</p><p><strong>Anmärkningar</strong></p><p>Påträngande reklam i butik</p>"
 				}
 			}
 		]

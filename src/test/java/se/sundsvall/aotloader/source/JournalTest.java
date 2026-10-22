@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.source.Journal.Entry;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +36,9 @@ class JournalTest {
 		final var texts = Journal.investigation(List.of("Första", " "), List.of(new Entry(LocalDateTime.of(2020, 1, 2, 0, 0), "Anteckning", "Ringde")),
 			List.of(new Entry(LocalDateTime.of(2020, 2, 1, 0, 0), "Erinran", null)));
 
-		assertThat(texts).isEqualTo(new InvestigationTexts("Första", "2020-01-02 Anteckning: Ringde", "2020-02-01 Erinran"));
+		assertThat(texts).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Första"), new Part("Händelser", "2020-01-02 Anteckning: Ringde"), new Part("Beslut", "2020-02-01 Erinran")));
+		// A part without a text is left out
+		assertThat(Journal.investigation(List.of(" "), List.of(), List.of(new Entry(null, "Varning", null))).parts()).containsExactly(new Part("Beslut", "Varning"));
 		assertThat(Journal.investigation(List.of(), List.of(), List.of())).isEqualTo(InvestigationTexts.NONE);
 	}
 

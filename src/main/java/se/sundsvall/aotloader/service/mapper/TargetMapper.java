@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
@@ -35,13 +36,14 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
-import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.support.LegalIds;
 import se.sundsvall.aotloader.support.MigrationException;
@@ -80,6 +82,8 @@ public class TargetMapper {
 
 	static final String CONTACT_EMAIL = "EMAIL";
 	static final String CONTACT_PHONE = "PHONE";
+	// Draken writes it on every stakeholder it saves
+	static final String COUNTRY = "SVERIGE";
 	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
 	private static final String INVESTIGATION_ACTIVE = "ACTIVE";
@@ -133,13 +137,14 @@ public class TargetMapper {
 			.description(Texts.paragraphs(candidate.description()))
 			.priority(Priority.MEDIUM)
 			.status(properties.errandStatus())
+			.resolution(properties.errandResolution())
 			.classification(new Classification().category(settings.category()).type(settings.type()))
 			.labels(labels(candidate, labelIds))
 			.channel(properties.channel())
 			.businessRelated(true)
 			.externalTags(externalTags(candidate))
 			.stakeholders(stakeholders(candidate, parties))
-			.parameters(Stream.of(candidate.parameters(), premisesParameters(candidate.place()), List.of(premisesMunicipalityParameter(candidate, municipalityId)))
+			.parameters(Stream.of(candidate.parameters(), premisesParameters(candidate), List.of(premisesMunicipalityParameter(candidate, municipalityId)))
 				.flatMap(List::stream)
 				.map(TargetMapper::toParameter)
 				.toList());
@@ -271,21 +276,29 @@ public class TargetMapper {
 
 	/**
 	 * @return the investigation of an inspection errand, visit or permit, completed when the source tells when the
-	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source
-	 *         (decisions 44–46); an end later than now, which the source has in error or for a planned inspection, leaves
-	 *         it active without an end
+	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source in
+	 *         its conclusion (decisions 44–46); an end later than now, which the source has in error or for a planned
+	 *         inspection, leaves it active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
 		final var completedAt = untilNow(investigation.completedAt());
-		final var texts = investigation.texts();
 		return new Investigation()
 			.status(completedAt == null ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
 			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
-			.description(texts.description())
-			.summary(texts.summary())
-			.conclusion(texts.conclusion())
+			.conclusion(conclusion(investigation.texts()))
 			.startedAt(inSwedishTime(investigation.startedAt()))
 			.completedAt(completedAt);
+	}
+
+	/**
+	 * @return the texts as HTML, each part with its heading in bold above its lines, since Draken shows no other text of
+	 *         an investigation than its conclusion, in an editor that reads HTML; null without texts
+	 */
+	private static String conclusion(final InvestigationTexts texts) {
+		final var html = texts.parts().stream()
+			.map(part -> Texts.boldParagraph(part.heading()) + Texts.paragraphs(part.text()))
+			.collect(Collectors.joining());
+		return html.isEmpty() ? null : html;
 	}
 
 	private static OffsetDateTime inSwedishTime(final LocalDateTime time) {
@@ -345,7 +358,9 @@ public class TargetMapper {
 			// influence
 			Optional.ofNullable(Texts.trimToNull(holder.contactPerson())).ifPresent(name -> stakeholders.add(new Stakeholder()
 				.role(properties.roles().contact())
-				.firstName(name)));
+				.externalIdType(PartyType.PRIVATE.getExternalIdType())
+				.firstName(name)
+				.country(COUNTRY)));
 		}
 		for (var i = 0; i < candidate.persons().size(); i++) {
 			final var person = candidate.persons().get(i);
@@ -357,7 +372,8 @@ public class TargetMapper {
 	}
 
 	/**
-	 * The holder, with its partyId when Party knows it. A holder that does not become a company has its name also as first
+	 * The holder, with its partyId when Party knows it, and otherwise with the type of its number as a stakeholder added by
+	 * hand has it (see {@link #externalIdTypeOf}). A holder that does not become a company has its name also as first
 	 * name, since Draken names such a stakeholder by its first and last name. A sole trader who is also among the persons
 	 * with significant influence is marked as one here, the way Draken marks a stakeholder that is already on the errand:
 	 * without a source.
@@ -369,8 +385,10 @@ public class TargetMapper {
 			.address(holder.address())
 			.zipCode(holder.zipCode())
 			.city(holder.city())
+			.country(COUNTRY)
 			.contactChannels(contactChannels(holder.email(), holder.phone()));
-		parties.holderPartyId().ifPresent(partyId -> identify(stakeholder, partyId, holder.legalId(), List.of()));
+		parties.holderPartyId().ifPresentOrElse(partyId -> identify(stakeholder, partyId, holder.legalId(), List.of()),
+			() -> stakeholder.externalIdType(externalIdTypeOf(holder.legalId())));
 		if (!PartyType.ENTERPRISE.getExternalIdType().equals(stakeholder.getExternalIdType())) {
 			stakeholder.firstName(holder.name());
 		}
@@ -398,14 +416,25 @@ public class TargetMapper {
 		final var stakeholder = new Stakeholder()
 			.role(properties.roles().contact())
 			.firstName(person.name())
+			.country(COUNTRY)
 			.parameters(toParameters(parameters));
 		if (person.isCompany()) {
 			stakeholder.organizationName(person.name());
 		}
-		if (partyId != null) {
+		if (partyId == null) {
+			stakeholder.externalIdType(externalIdTypeOf(person.legalId()));
+		} else {
 			identify(stakeholder, partyId, person.legalId(), parameters);
 		}
 		return stakeholder;
+	}
+
+	/**
+	 * @return the type a stakeholder without partyId gets, the one Draken and Katla give a stakeholder added by hand: a
+	 *         company by its organization number, and a person otherwise, also when the number is missing
+	 */
+	private static String externalIdTypeOf(final LegalId legalId) {
+		return Optional.ofNullable(legalId).map(LegalId::type).orElse(PartyType.PRIVATE).getExternalIdType();
 	}
 
 	/**
@@ -443,21 +472,25 @@ public class TargetMapper {
 
 	/**
 	 * The serving place or sales place as parameters of the errand, under the keys pw-alkt reads (section 7.2.1), followed
-	 * by the place's own parameters, e.g. the restaurant number.
+	 * by the place's own parameters, e.g. the restaurant number. A serving place of AlkT has the display names Draken
+	 * writes, a sales place of AlkOL the same for a sales place, and the postal code is written without blanks, as Draken
+	 * writes it.
 	 */
-	private static List<Parameter> premisesParameters(final Place place) {
+	private static List<Parameter> premisesParameters(final Candidate candidate) {
+		final var place = candidate.place();
 		if (place == null) {
 			return List.of();
 		}
-		final var premises = new ParameterList()
-			.add(ERRAND_PARAMETER_PREMISES_NAME, "Ställets namn", place.name())
-			.add(ERRAND_PARAMETER_PREMISES_STREET_ADDRESS, "Ställets gatuadress", place.address())
-			.add(ERRAND_PARAMETER_PREMISES_POSTAL_CODE, "Ställets postnummer", place.zipCode())
-			.add(ERRAND_PARAMETER_PREMISES_POSTAL_AREA, "Ställets postort", place.city())
-			.add(ERRAND_PARAMETER_PREMISES_PHONE, "Ställets telefon", place.phone())
-			.add(ERRAND_PARAMETER_PREMISES_EMAIL, "Ställets e-post", place.email())
+		final var premises = candidate.key().source() == Source.ALKT ? "Serveringsställets" : "Försäljningsställets";
+		final var parameters = new ParameterList()
+			.add(ERRAND_PARAMETER_PREMISES_NAME, premises + " namn", place.name())
+			.add(ERRAND_PARAMETER_PREMISES_STREET_ADDRESS, premises + " gatuadress", place.address())
+			.add(ERRAND_PARAMETER_PREMISES_POSTAL_CODE, premises + " postnummer", Texts.withoutBlanks(place.zipCode()))
+			.add(ERRAND_PARAMETER_PREMISES_POSTAL_AREA, premises + " postort", place.city())
+			.add(ERRAND_PARAMETER_PREMISES_PHONE, premises + " telefon", place.phone())
+			.add(ERRAND_PARAMETER_PREMISES_EMAIL, premises + " e-post", place.email())
 			.build();
-		return Stream.concat(premises.stream(), place.parameters().stream()).toList();
+		return Stream.concat(parameters.stream(), place.parameters().stream()).toList();
 	}
 
 	/**

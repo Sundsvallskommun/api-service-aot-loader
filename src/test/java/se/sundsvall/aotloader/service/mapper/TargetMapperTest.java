@@ -28,6 +28,7 @@ import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.LegalId;
@@ -36,6 +37,7 @@ import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
+import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.support.MigrationException;
 
@@ -64,25 +66,44 @@ class TargetMapperTest {
 		assertThat(errand.getDescription()).isEqualTo("<p>Beskrivning</p>");
 		assertThat(errand.getPriority()).isEqualTo(Priority.MEDIUM);
 		assertThat(errand.getStatus()).isEqualTo("SOLVED");
+		// As Draken closes an errand of AOT
+		assertThat(errand.getResolution()).isEqualTo("CLOSED");
 		assertThat(errand.getClassification().getCategory()).isEqualTo("CATEGORY_SERVING_PERMIT");
 		assertThat(errand.getClassification().getType()).isEqualTo("TYPE_SERVING_PERMIT");
 		assertThat(errand.getLabels()).extracting(ErrandLabel::getId, ErrandLabel::getVersion).containsExactly(tuple("label-migrated", null), tuple("label-permanent-serving", null));
-		assertThat(errand.getChannel()).isEqualTo("MIGRATED");
+		assertThat(errand.getChannel()).isEqualTo("MIGRATION");
 		assertThat(errand.getReporterUserId()).isEqualTo("alkt-migration");
 		assertThat(errand.getBusinessRelated()).isTrue();
 		assertThat(errand.getLifecycle()).isEqualTo(LifecycleEnum.DRAFT);
 		assertThat(errand.getAssignedUserId()).isNull();
 		assertThat(errand.getExternalTags()).extracting(ExternalTag::getKey, ExternalTag::getValue)
 			.containsExactly(tuple("migreringsid", "ALKT-TILLSTAND-1"), tuple("diarienummer", "IAN-2019-1"));
-		// The place is in the parameters of the errand, under the keys pw-alkt reads
+		// The place is in the parameters of the errand, under the keys pw-alkt reads and with the display names Draken writes
 		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(
 			tuple("alktObjektId", "Id i AlkT", List.of("1")),
-			tuple("premisesName", "Ställets namn", List.of("Restaurang 1")),
-			tuple("premisesStreetAddress", "Ställets gatuadress", List.of("Storgatan 1")),
-			tuple("premisesPostalCode", "Ställets postnummer", List.of("85230")),
-			tuple("premisesPostalArea", "Ställets postort", List.of("Sundsvall")),
-			tuple("premisesPhone", "Ställets telefon", List.of("060-2")),
-			tuple("restaurantNumber", "Serveringsställenummer", List.of("12345678")),
+			tuple("premisesName", "Serveringsställets namn", List.of("Restaurang 1")),
+			tuple("premisesStreetAddress", "Serveringsställets gatuadress", List.of("Storgatan 1")),
+			tuple("premisesPostalCode", "Serveringsställets postnummer", List.of("85230")),
+			tuple("premisesPostalArea", "Serveringsställets postort", List.of("Sundsvall")),
+			tuple("premisesPhone", "Serveringsställets telefon", List.of("060-2")),
+			tuple("restaurantNumber", "Valt restaurangnummer", List.of("12345678")),
+			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+	}
+
+	@Test
+	void aSalesPlaceIsNamedSoAndItsPostalCodeHasNoBlanks() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
+			.place(new Place("Kiosken", "Torget 2", "852 31", "Sundsvall", null, "kiosk@example.com", null, List.of()))
+			.build();
+
+		final var parameters = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getParameters();
+
+		assertThat(parameters).extracting("key", "displayName", "values").containsExactly(
+			tuple("premisesName", "Försäljningsställets namn", List.of("Kiosken")),
+			tuple("premisesStreetAddress", "Försäljningsställets gatuadress", List.of("Torget 2")),
+			tuple("premisesPostalCode", "Försäljningsställets postnummer", List.of("85231")),
+			tuple("premisesPostalArea", "Försäljningsställets postort", List.of("Sundsvall")),
+			tuple("premisesEmail", "Försäljningsställets e-post", List.of("kiosk@example.com")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
 	}
 
@@ -100,15 +121,19 @@ class TargetMapperTest {
 			assertThat(holder.getAddress()).isEqualTo("Gatan 1");
 			assertThat(holder.getZipCode()).isEqualTo("85230");
 			assertThat(holder.getCity()).isEqualTo("Sundsvall");
+			// Draken writes the country on every stakeholder
+			assertThat(holder.getCountry()).isEqualTo("SVERIGE");
 			assertThat(holder.getContactChannels()).extracting(ContactChannel::getType, ContactChannel::getValue).containsExactly(tuple("EMAIL", "bolag@example.com"), tuple("PHONE", "060-1"));
 			// The organization number in clear text, as new errands in AOT have it
 			assertThat(holder.getParameters()).extracting("key", "displayName", "values").containsExactly(tuple("organizationNumber", "Organisationsnummer", List.of("556677-8899")));
 		});
-		// The holder's contact person, without PBI
+		// The holder's contact person, without PBI, a person as Draken adds one by hand
 		assertThat(stakeholders.get(1)).satisfies(contact -> {
 			assertThat(contact.getRole()).isEqualTo("CONTACT");
 			assertThat(contact.getFirstName()).isEqualTo("Kontakt Person");
 			assertThat(contact.getExternalId()).isNull();
+			assertThat(contact.getExternalIdType()).isEqualTo("PRIVATE");
+			assertThat(contact.getCountry()).isEqualTo("SVERIGE");
 			assertThat(contact.getContactChannels()).isNullOrEmpty();
 			assertThat(contact.getParameters()).isNullOrEmpty();
 		});
@@ -123,6 +148,7 @@ class TargetMapperTest {
 			assertThat(person.getFirstName()).isEqualTo("Person Ett");
 			assertThat(person.getExternalId()).isEqualTo("person-party-id");
 			assertThat(person.getExternalIdType()).isEqualTo("PRIVATE");
+			assertThat(person.getCountry()).isEqualTo("SVERIGE");
 			// The keys Draken writes, without display names
 			assertThat(person.getParameters()).extracting("key", "displayName", "values").containsExactly(
 				tuple("PBI", null, List.of("true")),
@@ -132,7 +158,7 @@ class TargetMapperTest {
 		assertThat(stakeholders.get(3)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
 			assertThat(person.getExternalId()).isNull();
-			assertThat(person.getExternalIdType()).isNull();
+			assertThat(person.getExternalIdType()).isEqualTo("PRIVATE");
 			assertThat(person.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")));
 		});
 	}
@@ -164,17 +190,26 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void aHolderWithoutPartyIdHasItsNameAlsoAsFirstName() {
-		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "700"), ErrandType.ALCOHOL_INSPECTION)
+	void aHolderWithoutPartyIdHasTheTypeOfItsNumber() {
+		final var company = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "700"), ErrandType.ALCOHOL_INSPECTION)
 			.holder(new Holder(TestData.HOLDER_ID, "Förra Bolaget AB", null, null, null, null, null, null))
 			.build();
+		final var withoutNumber = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "701"), ErrandType.ALCOHOL_INSPECTION)
+			.holder(new Holder(null, "Okänd Ägare", null, null, null, null, null, null))
+			.build();
 
-		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders();
-
-		assertThat(stakeholders).singleElement().satisfies(holder -> {
-			assertThat(holder.getExternalIdType()).isNull();
-			assertThat(holder.getFirstName()).isEqualTo("Förra Bolaget AB");
+		// As Draken adds a stakeholder by hand: a company is named by its organization name, anyone else by the first name
+		assertThat(mapper.toNewDraft(company, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders()).singleElement().satisfies(holder -> {
+			assertThat(holder.getExternalId()).isNull();
+			assertThat(holder.getExternalIdType()).isEqualTo("COMPANY");
+			assertThat(holder.getFirstName()).isNull();
 			assertThat(holder.getOrganizationName()).isEqualTo("Förra Bolaget AB");
+			assertThat(holder.getParameters()).isNullOrEmpty();
+		});
+		assertThat(mapper.toNewDraft(withoutNumber, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders()).singleElement().satisfies(holder -> {
+			assertThat(holder.getExternalIdType()).isEqualTo("PRIVATE");
+			assertThat(holder.getFirstName()).isEqualTo("Okänd Ägare");
+			assertThat(holder.getOrganizationName()).isEqualTo("Okänd Ägare");
 		});
 	}
 
@@ -229,11 +264,11 @@ class TargetMapperTest {
 				tuple("PBI_ROLE", List.of("Ägarbolag")),
 				tuple("organizationNumber", List.of("559988-7766")));
 		});
-		// A company that Party does not know gets neither partyId nor organization number
+		// A company that Party does not know gets neither partyId nor organization number, but is a company
 		assertThat(stakeholders.get(2)).satisfies(company -> {
 			assertThat(company.getOrganizationName()).isEqualTo("Okänt Bolag AB");
 			assertThat(company.getExternalId()).isNull();
-			assertThat(company.getExternalIdType()).isNull();
+			assertThat(company.getExternalIdType()).isEqualTo("COMPANY");
 			assertThat(company.getParameters()).extracting("key").containsExactly("PBI", "PBI_SOURCE");
 		});
 	}
@@ -423,15 +458,17 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void anInvestigationGetsTheTextsOfTheSource() {
-		final var withTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null, new InvestigationTexts("Noteringar", "2020-01-10 Anteckning: text", "2020-02-01 Erinran")));
+	void anInvestigationGetsTheTextsOfTheSourceAsItsConclusion() {
+		final var withTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null,
+			InvestigationTexts.of(new Part("Noteringar", "Klagomål & <oro>"), new Part("Händelser", "2020-01-10 Anteckning: text\n2020-01-20 Bild"), new Part("Beslut", "2020-02-01 Erinran"))));
 		final var withoutTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null));
 
-		assertThat(withTexts.getDescription()).isEqualTo("Noteringar");
-		assertThat(withTexts.getSummary()).isEqualTo("2020-01-10 Anteckning: text");
-		assertThat(withTexts.getConclusion()).isEqualTo("2020-02-01 Erinran");
-		assertThat(withoutTexts.getDescription()).isNull();
-		assertThat(withoutTexts.getSummary()).isNull();
+		// Draken shows only the conclusion, as HTML
+		assertThat(withTexts.getConclusion()).isEqualTo("<p><strong>Noteringar</strong></p><p>Klagomål &amp; &lt;oro&gt;</p>"
+			+ "<p><strong>Händelser</strong></p><p>2020-01-10 Anteckning: text</p><p>2020-01-20 Bild</p>"
+			+ "<p><strong>Beslut</strong></p><p>2020-02-01 Erinran</p>");
+		assertThat(withTexts.getDescription()).isNull();
+		assertThat(withTexts.getSummary()).isNull();
 		assertThat(withoutTexts.getConclusion()).isNull();
 	}
 

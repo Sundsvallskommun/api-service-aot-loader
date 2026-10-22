@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
@@ -27,11 +28,11 @@ public final class Journal {
 	 * @param  notes     the notes of the errand
 	 * @param  events    the events of the errand, also those without a text
 	 * @param  decisions the decisions of the errand
-	 * @return           the texts of the investigation: the notes as its description, the events as its summary and the
-	 *                   decisions as its conclusion
+	 * @return           the texts of the investigation: the notes, the events and the decisions, under the headings
+	 *                   "Noteringar", "Händelser" and "Beslut"
 	 */
 	public static InvestigationTexts investigation(final Collection<String> notes, final Collection<Entry> events, final Collection<Entry> decisions) {
-		return new InvestigationTexts(Texts.join("\n", notes), text(events), text(decisions));
+		return InvestigationTexts.of(new Part("Noteringar", Texts.join("\n", notes)), new Part("Händelser", text(events)), new Part("Beslut", text(decisions)));
 	}
 
 	/**

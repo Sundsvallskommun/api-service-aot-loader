@@ -224,7 +224,7 @@ class SourceSupportTest {
 
 	@Test
 	void sourceDatabasesOpenOnFirstUseAndOnlyWhenConfigured() {
-		final var properties = new AotLoaderProperties("AOT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null, null), Map.of(),
+		final var properties = new AotLoaderProperties("AOT", "s", "u", "c", null, "r", new Roles("PRIMARY", "CONTACT", null, null), Map.of(),
 			Map.of(Source.ALKT, new Database("jdbc:h2:mem:source;DB_CLOSE_DELAY=-1", "sa", "", Duration.ofSeconds(5)), Source.ALKOL, new Database(" ", null, null, null)), Map.of(), DataSize.ofMegabytes(1), null);
 		final var databases = new SourceDatabases(properties);
 
@@ -250,7 +250,7 @@ class SourceSupportTest {
 		assertThat(properties.database(Source.ALKT).orElseThrow()).hasToString("Database[configured=true]");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).sourceErrandTypes()).containsOnlyKeys("it");
 
-		final var empty = new AotLoaderProperties("AOT", "s", "u", "c", null, new Roles("PRIMARY", "CONTACT", null, null), null, null, null, DataSize.ofMegabytes(1), null);
+		final var empty = new AotLoaderProperties("AOT", "s", "u", "c", null, "r", new Roles("PRIMARY", "CONTACT", null, null), null, null, null, DataSize.ofMegabytes(1), null);
 		final var none = empty.errandType(ErrandType.SERVING_PERMIT);
 		assertThat(none.category()).isNull();
 		assertThat(none.labels()).isEmpty();

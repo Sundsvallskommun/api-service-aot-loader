@@ -21,14 +21,14 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.description",
-					"equalTo": "Ansökan komplett"
+					"expression": "$.conclusion",
+					"contains": "<p><strong>Noteringar</strong></p><p>Ansökan komplett</p>"
 				}
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.conclusion",
-					"equalTo": "2019-04-30 Serveringstillstånd, beslutsfattare Anna Berg: Tillstånd beviljas.\nMed villkor om bordsservering."
+					"contains": "<p><strong>Beslut</strong></p><p>2019-04-30 Serveringstillstånd, beslutsfattare Anna Berg: Tillstånd beviljas.</p><p>Med villkor om bordsservering.</p>"
 				}
 			}
 		]

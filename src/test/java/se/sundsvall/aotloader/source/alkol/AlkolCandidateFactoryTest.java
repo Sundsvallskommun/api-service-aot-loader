@@ -17,6 +17,7 @@ import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
@@ -377,8 +378,8 @@ class AlkolCandidateFactoryTest {
 		// Started when the errand of the grant was opened, completed when the permit was granted; every event of the errand is
 		// in the journal, also one without a text, and the decision tells who made it
 		assertThat(permit.investigation()).isEqualTo(new InvestigationData("Tobakstillstånd – Butik 1", LocalDateTime.of(2019, 5, 2, 0, 0), LocalDateTime.of(2019, 7, 1, 0, 0),
-			new InvestigationTexts("Komplett ansökan", "2019-05-10 017\n2019-06-01 Anteckningar: Platsbesök gjort",
-				"2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Karin Andersson: Tillstånd beviljas.")));
+			InvestigationTexts.of(new Part("Noteringar", "Komplett ansökan"), new Part("Händelser", "2019-05-10 017\n2019-06-01 Anteckningar: Platsbesök gjort"),
+				new Part("Beslut", "2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Karin Andersson: Tillstånd beviljas."))));
 		// The log of the place takes only events with a text, and marks a confidential one
 		assertThat(parameters(permit)).containsEntry("handelselogg",
 			List.of("2020-03-01 Tillsyn - Tillsynsbesök enl plan: Besök enligt plan", "2020-06-01 Anteckningar: Ärendet är borttaget",
@@ -388,7 +389,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(parameters(permit)).containsEntry("handlaggare", List.of("Karin Andersson", "9"));
 		final var other = data.factory().permits().candidates().get(1);
 		assertThat(parameters(other)).containsEntry("noteringar", List.of("Notering 2"));
-		assertThat(other.investigation().texts().description()).isNull();
+		assertThat(other.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Noteringar");
 	}
 
 	@Test
@@ -590,8 +591,9 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.description()).contains("\nHandläggare: Karin Andersson\n");
 		assertThat(external.files()).containsExactly(new FileReference("varning.pdf", DOCUMENTS));
 		// A decision maker AlkOL has no user for stands with the code
-		assertThat(external.investigation().texts()).isEqualTo(new InvestigationTexts("Klagomål", "2020-01-10 Anteckningar (sekretess): Kontrollköp gjort\n2020-01-15 017 (diarienummer TIL-0)",
-			"2020-01-20 Varning, beslutsfattare XY: Varning meddelas."));
+		assertThat(external.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Klagomål"),
+			new Part("Händelser", "2020-01-10 Anteckningar (sekretess): Kontrollköp gjort\n2020-01-15 017 (diarienummer TIL-0)"),
+			new Part("Beslut", "2020-01-20 Varning, beslutsfattare XY: Varning meddelas.")));
 		final var internal = candidates.get(1);
 		assertThat(internal.investigation().texts()).isEqualTo(InvestigationTexts.NONE);
 		assertThat(parameters(internal)).doesNotContainKey("handlaggare");
@@ -715,7 +717,8 @@ class AlkolCandidateFactoryTest {
 			.containsEntry("anmarkningar", List.of("Påträngande reklam i butik"))
 			.containsEntry("anteckning", List.of("Köpet nekades."))
 			.containsEntry("migrerad", List.of(TODAY + " från AlkOL"));
-		assertThat(visit.investigation().texts()).isEqualTo(new InvestigationTexts("Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03", "Köpet nekades.", "Påträngande reklam i butik"));
+		assertThat(visit.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Tillsynsomgång", "Kontrollköp vecka 18, 2024-05-03"), new Part("Anteckning", "Köpet nekades."),
+			new Part("Anmärkningar", "Påträngande reklam i butik")));
 		assertThat(visit.measures()).containsExactly(new MeasureData("Påträngande reklam i butik", null, LocalDateTime.of(2024, 5, 3, 22, 15)));
 		// Every file of the visit is material of its investigation (decision 60)
 		assertThat(visit.files()).allSatisfy(file -> assertThat(visit.detailsOf(file).investigation()).isTrue());

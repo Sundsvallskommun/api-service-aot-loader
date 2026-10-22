@@ -32,20 +32,21 @@ import static java.util.function.UnaryOperator.identity;
  * The settings of the migration. Settings that depend on decisions not yet taken may be left blank: a dry run then
  * reports what is missing, and a real run refuses to start until it is set.
  *
- * @param namespace      the namespace in SupportManagement
- * @param sentBy         the value of the X-Sent-By header, which makes the migration the actor in the history of the
- *                       target systems
- * @param reporterUserId the reporter of the migrated errands
- * @param channel        the channel of the migrated errands
- * @param errandStatus   the closed status the migrated errands get (decision 5)
- * @param roles          the stakeholder roles
- * @param errandTypes    the settings per type of errand
- * @param databases      the source databases
- * @param fileArea       the directories of the file area per source
- * @param maxFileSize    the largest file uploaded (decision 24)
- * @param municipalities the municipality of the places in an area, by the name of the area, for the areas that do not
- *                       belong to the municipality a run is started for. The errands are still created in that
- *                       municipality, with the municipality of the place as a parameter (decision 19).
+ * @param namespace        the namespace in SupportManagement
+ * @param sentBy           the value of the X-Sent-By header, which makes the migration the actor in the history of the
+ *                         target systems
+ * @param reporterUserId   the reporter of the migrated errands
+ * @param channel          the channel of the migrated errands
+ * @param errandStatus     the closed status the migrated errands get (decision 5)
+ * @param errandResolution the resolution the migrated errands get, the one Draken closes an errand of AOT with
+ * @param roles            the stakeholder roles
+ * @param errandTypes      the settings per type of errand
+ * @param databases        the source databases
+ * @param fileArea         the directories of the file area per source
+ * @param maxFileSize      the largest file uploaded (decision 24)
+ * @param municipalities   the municipality of the places in an area, by the name of the area, for the areas that do not
+ *                         belong to the municipality a run is started for. The errands are still created in that
+ *                         municipality, with the municipality of the place as a parameter (decision 19).
  */
 @Validated
 @ConfigurationProperties("aot-loader")
@@ -55,6 +56,7 @@ public record AotLoaderProperties(
 	@NotBlank String reporterUserId,
 	@NotBlank String channel,
 	String errandStatus,
+	@NotBlank String errandResolution,
 	@NotNull @Valid Roles roles,
 	Map<ErrandType, ErrandTypeSettings> errandTypes,
 	Map<Source, Database> databases,

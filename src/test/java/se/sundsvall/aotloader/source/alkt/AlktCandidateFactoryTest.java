@@ -14,6 +14,7 @@ import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
@@ -257,7 +258,7 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.ruleHits()).extracting(RuleHit::detail).contains(
 			"AgarID i tillståndet 11, på serveringsstället 10",
 			"beslutstyp GT, giltigt till 2026-01-01",
-			"2026-01-01–2026-03-31",
+			"2026-01-01 – 2026-03-31",
 			"på tillståndet 87654321, på serveringsstället 12345678",
 			"serveringstid 2 '10:00–'",
 			"villkorets slutdatum 'tills vidare'",
@@ -266,7 +267,7 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.holder().legalId()).isNull();
 		assertThat(parameters(candidate)).containsEntry("serveringstider", List.of("11:00–01:00", "10:00–"))
 			.containsEntry("villkor", List.of("Villkor"))
-			.containsEntry("period", List.of("2026-01-01–2026-03-31"));
+			.containsEntry("period", List.of("2026-01-01 – 2026-03-31"));
 	}
 
 	@Test
@@ -541,8 +542,8 @@ class AlktCandidateFactoryTest {
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
-		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '2026-11-01–' saknar slut"));
-		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '–2026-11-30' saknar början"));
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '2026-11-01 –' saknar slut"));
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '– 2026-11-30' saknar början"));
 	}
 
 	@Test
@@ -597,14 +598,16 @@ class AlktCandidateFactoryTest {
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
-		assertThat(parameters(candidates.get(0))).containsEntry("sasong", List.of("05-01–09-30"));
+		assertThat(parameters(candidates.get(0))).containsEntry("sasong", List.of("05-01 – 09-30"));
+		// A period as Draken writes it on the permit
+		assertThat(candidates.get(0).asset().parameters()).containsEntry("scopePeriodFromTo", "05-01 – 09-30");
 		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(UNPARSEABLE);
-		assertThat(parameters(candidates.get(1))).containsEntry("sasong", List.of("05-01–09-30")).doesNotContainKey("period");
-		assertThat(parameters(candidates.get(2))).containsEntry("sasong", List.of("vår–höst"));
-		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "säsong 'vår–höst'"));
-		assertThat(parameters(candidates.get(3))).containsEntry("period", List.of("maj–2026-09-30"));
-		assertThat(candidates.get(3).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "period 'maj–2026-09-30'"));
-		assertThat(candidates.get(4).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '2026-09-30–2026-05-01' slutar före sin början"));
+		assertThat(parameters(candidates.get(1))).containsEntry("sasong", List.of("05-01 – 09-30")).doesNotContainKey("period");
+		assertThat(parameters(candidates.get(2))).containsEntry("sasong", List.of("vår – höst"));
+		assertThat(candidates.get(2).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "säsong 'vår – höst'"));
+		assertThat(parameters(candidates.get(3))).containsEntry("period", List.of("maj – 2026-09-30"));
+		assertThat(candidates.get(3).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "period 'maj – 2026-09-30'"));
+		assertThat(candidates.get(4).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "perioden '2026-09-30 – 2026-05-01' slutar före sin början"));
 	}
 
 	@Test
@@ -691,13 +694,13 @@ class AlktCandidateFactoryTest {
 		// marked, a picture is headed "Bild", and a decision tells who made it
 		assertThat(closed.investigation())
 			.isEqualTo(new InvestigationData("Tillsyn, ifrågasatt åtgärd – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0),
-				new InvestigationTexts("Klagomål från granne\nUppföljning i mars", """
+				InvestigationTexts.of(new Part("Noteringar", "Klagomål från granne\nUppföljning i mars"), new Part("Händelser", """
 					Anteckning: Utan datum
 					2020-01-10 UTSKR: Brev om tillsyn
 					2020-01-15 Bild: Fasaden
 					2020-01-20 Anteckning (sekretess): Ringde bolaget.
 					2020-01-22 HAND (diarienummer TIL-2019-9): Från annat ärende
-					2020-01-25 REMP""", "2020-02-01 Erinran, beslutsfattare Anna Berg: Erinran meddelas.")));
+					2020-01-25 REMP"""), new Part("Beslut", "2020-02-01 Erinran, beslutsfattare Anna Berg: Erinran meddelas."))));
 
 		final var open = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("701")).findFirst().orElseThrow();
 		assertThat(open.ruleHits()).extracting(RuleHit::rule).containsExactly(ERRAND_OPEN);
@@ -752,7 +755,8 @@ class AlktCandidateFactoryTest {
 		final var withErrands = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("1")).findFirst().orElseThrow();
 		// Started when the first issuing errand was opened, completed when the permit was issued
 		assertThat(withErrands.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0),
-			LocalDateTime.of(2019, 5, 1, 0, 0), new InvestigationTexts("Ansökan komplett", "2019-03-01 Anteckning: Remiss skickad", "2019-05-01 Serveringstillstånd: Tillstånd beviljas.")));
+			LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.of(new Part("Noteringar", "Ansökan komplett"), new Part("Händelser", "2019-03-01 Anteckning: Remiss skickad"),
+				new Part("Beslut", "2019-05-01 Serveringstillstånd: Tillstånd beviljas."))));
 		assertThat(parameters(withErrands)).containsEntry("handelselogg", List.of("2020-01-01 HAND: Inkommen ritning", "2021-06-01 Anteckning: Ny serveringsansvarig"));
 		// The handlers of the issuing errands, each named once
 		assertThat(parameters(withErrands)).containsEntry("handlaggare", List.of("Anna Berg", "KLM")).containsEntry("noteringar", List.of("En notering"));
@@ -817,11 +821,10 @@ class AlktCandidateFactoryTest {
 		assertThat(visit.placeNumber()).isEqualTo("12345678");
 		assertThat(visit.title()).isEqualTo("Tillsynsbesök – Restaurang 1");
 		// The end time 23 cannot be read, so the visit ended when it started
-		// The round of inspection is the description of its investigation, the note of the visit the summary and the remarks
-		// the conclusion
+		// The texts of the investigation are the round of inspection, the note of the visit and the remarks
 		assertThat(visit.investigation()).isEqualTo(new InvestigationData("Tillsynsbesök – Restaurang 1", LocalDateTime.of(2023, 11, 4, 21, 30), LocalDateTime.of(2023, 11, 4, 21, 30),
-			new InvestigationTexts("Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05\nTillsammans med polisen.", "Mycket folk i baren.",
-				"Servering till minderårig: Ungdomar i baren\n77")));
+			InvestigationTexts.of(new Part("Tillsynsomgång", "Krogrunda, 2023-11-04 – 2023-11-05\nTillsammans med polisen."), new Part("Anteckning", "Mycket folk i baren."),
+				new Part("Anmärkningar", "Servering till minderårig: Ungdomar i baren\n77"))));
 		assertThat(visit.labelPaths()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
 		assertThat(visit.externalTags()).isEmpty();
 		assertThat(visit.asset()).isNull();
@@ -829,7 +832,7 @@ class AlktCandidateFactoryTest {
 			Tillsynsbesök på Restaurang 1 2023-11-04, migrerat från AlkT.
 			Tillsynsart: Rutintillsyn
 			Tid: 21:30–23
-			Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05
+			Tillsynsomgång: Krogrunda, 2023-11-04 – 2023-11-05
 			Handläggare: Anna Berg, XYZ
 			Serveringspersonal: Ägaren på plats, Personalen inte på plats
 			Anmärkningar:
@@ -841,7 +844,7 @@ class AlktCandidateFactoryTest {
 			.containsEntry("besoksdatum", List.of("2023-11-04"))
 			.containsEntry("besokstid", List.of("21:30–23"))
 			.containsEntry("tillsynsart", List.of("Rutintillsyn"))
-			.containsEntry("tillsynsomgang", List.of("Krogrunda, 2023-11-04–2023-11-05"))
+			.containsEntry("tillsynsomgang", List.of("Krogrunda, 2023-11-04 – 2023-11-05"))
 			.doesNotContainKeys("tillsynenGallde", "anmaltBesok")
 			.containsEntry("handlaggare", List.of("Anna Berg", "XYZ"))
 			.containsEntry("serveringspersonal", List.of("Ägaren på plats", "Personalen inte på plats"))
@@ -867,7 +870,7 @@ class AlktCandidateFactoryTest {
 		assertThat(withoutPlace.title()).isEqualTo("Tillsynsbesök – okänt serveringsställe");
 		assertThat(parameters(withoutPlace)).containsEntry("tillsynsart", List.of("99")).containsEntry("besokstid", List.of("09:15–10:00"))
 			.doesNotContainKeys("anmarkningar", "anteckning", "tillsynsomgang");
-		assertThat(withoutPlace.investigation().texts().description()).isNull();
+		assertThat(withoutPlace.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Tillsynsomgång");
 	}
 
 	@Test

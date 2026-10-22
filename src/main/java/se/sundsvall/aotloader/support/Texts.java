@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.web.util.HtmlUtils;
 
 import static java.util.stream.Collectors.joining;
@@ -21,6 +22,8 @@ public final class Texts {
 	public static final String DASH = "–";
 
 	private static final String ELLIPSIS = "…";
+	// Also the no-break space, which \s alone does not match
+	private static final Pattern BLANKS = Pattern.compile("[\\s\\p{Z}]+");
 
 	private Texts() {}
 
@@ -32,10 +35,24 @@ public final class Texts {
 	}
 
 	/**
-	 * @return the range "start–end", with a missing end left empty, e.g. "2026-05-01–"
+	 * @return the range "start–end", as Draken writes a range of times, with a missing end left empty, e.g. "11:00–"
 	 */
 	public static String range(final String start, final String end) {
 		return Optional.ofNullable(start).orElse("") + DASH + Optional.ofNullable(end).orElse("");
+	}
+
+	/**
+	 * @return the range "start – end", as Draken writes a range of days, with a missing end left empty, e.g. "05-01 –"
+	 */
+	public static String dateRange(final String start, final String end) {
+		return (Optional.ofNullable(start).orElse("") + " " + DASH + " " + Optional.ofNullable(end).orElse("")).strip();
+	}
+
+	/**
+	 * @return the value without any blanks, also those inside it, such as the one in "852 30"; null when nothing remains
+	 */
+	public static String withoutBlanks(final String value) {
+		return value == null ? null : trimToNull(BLANKS.matcher(value).replaceAll(""));
 	}
 
 	/**
@@ -134,8 +151,20 @@ public final class Texts {
 		final var paragraphs = text.lines()
 			.map(Texts::trimToNull)
 			.filter(Objects::nonNull)
-			.map(line -> "<p>" + HtmlUtils.htmlEscape(line, StandardCharsets.UTF_8.name()) + "</p>")
+			.map(line -> "<p>" + escape(line) + "</p>")
 			.collect(joining());
 		return paragraphs.isEmpty() ? null : paragraphs;
+	}
+
+	/**
+	 * @return the heading as an HTML paragraph in bold, "&lt;p&gt;&lt;strong&gt;heading&lt;/strong&gt;&lt;/p&gt;", escaped
+	 *         as {@link #paragraphs} escapes a line
+	 */
+	public static String boldParagraph(final String heading) {
+		return "<p><strong>" + escape(heading) + "</strong></p>";
+	}
+
+	private static String escape(final String text) {
+		return HtmlUtils.htmlEscape(text, StandardCharsets.UTF_8.name());
 	}
 }

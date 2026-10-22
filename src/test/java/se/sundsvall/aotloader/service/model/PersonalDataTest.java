@@ -38,7 +38,8 @@ class PersonalDataTest {
 		assertHidden(new PermitLink(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true), legalId, legalId, null));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
 		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
-		assertHidden(new InvestigationData("Tillsyn", null, null, new InvestigationTexts(NAME, NAME + " " + NUMBER, NUMBER)));
+		assertHidden(new InvestigationData("Tillsyn", null, null, InvestigationTexts.of(new InvestigationTexts.Part("Noteringar", NAME), new InvestigationTexts.Part("Händelser", NAME + " " + NUMBER))));
+		assertHidden(new InvestigationTexts.Part("Beslut", NUMBER));
 		assertHidden(new Journal.Entry(null, "Anteckning", NAME + " " + NUMBER));
 	}
 

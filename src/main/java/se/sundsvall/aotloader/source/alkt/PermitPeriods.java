@@ -41,13 +41,13 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 			// A period of days and months is a season (section 7.3.3)
 			return new PermitPeriods(startDay.get(), endDay.get(), null, null, season.raw(), null, problems);
 		}
-		final var rawPeriod = Texts.range(permit.periodStart(), permit.periodSlut());
+		final var rawPeriod = Texts.dateRange(permit.periodStart(), permit.periodSlut());
 		problems.add("period '" + rawPeriod + "'");
 		return new PermitPeriods(season.start(), season.end(), null, null, season.raw(), rawPeriod, problems);
 	}
 
 	private static void checkDatePeriod(final PermitRow permit, final LocalDate periodStart, final LocalDate periodEnd, final List<String> problems) {
-		final var period = Texts.range(permit.periodStart(), permit.periodSlut());
+		final var period = Texts.dateRange(permit.periodStart(), permit.periodSlut());
 		if (periodStart == null || periodEnd == null) {
 			// A period open at one end would make a temporary permit that never ends, or one without a start
 			problems.add("perioden '%s' saknar %s".formatted(period, periodStart == null ? "början" : "slut"));
@@ -62,14 +62,14 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 
 	String seasonText() {
 		if (seasonStart != null) {
-			return Texts.range(SourceValues.format(seasonStart), SourceValues.format(seasonEnd));
+			return Texts.dateRange(SourceValues.format(seasonStart), SourceValues.format(seasonEnd));
 		}
 		return rawSeason;
 	}
 
 	String periodText() {
 		if (hasDatePeriod()) {
-			return Texts.range(SourceValues.format(periodStart), SourceValues.format(periodEnd));
+			return Texts.dateRange(SourceValues.format(periodStart), SourceValues.format(periodEnd));
 		}
 		return rawPeriod;
 	}
@@ -92,7 +92,7 @@ record PermitPeriods(MonthDay seasonStart, MonthDay seasonEnd, LocalDate periodS
 			if (start.isPresent() && end.isPresent()) {
 				return new Season(start.get(), end.get(), null);
 			}
-			final var raw = Texts.range(permit.arligPeriodStart(), permit.arligPeriodSlut());
+			final var raw = Texts.dateRange(permit.arligPeriodStart(), permit.arligPeriodSlut());
 			problems.add("säsong '" + raw + "'");
 			return new Season(null, null, raw);
 		}

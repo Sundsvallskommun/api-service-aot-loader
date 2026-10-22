@@ -60,10 +60,32 @@ class TextsTest {
 	}
 
 	@Test
+	void boldParagraph() {
+		assertThat(Texts.boldParagraph("Beslut & <villkor>")).isEqualTo("<p><strong>Beslut &amp; &lt;villkor&gt;</strong></p>");
+	}
+
+	@Test
 	void titleAndRange() {
 		assertThat(Texts.title("Serveringstillstånd", "Krogen")).isEqualTo("Serveringstillstånd – Krogen");
 		assertThat(Texts.range("08:00", "01:00")).isEqualTo("08:00–01:00");
 		assertThat(Texts.range("2026-05-01", null)).isEqualTo("2026-05-01–");
 		assertThat(Texts.range(null, null)).isEqualTo("–");
+	}
+
+	@Test
+	void dateRange() {
+		// As Draken writes a period of days
+		assertThat(Texts.dateRange("2026-05-01", "2026-09-30")).isEqualTo("2026-05-01 – 2026-09-30");
+		assertThat(Texts.dateRange("2026-05-01", null)).isEqualTo("2026-05-01 –");
+		assertThat(Texts.dateRange(null, "09-30")).isEqualTo("– 09-30");
+		assertThat(Texts.dateRange(null, null)).isEqualTo("–");
+	}
+
+	@Test
+	void withoutBlanks() {
+		assertThat(Texts.withoutBlanks(" 852 30 ")).isEqualTo("85230");
+		assertThat(Texts.withoutBlanks("852 30")).isEqualTo("85230");
+		assertThat(Texts.withoutBlanks(" \t ")).isNull();
+		assertThat(Texts.withoutBlanks(null)).isNull();
 	}
 }

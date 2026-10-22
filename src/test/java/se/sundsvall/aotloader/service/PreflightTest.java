@@ -212,7 +212,7 @@ class PreflightTest {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(List.of(new Label().id("x").resourcePath("/TAGROOT/MIGRATED_ERRAND")
 			.attributes(List.of(new LabelAttribute().key("processBlocked").value("false")))));
 		final var inspection = new ErrandTypeSettings(null, null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
-		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATED", " ", new Roles("PRIMARY", "CONTACT", null, null),
+		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATION", " ", "CLOSED", new Roles("PRIMARY", "CONTACT", null, null),
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection, ErrandType.ALCOHOL_INSPECTION_VISIT,
 				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true)),
 			Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),

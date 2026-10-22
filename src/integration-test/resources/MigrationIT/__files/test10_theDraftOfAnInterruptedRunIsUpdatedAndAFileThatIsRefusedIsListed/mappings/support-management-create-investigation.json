@@ -21,20 +21,8 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.description",
-					"equalTo": "Komplett ansökan"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.summary",
-					"equalTo": "2019-06-01 001: Ansökan inkom\n2019-06-15 Annan utsänd handling (diarienummer IAN-2019-99)"
-				}
-			},
-			{
-				"matchesJsonPath": {
 					"expression": "$.conclusion",
-					"equalTo": "2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Per Eriksson: Tillstånd beviljas."
+					"equalTo": "<p><strong>Noteringar</strong></p><p>Komplett ansökan</p><p><strong>Händelser</strong></p><p>2019-06-01 001: Ansökan inkom</p><p>2019-06-15 Annan utsänd handling (diarienummer IAN-2019-99)</p><p><strong>Beslut</strong></p><p>2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Per Eriksson: Tillstånd beviljas.</p>"
 				}
 			}
 		]

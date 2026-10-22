@@ -16,6 +16,7 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Parameter;
@@ -177,7 +178,7 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
-	 * @return the name of the round with its days, "name, ÅÅÅÅ-MM-DD–ÅÅÅÅ-MM-DD", without what it lacks; null without a
+	 * @return the name of the round with its days, "name, ÅÅÅÅ-MM-DD – ÅÅÅÅ-MM-DD", without what it lacks; null without a
 	 *         round
 	 */
 	static String roundName(final RoundRow round) {
@@ -186,7 +187,7 @@ public final class InspectionVisitCandidates {
 		}
 		final var start = SourceValues.format(round.start());
 		final var end = SourceValues.format(round.slut());
-		final var days = start == null || end == null || start.equals(end) ? Optional.ofNullable(start).orElse(end) : Texts.range(start, end);
+		final var days = start == null || end == null || start.equals(end) ? Optional.ofNullable(start).orElse(end) : Texts.dateRange(start, end);
 		return Texts.join(", ", Arrays.asList(Texts.trimToNull(round.namn()), days));
 	}
 
@@ -199,13 +200,12 @@ public final class InspectionVisitCandidates {
 	 * the start of that day without one, and was completed at its end time on its end day, SlutDatum, or on the date of
 	 * the visit when it has no later end day; then an end time before the start time is the day after, as the visit went
 	 * on past midnight. A visit without an end time was completed at the start of a later end day, otherwise when it
-	 * started, so that both are set whenever the visit has a date. The round of inspection the visit was made in, with its
-	 * note, is its description (decision 50), the note of the visit its summary and the remarks its conclusion (decision
-	 * 45).
+	 * started, so that both are set whenever the visit has a date. The texts are the round of inspection the visit was made
+	 * in, with its note (decision 50), the note of the visit and its remarks (decision 45).
 	 */
 	static InvestigationData investigation(final String title, final VisitRow visit, final List<String> remarks, final RoundRow round) {
-		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(line(ROUND, roundName(round)), Texts.trimToNull(round.fritext())));
-		final var texts = new InvestigationTexts(roundText, Texts.trimToNull(visit.fritext()), Texts.join("\n", remarks));
+		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(roundName(round), Texts.trimToNull(round.fritext())));
+		final var texts = InvestigationTexts.of(new Part(ROUND, roundText), new Part("Anteckning", Texts.trimToNull(visit.fritext())), new Part("Anmärkningar", Texts.join("\n", remarks)));
 		if (visit.datum() == null) {
 			return new InvestigationData(title, null, null, texts);
 		}

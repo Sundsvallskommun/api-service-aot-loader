@@ -91,7 +91,7 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.values[0] == '12345678')]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsomgang' && @.values.length() == 1 && @.values[0] == 'Krogrunda, 2023-11-04–2023-11-05')]"
+				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsomgang' && @.values.length() == 1 && @.values[0] == 'Krogrunda, 2023-11-04 – 2023-11-05')]"
 			},
 			{
 				"matchesJsonPath": "$[?(@.measures.length() == 2)]"
@@ -105,7 +105,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.description",
-					"contains": "<p>Tillsynsart: Rutintillsyn</p><p>Tid: 21:30–23:00</p><p>Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05</p>"
+					"contains": "<p>Tillsynsart: Rutintillsyn</p><p>Tid: 21:30–23:00</p><p>Tillsynsomgång: Krogrunda, 2023-11-04 – 2023-11-05</p>"
 				}
 			},
 			{

@@ -24,20 +24,8 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.description",
-					"equalTo": "Tillsynsomgång: Krogrunda, 2023-11-04–2023-11-05\nTillsammans med polisen."
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.summary",
-					"equalTo": "Mycket folk i baren."
-				}
-			},
-			{
-				"matchesJsonPath": {
 					"expression": "$.conclusion",
-					"equalTo": "Servering till minderårig: Ungdomar i baren\nServering utom tillåten serveringstid"
+					"equalTo": "<p><strong>Tillsynsomgång</strong></p><p>Krogrunda, 2023-11-04 – 2023-11-05</p><p>Tillsammans med polisen.</p><p><strong>Anteckning</strong></p><p>Mycket folk i baren.</p><p><strong>Anmärkningar</strong></p><p>Servering till minderårig: Ungdomar i baren</p><p>Servering utom tillåten serveringstid</p>"
 				}
 			}
 		]

@@ -7,6 +7,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -14,7 +15,7 @@ class PermitInvestigationsTest {
 
 	@Test
 	void aPermitWithoutADecisionDateIsCompletedWhenTheLastErrandWasClosed() {
-		final var texts = new InvestigationTexts("Noteringar", null, null);
+		final var texts = InvestigationTexts.of(new Part("Noteringar", "Ansökan komplett"));
 
 		final var investigation = PermitInvestigations.of("Tillstånd", Arrays.asList(LocalDate.of(2019, 3, 1), null, LocalDate.of(2019, 2, 1)),
 			Arrays.asList(LocalDate.of(2019, 6, 1), null, LocalDate.of(2019, 7, 1)), null, texts);

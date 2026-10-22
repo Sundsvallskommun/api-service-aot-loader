@@ -444,7 +444,7 @@ public final class AlktCandidateFactory {
 		final var marking = group != null && PLACE_MARKINGS.contains(group.toUpperCase(Locale.ROOT));
 		final var area = snapshot.codeText(CODE_TYPE_AREA, place.omrade());
 		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
-			.add(PARAMETER_RESTAURANT_NUMBER, "Serveringsställenummer", place.restaurangBeteckning())
+			.add(PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurangBeteckning())
 			.add("typAvServeringsstalle", "Typ av serveringsställe", marking ? null : snapshot.codeText(CODE_TYPE_PLACE_GROUP, group))
 			.add("markering", "Markering", marking ? snapshot.codeText(CODE_TYPE_PLACE_GROUP, group) : null)
 			.add(ErrandParameters.AREA, "Område", area)

@@ -21,14 +21,14 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.description",
-					"equalTo": "Klagomål från grannar"
+					"expression": "$.conclusion",
+					"contains": "<p><strong>Noteringar</strong></p><p>Klagomål från grannar</p>"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.summary",
-					"equalTo": "2021-01-15 Anteckning (sekretess): Samtal med bolaget\n2021-01-18 Remiss till polisen (diarienummer TIL-2020-3)\n2021-01-20 Bild: Fasaden mot torget"
+					"expression": "$.conclusion",
+					"contains": "<p><strong>Händelser</strong></p><p>2021-01-15 Anteckning (sekretess): Samtal med bolaget</p><p>2021-01-18 Remiss till polisen (diarienummer TIL-2020-3)</p><p>2021-01-20 Bild: Fasaden mot torget</p>"
 				}
 			}
 		]

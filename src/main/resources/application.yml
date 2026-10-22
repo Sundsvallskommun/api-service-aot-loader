@@ -91,9 +91,12 @@ aot-loader:
   namespace: AOT
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
-  channel: MIGRATED
+  # The channel Draken shows as "Migrerat ärende"
+  channel: MIGRATION
   # The closed status of the migrated errands, the one AOT has (decision 5)
   errand-status: SOLVED
+  # The resolution Draken closes an errand of AOT with, shown as "Avslutat"
+  errand-resolution: CLOSED
   max-file-size: 50MB
   # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
   # in the code lists of AlkT and AlkOL. Their errands are created in the municipality of the run like the others, with
