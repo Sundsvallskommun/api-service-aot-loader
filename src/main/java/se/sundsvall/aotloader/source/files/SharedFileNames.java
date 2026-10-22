@@ -4,11 +4,11 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.Objects.requireNonNull;
@@ -16,7 +16,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * The file names that more than one place of a source refers to, by directory of the file area. The directories are
  * flat, so places that refer to the same name share one file, which belongs to at most one of them. Such a file is not
- * migrated (G14). Names are compared the way the file area finds them: the last part of a path, regardless of case.
+ * migrated (G14). Names are compared the way the file area finds them: the last part of a path, composed and regardless
+ * of case.
  * When a source keeps its documents and its attachments in the same directory, a name is one file in both.
  */
 public final class SharedFileNames {
@@ -46,11 +47,11 @@ public final class SharedFileNames {
 	}
 
 	private static String key(final String name, final FileFolder folder, final boolean oneDirectory) {
-		final var fileName = name == null ? null : FileArea.fileNameOf(name);
+		final var fileName = FileNames.key(name);
 		if (fileName == null || folder == null) {
 			return null;
 		}
-		return (oneDirectory ? "" : folder + "/") + fileName.toLowerCase(Locale.ROOT);
+		return (oneDirectory ? "" : folder + "/") + fileName;
 	}
 
 	private static boolean isOneDirectory(final FileAreaDirectories directories) {

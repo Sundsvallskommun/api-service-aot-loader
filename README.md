@@ -90,6 +90,7 @@ When the migration is approved, the production secret is changed or the client i
 | `ALKT_DOCUMENTS_DIR`, `ALKT_ATTACHMENTS_DIR`                              | The directories of AlkT on the file area (`Dokument` and `Bilder`)                                                                      |
 | `ALKOL_DOCUMENTS_DIR`, `ALKOL_ATTACHMENTS_DIR`                            | The directory of AlkOL on the file area, the same for both                                                                              |
 | `AOT_LOADER_DB_URL`                                                       | The local database, see below. Default `jdbc:h2:file:./data/aot-loader`                                                                 |
+| `AOT_LOADER_RESULT_DIRECTORY`                                             | Where the report of each run is written as a file, see below. Default `./data/resultat`; blank writes none                              |
 
 The connection to SQL Server is encrypted. The server presents only the certificate it makes itself
 (`SSL_Self_Signed_Fallback`), which no truststore can trust, so the URLs end with `trustServerCertificate=true` and the
@@ -119,7 +120,12 @@ The settings that are the same everywhere are in `application.yml` under `aot-lo
   Timrå, and otherwise the municipality of the run (decision 19). An item is never moved to another municipality once
   it has been written.
 
-- **Status:** `errand-status`, the closed status of the migrated errands: `SOLVED`, the one AOT has (decision 5).
+- **Status:** `errand-status`, the closed status of the migrated errands: `SOLVED`, the one AOT has (decision 5), and
+  `errand-resolution`, `CLOSED`, the one Draken closes an errand of AOT with.
+
+- **Cleanup:** `cleanup.enabled` turns on the calls that remove what the migration wrote (section 10.3). It is `false`,
+  and is turned on only for a test environment, e.g. with `AOT_LOADER_CLEANUP_ENABLED=true` in `.env`. Never in
+  production.
 
 - **Roles:** the permit holder is `PRIMARY`, and the persons with significant influence are `CONTACT` with the parameter
   `PBI` = `true` (decision 15). The holder's contact person is a `CONTACT` of its own, without `PBI`.
@@ -135,9 +141,21 @@ The status table, the exception list and the reports of the runs are kept in an 
 later run continue where an earlier one stopped. It holds no names or numbers of permit holders or other persons.
 
 - Use an absolute path and one file per environment, e.g. `AOT_LOADER_DB_URL=jdbc:h2:file:C:/migrering/aot-loader-test`.
-  The first run binds the file to the SupportManagement it calls, and a run against another environment is refused.
+  The first run binds the file to the SupportManagement and namespace, the PartyAssets and the relation service it
+  calls, and a run against another environment is refused.
 - Open it with DBeaver (H2 driver) while the service is stopped; H2 locks the file while it runs.
 - Copy the file, with the service stopped, to keep it as a record of the migration.
+
+### The result file
+
+When a run finishes, dry or real, with rows in its report, its whole report is written to `data/resultat` as a CSV file
+for Excel, the same as `GET /2281/migrations/runs/{runId}/report.csv` gives: one row per item, with the errands that
+were not migrated and why, and the files that were not uploaded (G14) with their names and the reason, e.g. that a
+file is larger than 50 MB.
+That file is what is sent to the business. Its name tells when the run started, what it was and the start of its id,
+e.g. `rapport-20261022-153000-torrkorning-1a2b3c4d.csv`, and the message of the run says where it is. A file that
+cannot be written is told in the message of the run; the run itself is not affected. Like the local database, the file
+holds no numbers of permit holders, but it does hold the names of places and files.
 
 The protection against duplicates does not rest on the local database alone: before anything is created the target
 systems are searched, the errand on the external tag `migreringsid`, drafts included, the post in PartyAssets on its
@@ -173,16 +191,18 @@ nothing: an item already on the list gets what the saved list says.
 
 Swagger UI: [http://localhost:8080/api-docs](http://localhost:8080/api-docs)
 
-|                               Call                               |                                                                                                                                   What it does                                                                                                                                   |
-|------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `POST /2281/migrations/runs`                                     | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`, `TILLSYNSBESOK`) and `limit`. A field it does not know, or an empty list, is refused with 400 |
-| `GET /2281/migrations/runs/{runId}`                              | The status of the run, with the number of items per outcome                                                                                                                                                                                                                      |
-| `POST /2281/migrations/runs/{runId}/stop`                        | Stops the run before its next item                                                                                                                                                                                                                                               |
-| `GET /2281/migrations/runs/{runId}/report`                       | The report: one row per item, with the review rules and what went wrong                                                                                                                                                                                                          |
-| `GET /2281/migrations/runs/{runId}/report.csv`                   | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                                                                                                               |
-| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`  | Migrates a single item and waits for it                                                                                                                                                                                                                                          |
-| `GET /2281/migrations/items`                                     | The status table                                                                                                                                                                                                                                                                 |
-| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}` | The exception list (section 7.1.1)                                                                                                                                                                                                                                               |
+|                                  Call                                   |                                                                                                                                                               What it does                                                                                                                                                                |
+|-------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST /2281/migrations/runs`                                            | Starts a run in the background. A dry run unless the body says `"dryRun": false`. The body may narrow it: `sources` (`ALKT`, `ALKOL`), `kinds` (`TILLSTAND`, `ANMALAN`, `TILLSYN`, `TILLSYNSBESOK`) and `limit`. A field it does not know, or an empty list, is refused with 400                                                          |
+| `GET /2281/migrations/runs/{runId}`                                     | The status of the run, with the number of items per outcome                                                                                                                                                                                                                                                                               |
+| `POST /2281/migrations/runs/{runId}/stop`                               | Stops the run before its next item                                                                                                                                                                                                                                                                                                        |
+| `GET /2281/migrations/runs/{runId}/report`                              | The report: one row per item, with the review rules and what went wrong                                                                                                                                                                                                                                                                   |
+| `GET /2281/migrations/runs/{runId}/report.csv`                          | The same as a CSV file for Excel; `?outcome=FEL&outcome=GRANSKAS` lists only those                                                                                                                                                                                                                                                        |
+| `POST /2281/migrations/items/{source}/{kind}/{id}?dryRun=false`         | Migrates a single item and waits for it                                                                                                                                                                                                                                                                                                   |
+| `GET /2281/migrations/items`                                            | The status table                                                                                                                                                                                                                                                                                                                          |
+| `PUT`, `DELETE /2281/migrations/exceptions/{source}/{kind}/{id}`        | The exception list (section 7.1.1)                                                                                                                                                                                                                                                                                                        |
+| `POST /2281/migrations/cleanups`                                        | Only with `cleanup.enabled`. Starts a cleanup in the background, followed and stopped as a run: removes the relations, the post in PartyAssets and the errand the migration wrote for each item of the status table in the selection, and the item. A dry run unless the body says `"dryRun": false`; the body may narrow it as for a run |
+| `POST /2281/migrations/items/{source}/{kind}/{id}/cleanup?dryRun=false` | Only with `cleanup.enabled`. Cleans up a single item and waits for it                                                                                                                                                                                                                                                                     |
 
 The id of an item is `ObjektID` in AlkT or `FSID` in AlkOL for a permit, `FSID` and product for a
 notification (`1234-FOLKOL`, `1234-ECIGARETTER`, `1234-TOBAKSFRI_NIKOTIN`), `ArendeID` for an inspection errand, and
@@ -208,6 +228,10 @@ curl -o rapport.csv 'http://localhost:8080/2281/migrations/runs/<runId>/report.c
 # A real run of the permits in AlkT, ten at a time
 curl -X POST http://localhost:8080/2281/migrations/runs -H 'Content-Type: application/json' \
   -d '{"dryRun": false, "sources": ["ALKT"], "kinds": ["TILLSTAND"], "limit": 10}'
+
+# In a test environment with cleanup.enabled: what a cleanup of everything would remove, and then removing it
+curl -X POST http://localhost:8080/2281/migrations/cleanups -H 'Content-Type: application/json' -d '{}'
+curl -X POST http://localhost:8080/2281/migrations/cleanups -H 'Content-Type: application/json' -d '{"dryRun": false}'
 ```
 
 ## Tests

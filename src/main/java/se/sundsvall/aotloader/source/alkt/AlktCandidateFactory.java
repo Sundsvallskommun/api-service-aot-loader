@@ -59,10 +59,9 @@ import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_ANNEX;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
-import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
 import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_CONDITIONS;
-import static se.sundsvall.aotloader.Constants.PARAMETER_RESTAURANT_NUMBER;
+import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
@@ -135,9 +134,13 @@ public final class AlktCandidateFactory {
 		this.today = today;
 		this.properties = properties;
 		this.sharedFileNames = sharedFileNames(snapshot, properties);
+		// G16 counts places, so that the rows of one place (G26) with the same diary number count once
+		final var diaryNumbersOfPlaces = new HashSet<String>();
 		snapshot.permits().forEach(permit -> {
 			Optional.ofNullable(permit.objektId()).ifPresent(objektId -> permitRowsByPlace.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(permit));
-			Optional.ofNullable(DiaryNumbers.normalize(permit.utfardandeDiarienr())).ifPresent(number -> permitsByDiaryNumber.merge(number, 1, Integer::sum));
+			Optional.ofNullable(DiaryNumbers.normalize(permit.utfardandeDiarienr()))
+				.filter(number -> permit.objektId() == null || diaryNumbersOfPlaces.add(number + "/" + permit.objektId()))
+				.ifPresent(number -> permitsByDiaryNumber.merge(number, 1, Integer::sum));
 			ownerOf(placeOf(permit.objektId()))
 				.ifPresent(owner -> PartyRows.numberKey(owner.organisationsNr(), today)
 					.ifPresent(number -> ownersByNumber.computeIfAbsent(number, _ -> new HashSet<>()).add(owner.id())));
@@ -149,20 +152,23 @@ public final class AlktCandidateFactory {
 	}
 
 	/**
-	 * @return the current serving permits, with a notice for each permit that has no ObjektID and therefore no id
+	 * @return the current serving permits, one per place, with a notice for each permit that has no ObjektID and therefore
+	 *         no id. A place with several rows (G26) is one item, built from its first row, since the rows would share
+	 *         their key.
 	 */
 	public ReaderResult permits() {
 		final var candidates = new ArrayList<Candidate>();
 		final var notices = new ArrayList<Notice>();
+		final var places = new HashSet<Integer>();
 		var withoutId = 0;
 		for (final var permit : snapshot.permits()) {
 			if (permit.objektId() == null) {
 				withoutId++;
-				notices.add(new Notice(new ItemKey(ALKT, TILLSTAND, WITHOUT_ID + withoutId), null, Outcome.GRANSKAS,
+				notices.add(new Notice(new ItemKey(ALKT, TILLSTAND, WITHOUT_ID + withoutId), null, Outcome.GRANSKAS, PLACE_MISSING.getCode(),
 					PLACE_MISSING.getCode() + " Tillståndet saknar ObjektID, diarienummer " + Optional.ofNullable(permit.utfardandeDiarienr()).orElse("saknas")));
-				continue;
+			} else if (places.add(permit.objektId())) {
+				candidates.add(permit(permit));
 			}
-			candidates.add(permit(permit));
 		}
 		return new ReaderResult(candidates, notices);
 	}
@@ -205,6 +211,8 @@ public final class AlktCandidateFactory {
 		final var issuingErrands = issuingErrands(permit);
 		if (issuingErrands.isEmpty()) {
 			hits.add(RuleHit.of(NO_ISSUING_ERRAND));
+		} else if (issuingErrands.stream().noneMatch(snapshot.errands()::containsKey)) {
+			hits.add(RuleHit.of(NO_ISSUING_ERRAND, "ArendeID %s finns inte i Ärende".formatted(Texts.join(", ", issuingErrands.stream().map(String::valueOf).toList()))));
 		}
 		openErrandHits(issuingErrands, hits);
 		diaryNumberHits(permit, hits);
@@ -315,10 +323,26 @@ public final class AlktCandidateFactory {
 
 	/**
 	 * @return false when the permit may have been issued to another than the current owner of the place (G2), or the place
-	 *         is missing
+	 *         is missing; true when either owner is unknown. Two owner posts with the same number are the same holder, as
+	 *         holders are compared everywhere (section 7.7.1), and without a number for both the posts are compared.
 	 */
-	private static boolean issuedToOwner(final PermitRow permit, final PlaceRow place) {
-		return place != null && (permit.gtAgarId() == null || place.agarId() == null || permit.gtAgarId().equals(place.agarId()));
+	private boolean issuedToOwner(final PermitRow permit, final PlaceRow place) {
+		if (place == null) {
+			return false;
+		}
+		if (permit.gtAgarId() == null || place.agarId() == null || permit.gtAgarId().equals(place.agarId())) {
+			return true;
+		}
+		final var permitNumber = Optional.ofNullable(snapshot.owners().get(permit.gtAgarId())).flatMap(owner -> PartyRows.numberKey(owner.organisationsNr(), today));
+		final var placeNumber = Optional.ofNullable(snapshot.owners().get(place.agarId())).flatMap(owner -> PartyRows.numberKey(owner.organisationsNr(), today));
+		return permitNumber.isPresent() && permitNumber.equals(placeNumber);
+	}
+
+	private static String ownerText(final PlaceRow place, final ContactRow owner) {
+		if (owner != null) {
+			return "AgarID " + owner.id();
+		}
+		return place.agarId() == null ? "serveringsstället saknar ägare" : "AgarID %d finns inte".formatted(place.agarId());
 	}
 
 	/**
@@ -361,7 +385,7 @@ public final class AlktCandidateFactory {
 			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), restaurantNumber)));
 		}
 		if (holder == null || holder.legalId() == null) {
-			hits.add(RuleHit.of(LEGAL_ID_INVALID, owner == null ? "serveringsstället saknar ägare" : "AgarID " + owner.id()));
+			hits.add(RuleHit.of(LEGAL_ID_INVALID, ownerText(place, owner)));
 		}
 		Optional.ofNullable(owner)
 			.flatMap(found -> PartyRows.numberKey(found.organisationsNr(), today))
@@ -432,7 +456,7 @@ public final class AlktCandidateFactory {
 	 * A restaurant number without the spaces and dots it is sometimes written with on the permit.
 	 */
 	private static String digitsOf(final String restaurantNumber) {
-		return restaurantNumber.replaceAll("[\\s.]", "");
+		return restaurantNumber.replaceAll("[\\h\\v.]", "");
 	}
 
 	private Optional<ContactRow> ownerOf(final PlaceRow place) {
@@ -444,7 +468,7 @@ public final class AlktCandidateFactory {
 		final var marking = group != null && PLACE_MARKINGS.contains(group.toUpperCase(Locale.ROOT));
 		final var area = snapshot.codeText(CODE_TYPE_AREA, place.omrade());
 		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
-			.add(PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurangBeteckning())
+			.add(ERRAND_PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurangBeteckning())
 			.add("typAvServeringsstalle", "Typ av serveringsställe", marking ? null : snapshot.codeText(CODE_TYPE_PLACE_GROUP, group))
 			.add("markering", "Markering", marking ? snapshot.codeText(CODE_TYPE_PLACE_GROUP, group) : null)
 			.add(ErrandParameters.AREA, "Område", area)
@@ -571,7 +595,7 @@ public final class AlktCandidateFactory {
 				.filter(PermitFiles::isDrawing)
 				.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 		}
-		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> markPermitDecision(files, decision)));
+		issuingErrands.forEach(arendeId -> decisionsOf(arendeId).forEach(decision -> PermitFiles.markPermitDecision(files, decision.mall(), decision.worddokument(), decision.bifogadFil(), DECISION_TEMPLATES)));
 		return files;
 	}
 
@@ -590,20 +614,6 @@ public final class AlktCandidateFactory {
 			.map(name -> files.findOfHolder(name, DOCUMENTS))
 			.flatMap(Optional::stream)
 			.toList();
-	}
-
-	/**
-	 * Marks the files of a decision that are the permit decision for the post: the document made from the template of the
-	 * decision, and an attachment whose name tells it is a permit, a decision or a certificate (decision 39). The others,
-	 * such as an investigation or a referral answer, stay on the errand only.
-	 */
-	private static void markPermitDecision(final FileList files, final DecisionRow decision) {
-		if (PermitFiles.isTemplate(decision.mall(), DECISION_TEMPLATES)) {
-			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
-		}
-		if (PermitFiles.isDecision(decision.bifogadFil())) {
-			files.add(decision.bifogadFil(), ATTACHMENTS, ASSET_CATEGORY_DECISION);
-		}
 	}
 
 	/**
@@ -762,7 +772,7 @@ public final class AlktCandidateFactory {
 	 */
 	private InvestigationTexts investigationTexts(final Collection<Integer> arendeIds, final Collection<String> shownNotes) {
 		return Journal.investigation(
-			arendeIds.stream().map(snapshot.errands()::get).filter(Objects::nonNull).flatMap(errand -> errand.notes().stream()).filter(note -> !shownNotes.contains(note)).toList(),
+			arendeIds.stream().map(snapshot.errands()::get).filter(Objects::nonNull).flatMap(errand -> errand.notes().stream()).filter(note -> !shownNotes.contains(note)).distinct().toList(),
 			arendeIds.stream()
 				.flatMap(arendeId -> entries(snapshot.textsOf(arendeId), Optional.ofNullable(snapshot.errands().get(arendeId)).map(ErrandRow::diarieNr).orElse(null)).stream())
 				.toList(),
@@ -819,10 +829,10 @@ public final class AlktCandidateFactory {
 	 *
 	 * @param permit       the row of the permit
 	 * @param periods      its season and date period
-	 * @param servingTimes its serving times, "hh:mm–hh:mm"
+	 * @param servingTimes its serving times, "hh:mm–hh:mm", or as the source has them when they cannot be read
 	 * @param conditions   its conditions that still apply
 	 */
-	private record PermitContent(PermitRow permit, PermitPeriods periods, List<String> servingTimes, List<String> conditions) {
+	record PermitContent(PermitRow permit, PermitPeriods periods, List<String> servingTimes, List<String> conditions) {
 
 		List<String> drinks() {
 			return ServingPermits.drinks(permit);
@@ -834,6 +844,11 @@ public final class AlktCandidateFactory {
 
 		List<String> scope() {
 			return ServingPermits.scope(permit);
+		}
+
+		@Override
+		public String toString() {
+			return "PermitContent[permit=" + permit + "]";
 		}
 	}
 }

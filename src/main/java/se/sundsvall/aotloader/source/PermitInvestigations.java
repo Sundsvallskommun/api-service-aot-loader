@@ -17,8 +17,9 @@ public final class PermitInvestigations {
 
 	/**
 	 * The investigation of a permit: it started when the first errand that issued the permit was opened, and was completed
-	 * when the permit was decided, or, without a decision date, when the last of those errands was closed. A permit
-	 * without an issuing errand gets an investigation all the same, completed when it was decided and without texts.
+	 * when the permit was decided, or, without a decision date, when the last of those errands was closed. An end before
+	 * the start becomes the start, as for the inspections. A permit without an issuing errand gets an investigation all the
+	 * same, completed when it was decided and without texts.
 	 *
 	 * @param  title   the heading of the investigation
 	 * @param  opened  the days the errands that issued the permit were opened
@@ -32,6 +33,7 @@ public final class PermitInvestigations {
 		final var started = opened.stream().filter(Objects::nonNull).min(LocalDate::compareTo).orElse(null);
 		final var completed = Optional.ofNullable(decided)
 			.or(() -> closed.stream().filter(Objects::nonNull).max(LocalDate::compareTo))
+			.map(end -> started != null && end.isBefore(started) ? started : end)
 			.orElse(null);
 		return new InvestigationData(title, SourceValues.startOfDay(started), SourceValues.startOfDay(completed), texts);
 	}

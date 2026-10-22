@@ -11,6 +11,9 @@ openapi:
 server:
   # The migration runs on a developer computer (decision 10) and must not be reachable from the network
   address: 127.0.0.1
+  # No proxy stands in front, so X-Forwarded-Host and Forwarded are a caller's own words: dept44 would honour them and
+  # let a page that resolves its own name to the loopback address pass for this computer
+  forward-headers-strategy: none
 spring:
   application:
     name: api-aot-loader
@@ -97,6 +100,13 @@ aot-loader:
   errand-status: SOLVED
   # The resolution Draken closes an errand of AOT with, shown as "Avslutat"
   errand-resolution: CLOSED
+  # The resource that removes what the migration wrote to the target systems (section 10.3). Turned on only for a test
+  # environment, e.g. with AOT_LOADER_CLEANUP_ENABLED=true; never in production.
+  cleanup:
+    enabled: false
+  # The report of each run is written here as a CSV file for Excel when the run finishes, to be sent to the business
+  # (section 9). Blank writes none.
+  result-directory: ${AOT_LOADER_RESULT_DIRECTORY:./data/resultat}
   max-file-size: 50MB
   # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
   # in the code lists of AlkT and AlkOL. Their errands are created in the municipality of the run like the others, with

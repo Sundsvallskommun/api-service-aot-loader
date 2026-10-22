@@ -60,8 +60,9 @@ import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
-import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.Constants.TAG_NOTIFICATION;
@@ -78,6 +79,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_DATE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_OF_FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_ONLY_FLAG;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_COPY_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
@@ -85,6 +87,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SALES_PLACE;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
@@ -101,18 +104,14 @@ public final class AlkolCandidateFactory {
 	/** The notice for an active sales place marked for tobacco but without a current tobacco permit. */
 	static final String NOTICE_TOBACCO_WITHOUT_PERMIT = "Ö2";
 
-	private static final Set<String> GRANTING_DECISIONS = Set.of("GTDE", "GTPH", "GTDI");
+	private static final Set<String> GRANTING_DECISIONS = Arrays.stream(PermitKind.values()).map(PermitKind::decision).collect(toUnmodifiableSet());
 	/**
 	 * The templates of the tobacco permit certificate, of Sundsvall and of Timrå, made at the granting decision (decision
 	 * 34).
 	 */
 	private static final Set<String> CERTIFICATE_TEMPLATES = Set.of("TILLSTT", "TILLTT");
-	/**
-	 * The templates of the letters that confirm a notification: of folköl and of e-cigarettes, and the receipts of folköl
-	 * and of tobacco-free nicotine products (decision 38).
-	 */
-	private static final Set<String> NOTIFICATION_TEMPLATES = Set.of("BEKFOL", "BEKECI", "MOTFOL", "MTN");
 	private static final Set<String> ENDING_DECISIONS = Set.of("GTDEU", "GTDEÅ");
+	private static final String UNDATED = "utan datum";
 	private static final String SERVING_PLACE_CATEGORY_PREFIX = "serveringsställe";
 	// The product part of the id of the notice for a sales place without any notified product
 	private static final String NO_PRODUCT = "INGEN";
@@ -148,6 +147,13 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
+	 * @return the codes of the products in the ids of the notifications, e.g. FOLKOL in 1234-FOLKOL
+	 */
+	public static Set<String> productCodes() {
+		return Arrays.stream(Product.values()).map(Product::code).collect(toUnmodifiableSet());
+	}
+
+	/**
 	 * @return the tobacco permits of the sales places in the view FS_GT_Tobak, and a notice for every active sales place
 	 *         marked for tobacco that is not in the view
 	 */
@@ -157,7 +163,7 @@ public final class AlkolCandidateFactory {
 			.toList();
 		final var notices = placesById.values().stream()
 			.filter(place -> !place.upphort() && place.tobak() && !snapshot.permitView().containsKey(place.fsId()))
-			.map(place -> new Notice(new ItemKey(ALKOL, TILLSTAND, String.valueOf(place.fsId())), place.namn(), Outcome.MIGRERAS_INTE,
+			.map(place -> new Notice(new ItemKey(ALKOL, TILLSTAND, String.valueOf(place.fsId())), place.namn(), Outcome.MIGRERAS_INTE, NOTICE_TOBACCO_WITHOUT_PERMIT,
 				NOTICE_TOBACCO_WITHOUT_PERMIT + " Aktivt försäljningsställe är markerat för tobak men har inget gällande tobakstillstånd"))
 			.toList();
 		return new ReaderResult(candidates, notices);
@@ -175,7 +181,7 @@ public final class AlkolCandidateFactory {
 				.filter(product -> product.isNotifiedOn(place))
 				.forEach(product -> candidates.add(notification(place, product)));
 			if (!hasNotification(place) && !place.tobak() && !snapshot.permitView().containsKey(place.fsId())) {
-				notices.add(new Notice(new ItemKey(ALKOL, ANMALAN, notificationId(place, NO_PRODUCT)), place.namn(), Outcome.MIGRERAS_INTE,
+				notices.add(new Notice(new ItemKey(ALKOL, ANMALAN, notificationId(place, NO_PRODUCT)), place.namn(), Outcome.MIGRERAS_INTE, NOTICE_WITHOUT_PRODUCT,
 					NOTICE_WITHOUT_PRODUCT + " Aktivt försäljningsställe utan produkttyp migreras inte"));
 			}
 		});
@@ -184,26 +190,27 @@ public final class AlkolCandidateFactory {
 
 	/**
 	 * @return the inspection errands of the errand types in the settings, only of places with a current permit when the
-	 *         settings say so, and never of a sales place that has ceased (section 7.7)
+	 *         settings say so, and never of a sales place that has ceased (section 7.7). A permit is current when it is in
+	 *         the view FS_GT_Tobak and no decision ended it after its latest grant (G18, decision 29).
 	 */
 	public ReaderResult inspections() {
 		final var inspections = new InspectionCandidates(ErrandType.TOBACCO_INSPECTION, properties, UNKNOWN_SALES_PLACE, "tillsynsärendet saknar försäljningsställe", today);
 		return new ReaderResult(snapshot.errands().stream()
 			.filter(errand -> !hasCeased(errand.fsId()))
-			.filter(errand -> inspections.selects(errand.arendetyp(), hasPermit(errand.fsId())))
+			.filter(errand -> inspections.selects(errand.arendetyp(), hasCurrentPermit(errand.fsId())))
 			.map(errand -> inspectionErrand(errand, inspections))
 			.toList(), List.of());
 	}
 
 	/**
-	 * @return the inspection visits, only of places with a current permit when the settings say so, and never of a sales
-	 *         place that has ceased (section 7.7.2)
+	 * @return the inspection visits, only of places with a current permit, as for the inspection errands, when the settings
+	 *         say so, and never of a sales place that has ceased (section 7.7.2)
 	 */
 	public ReaderResult visits() {
 		final var visits = new InspectionVisitCandidates(ErrandType.TOBACCO_INSPECTION_VISIT, properties, UNKNOWN_SALES_PLACE, "tillsynsbesöket saknar försäljningsställe", today);
 		return new ReaderResult(snapshot.visits().visits().stream()
 			.filter(visit -> !hasCeased(visit.objektId()))
-			.filter(visit -> visits.selects(hasPermit(visit.objektId())))
+			.filter(visit -> visits.selects(hasCurrentPermit(visit.objektId())))
 			.map(visit -> visit(visit, visits))
 			.toList(), List.of());
 	}
@@ -213,14 +220,19 @@ public final class AlkolCandidateFactory {
 		final var grant = latestGrant(fsId).orElse(null);
 		final var grantErrand = grant == null ? null : errandsById.get(grant.arendeId());
 		final var issued = issued(grant);
+		final var view = snapshot.permitView().get(fsId);
 		final var hits = permitHits(fsId, place, owner, grant, grantErrand, issued);
+		if (view != null && view.unreadable()) {
+			hits.add(RuleHit.of(UNPARSEABLE, "tillståndstypen i FS_GT_Tobak går inte att tolka"));
+		}
 
 		final var placeName = place == null ? null : place.namn();
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SALES_PLACE);
 		final var notes = place == null ? null : place.notering();
 		final var diaryNumber = grantErrand == null ? null : grantErrand.diarieNr();
 		final var products = place == null ? List.<String>of() : notifiedProducts(place);
-		final var kindsText = Texts.join(", ", permitKinds(fsId, grant));
+		final var kinds = permitKinds(view, grant);
+		final var kindsText = Texts.join(", ", kinds.stream().map(PermitKind::text).toList());
 		final var holder = PartyRows.holder(owner, today);
 		final var premises = place == null ? null : place(place);
 		final var files = permitFiles(place, fsId, grant, grantErrand, hits);
@@ -259,7 +271,7 @@ public final class AlkolCandidateFactory {
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
-				permitAssetParameters(holder, premises, snapshot.permitView().get(fsId), diaryNumber), legalBasisDocuments(fsId, grant, files)))
+				permitAssetParameters(holder, premises, kinds, diaryNumber), legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -327,10 +339,10 @@ public final class AlkolCandidateFactory {
 
 		certificate(fsId).ifPresentOrElse(certificate -> {
 			files.add(certificate.name(), certificate.folder(), certificate.details());
-			if (grant != null && DECISION_ORDER.compare(certificate.decision(), grant) < 0) {
+			if (grant != null && isAfter(grant, certificate.decision())) {
 				files.addToErrandOnly(certificate.name(), certificate.folder());
 				hits.add(RuleHit.of(CERTIFICATE_OLDER, "beviset hör till beslutet %s, det senaste beviljandet är %s"
-					.formatted(SourceValues.format(certificate.decision().beslutsDatum()), SourceValues.format(grant.beslutsDatum()))));
+					.formatted(dateText(certificate.decision()), dateText(grant))));
 			} else {
 				files.add(certificate.name(), certificate.folder(), ASSET_CATEGORY_CERTIFICATE);
 			}
@@ -342,23 +354,9 @@ public final class AlkolCandidateFactory {
 			decisionsByErrand.getOrDefault(arendeId, List.of()).stream()
 				.filter(decision -> PermitFiles.isDrawing(decision.bifogadfil()))
 				.forEach(decision -> files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
-			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> markPermitDecision(files, decision));
+			decisionsByErrand.getOrDefault(arendeId, List.of()).forEach(decision -> PermitFiles.markPermitDecision(files, decision.mall(), decision.worddokument(), decision.bifogadfil(), CERTIFICATE_TEMPLATES));
 		});
 		return files;
-	}
-
-	/**
-	 * Marks the files of a decision that are the permit decision for the post: the document made from the template of the
-	 * certificate, which is the decision document of AlkOL, and an attachment whose name tells it is a permit, a decision
-	 * or a certificate (decision 39). The others, such as a receipt letter, stay on the errand only.
-	 */
-	private static void markPermitDecision(final FileList files, final DecisionRow decision) {
-		if (PermitFiles.isTemplate(decision.mall(), CERTIFICATE_TEMPLATES)) {
-			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
-		}
-		if (PermitFiles.isDecision(decision.bifogadfil())) {
-			files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DECISION);
-		}
 	}
 
 	/**
@@ -378,7 +376,7 @@ public final class AlkolCandidateFactory {
 	 */
 	private Optional<Certificate> certificate(final Integer fsId) {
 		return decisionsOf(fsId).stream()
-			.filter(decision -> isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
+			.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
 			.sorted(DECISION_ORDER.reversed())
 			.map(decision -> {
 				if (decision.worddokument() != null && PermitFiles.isTemplate(decision.mall(), CERTIFICATE_TEMPLATES)) {
@@ -414,28 +412,26 @@ public final class AlkolCandidateFactory {
 	 */
 	private static boolean registersNotification(final SalesPlaceRow place, final EventRow event) {
 		return place != null && !place.upphort() && Arrays.stream(Product.values())
-			.anyMatch(product -> product.isNotifiedOn(place) && product.isEventType(event.handelseTyp()));
+			.anyMatch(product -> product.isNotifiedOn(place) && product.concerns(event));
 	}
 
 	private Candidate notification(final SalesPlaceRow place, final Product product) {
 		final var hits = new ArrayList<RuleHit>();
 		final var owner = ownerOf(place);
 		ownerHits(place, owner, hits);
-		final var errands = errandsByPlace.getOrDefault(place.fsId(), List.of()).stream()
-			.filter(errand -> product.isErrandType(errand.arendetyp()))
-			.toList();
-		final var events = eventsByPlace.getOrDefault(place.fsId(), List.of()).stream()
-			.filter(event -> product.isEventType(event.handelseTyp()))
-			.toList();
-		final var notified = notifiedDate(place, product, errands, events, hits);
-		openErrandHits(errands, hits);
+		final var registrations = registrations(place, product, owner);
+		final var notified = notifiedDate(place, product, registrations, hits);
+		openErrandHits(registrations.errands(), hits);
+		formerHolderHits(registrations, hits);
 
-		final var type = product.errandType(isServing(place, errands, events));
-		final var diaryNumber = latestDiaryNumber(errands, events);
+		final var current = registrations.ofCurrentHolder();
+		final var type = product.errandType(isServing(place, product, current.errands(), current.events()));
+		final var diaryNumber = latestDiaryNumber(current.errands(), current.events());
 		final var name = Optional.ofNullable(place.namn()).orElse(UNKNOWN_SALES_PLACE);
 		final var subject = "Anmälan om " + productText(type);
 		final var premises = place(place);
-		final var files = notificationFiles(place, product, errands);
+		final var ownEvents = notificationOwnEvents(place, product);
+		final var files = notificationFiles(product, registrations, ownEvents);
 		final var assetParameters = new AssetParameters()
 			.premises(premises, null)
 			.text(AssetParameters.PRODUCT, product.parameterText())
@@ -463,6 +459,8 @@ public final class AlkolCandidateFactory {
 				.add("anmald", "Anmäld", SourceValues.format(notified.date()))
 				.add("anmaldUppskattat", "Datumet är uppskattat", notified.estimated() ? "Ja" : null)
 				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
+				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", registrations.errands().stream().map(ErrandRow::noteringar).filter(Objects::nonNull).distinct().toList())
+				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.lines(notificationLog(registrations, ownEvents)))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
@@ -471,40 +469,169 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * The files of the notification: those of its errands and of its own events without an errand, and, when the place
-	 * has no tobacco permit, those of the place's events without an errand that register no notification (decision 37).
-	 * The drawings, the notification itself, which is an attachment of an event that registers the product, and the
-	 * letters that confirm it, from its errands and the events that register the product, also go on the post in
-	 * PartyAssets: the drawings in the category of their purpose, the others without one, as pw-alkt puts a file without a
-	 * purpose there (decisions 38 and 40). Anything else, such as an investigation, a referral answer or a file of the
-	 * place's other events, stays on the errand only.
+	 * @return the events of the place without an errand whose files and texts go to the notification: those that register
+	 *         or confirm the product, and, when the place has no tobacco permit, those that concern no notification
+	 *         (decision 37)
 	 */
-	private FileList notificationFiles(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands) {
-		final var arendeIds = errands.stream().map(ErrandRow::arendeId).toList();
-		final var files = addErrandFiles(arendeIds, new FileList(sharedFileNames));
-		final var ownEvents = eventsWithoutErrand(place.fsId())
-			.filter(event -> product.isEventType(event.handelseTyp()) || (!hasPermit(place.fsId()) && !registersNotification(place, event)))
+	private List<EventRow> notificationOwnEvents(final SalesPlaceRow place, final Product product) {
+		return eventsWithoutErrand(place.fsId())
+			.filter(event -> product.concerns(event) || (!hasPermit(place.fsId()) && !registersNotification(place, event)))
 			.toList();
+	}
+
+	/**
+	 * The files of the notification: those of its errands and of its own events without an errand (decision 37). The
+	 * drawings, the notification itself, which is an attachment of an event that registers the product, and the letters
+	 * that confirm it, from its errands and the events that register or confirm the product, also go on the post in
+	 * PartyAssets: the drawings in the category of their purpose, the others without one, as pw-alkt puts a file without a
+	 * purpose there (decisions 38 and 40). Those of a former holder's registrations stay on the errand only (G31), as does
+	 * anything else, such as an investigation, a referral answer or a file of the place's other events.
+	 */
+	private FileList notificationFiles(final Product product, final Registrations registrations, final List<EventRow> ownEvents) {
+		final var files = addErrandFiles(registrations.errands().stream().map(ErrandRow::arendeId).toList(), new FileList(sharedFileNames));
 		ownEvents.forEach(event -> addEventFiles(files, event));
 
-		// The place's other events without an errand follow the errand only, since they may concern another product
-		final var events = Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()),
-			ownEvents.stream().filter(event -> product.isEventType(event.handelseTyp()))).toList();
-		final var decisions = arendeIds.stream().flatMap(arendeId -> decisionsByErrand.getOrDefault(arendeId, List.of()).stream()).toList();
+		// Marked first, since a file marked for the errand only never goes on the post
+		final var former = registrations.ofFormerHolders();
+		postFileNames(product, former).forEach(file -> files.addToErrandOnly(file.name(), file.folder()));
+
+		final var current = registrations.ofCurrentHolder();
+		final var events = postEvents(current);
+		final var decisions = decisionsOf(current.errands());
 		// The drawings first, since a file keeps the category it is first marked with
 		Stream.concat(events.stream().filter(event -> FilePurposes.isDrawing(attachmentPurpose(event))).map(EventRow::bifogadfil),
 			decisions.stream().map(DecisionRow::bifogadfil).filter(PermitFiles::isDrawing))
 			.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
-		events.stream()
-			.filter(event -> product.isEventType(event.handelseTyp()))
-			.forEach(event -> files.addToPost(event.bifogadfil(), ATTACHMENTS));
-		events.stream()
-			.filter(event -> PermitFiles.isTemplate(event.mall(), NOTIFICATION_TEMPLATES))
-			.forEach(event -> files.addToPost(event.worddokument(), DOCUMENTS));
-		decisions.stream()
-			.filter(decision -> PermitFiles.isTemplate(decision.mall(), NOTIFICATION_TEMPLATES))
-			.forEach(decision -> files.addToPost(decision.worddokument(), DOCUMENTS));
+		postFileNames(product, current).forEach(file -> files.addToPost(file.name(), file.folder()));
 		return files;
+	}
+
+	/**
+	 * @return the notifications themselves and the letters that confirm them, among the files of the registrations and
+	 *         their errands, and the drawings
+	 */
+	private List<FileReference> postFileNames(final Product product, final Registrations registrations) {
+		final var events = postEvents(registrations);
+		final var decisions = decisionsOf(registrations.errands());
+		return Stream.of(
+			events.stream().filter(event -> FilePurposes.isDrawing(attachmentPurpose(event))).flatMap(event -> reference(event.bifogadfil(), ATTACHMENTS)),
+			decisions.stream().map(DecisionRow::bifogadfil).filter(PermitFiles::isDrawing).flatMap(name -> reference(name, ATTACHMENTS)),
+			events.stream().filter(product::concerns).flatMap(event -> reference(event.bifogadfil(), ATTACHMENTS)),
+			events.stream().filter(event -> product.isConfirmationTemplate(event.mall())).flatMap(event -> reference(event.worddokument(), DOCUMENTS)),
+			decisions.stream().filter(decision -> product.isConfirmationTemplate(decision.mall())).flatMap(decision -> reference(decision.worddokument(), DOCUMENTS)))
+			.flatMap(references -> references)
+			.toList();
+	}
+
+	private static Stream<FileReference> reference(final String name, final FileFolder folder) {
+		return Stream.ofNullable(Texts.trimToNull(name)).map(trimmed -> new FileReference(trimmed, folder));
+	}
+
+	/**
+	 * @return the events of the errands of the registrations, and the registrations' events without one of those errands
+	 */
+	private List<EventRow> postEvents(final Registrations registrations) {
+		final var arendeIds = registrations.errands().stream().map(ErrandRow::arendeId).collect(toSet());
+		return Stream.concat(arendeIds.stream().flatMap(arendeId -> eventsByErrand.getOrDefault(arendeId, List.of()).stream()),
+			registrations.events().stream().filter(event -> !arendeIds.contains(event.arendeId())))
+			.distinct()
+			.toList();
+	}
+
+	private List<DecisionRow> decisionsOf(final List<ErrandRow> errands) {
+		return errands.stream().flatMap(errand -> decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream()).toList();
+	}
+
+	/**
+	 * @return the texts of the notification's errands and events, for its event log: the events and decisions of its
+	 *         errands and the place's own events that go to it, as the files do; a notification has no investigation
+	 */
+	private List<Journal.Entry> notificationLog(final Registrations registrations, final List<EventRow> ownEvents) {
+		final var errandEntries = registrations.errands().stream().flatMap(errand -> Stream.concat(
+			eventsByErrand.getOrDefault(errand.arendeId(), List.of()).stream().filter(event -> event.text() != null).map(event -> journalEntry(event, errand.diarieNr())),
+			decisionsByErrand.getOrDefault(errand.arendeId(), List.of()).stream().filter(decision -> decision.beslutsText() != null)
+				.map(decision -> new Journal.Entry(decision.beslutad(),
+					Journal.decisionHeading(CodeTexts.textOf(snapshot.decisionTypes(), decision.beslutsTyp()), CodeTexts.textOf(snapshot.userNames(), decision.beslutsfattare())),
+					decision.beslutsText()))));
+		final var ownEntries = ownEvents.stream().filter(event -> event.text() != null).map(event -> journalEntry(event, null));
+		return Stream.concat(errandEntries, ownEntries).toList();
+	}
+
+	/**
+	 * @return the registrations of the product on the place: its errands, and its events that register or confirm it,
+	 *         with or without an errand. An errand whose applicant has another number than the owner is a former
+	 *         holder's (as G19 compares them). Then what came before the first errand of the owner is a former holder's
+	 *         too, or, without one, what came up to the day the last former holder's errand closed; an event of an errand
+	 *         goes with its errand, and an errand whose applicant is the owner is never a former holder's.
+	 */
+	private Registrations registrations(final SalesPlaceRow place, final Product product, final ContactRow owner) {
+		final var errands = errandsByPlace.getOrDefault(place.fsId(), List.of()).stream()
+			.filter(errand -> product.isErrandType(errand.arendetyp()))
+			.toList();
+		final var events = eventsByPlace.getOrDefault(place.fsId(), List.of()).stream()
+			.filter(product::concerns)
+			.toList();
+		final var formerEnd = errands.stream()
+			.filter(errand -> applicantIsNotOwner(errand, owner))
+			.map(errand -> Optional.ofNullable(errand.avslutad()).orElse(errandDate(errand)))
+			.filter(Objects::nonNull)
+			.max(Comparator.naturalOrder());
+		final var ownerStart = errands.stream()
+			.filter(errand -> applicantIsOwner(errand, owner))
+			.map(AlkolCandidateFactory::errandDate)
+			.filter(Objects::nonNull)
+			.min(Comparator.naturalOrder());
+		final var formerUntil = formerEnd.map(end -> ownerStart.map(start -> start.minusDays(1)).orElse(end)).orElse(null);
+		final var formerIds = errands.stream()
+			.filter(errand -> applicantIsNotOwner(errand, owner) || (!applicantIsOwner(errand, owner) && isUpTo(errandDate(errand), formerUntil)))
+			.map(ErrandRow::arendeId)
+			.collect(toSet());
+		final var errandIds = errands.stream().map(ErrandRow::arendeId).collect(toSet());
+		final var formerEvents = events.stream()
+			.filter(event -> errandIds.contains(event.arendeId()) ? formerIds.contains(event.arendeId()) : isUpTo(dateOf(event), formerUntil))
+			.collect(toSet());
+		return new Registrations(errands, events, formerIds, formerEvents);
+	}
+
+	/**
+	 * G31 when a former holder registered the product, whose files stay on the errand only, and G19 when no registration is
+	 * the current owner's.
+	 */
+	private static void formerHolderHits(final Registrations registrations, final List<RuleHit> hits) {
+		final var former = registrations.ofFormerHolders();
+		if (former.errands().isEmpty() && former.events().isEmpty()) {
+			return;
+		}
+		hits.add(RuleHit.of(NOTIFICATION_OF_FORMER_HOLDER, Texts.join(", ", former.errands().stream().map(errand -> CandidateTexts.errand(errand.arendeId(), errand.diarieNr())).toList())));
+		final var current = registrations.ofCurrentHolder();
+		if (current.errands().isEmpty() && current.events().isEmpty()) {
+			hits.add(RuleHit.of(APPLICANT_NOT_OWNER, "anmälan är gjord av en tidigare ägare"));
+		}
+	}
+
+	/**
+	 * @return true when the applicant of the errand is the current owner of the place, both with a number that can be read
+	 */
+	private boolean applicantIsOwner(final ErrandRow errand, final ContactRow owner) {
+		final var applicantNumber = Optional.ofNullable(errand).map(ErrandRow::sokandeId).map(snapshot.applicants()::get)
+			.flatMap(applicant -> PartyRows.numberKey(applicant.organisationsNr(), today));
+		final var ownerNumber = Optional.ofNullable(owner).flatMap(found -> PartyRows.numberKey(found.organisationsNr(), today));
+		return applicantNumber.isPresent() && applicantNumber.equals(ownerNumber);
+	}
+
+	private static boolean isUpTo(final LocalDate date, final LocalDate until) {
+		return date != null && until != null && !date.isAfter(until);
+	}
+
+	/**
+	 * @return the day the errand was opened, or else registered (UpplagdDatum); null when it has neither
+	 */
+	private static LocalDate errandDate(final ErrandRow errand) {
+		return Optional.ofNullable(errand.oppnad()).orElse(errand.upplagd());
+	}
+
+	private static LocalDate dateOf(final EventRow event) {
+		return event.tidpunkt() == null ? null : event.tidpunkt().toLocalDate();
 	}
 
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {
@@ -569,14 +696,18 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * The rules about the granting decision: G15, G18, G16 and G19.
+	 * The rules about the granting decision: G15, G18, G9 for a later grant without a date, G16 and G19.
 	 */
 	private void grantHits(final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final ContactRow owner, final List<RuleHit> hits) {
 		if (grant == null) {
 			hits.add(RuleHit.of(DIARY_NUMBER_MISSING, "inget beviljande beslut hittades"));
 			return;
 		}
-		endingAfter(fsId, grant).ifPresent(ending -> hits.add(RuleHit.of(PERMIT_ENDED, Texts.joinWords(ending.beslutsTyp(), SourceValues.format(ending.beslutsDatum())))));
+		endingAfter(fsId, grant).ifPresent(ending -> hits.add(RuleHit.of(PERMIT_ENDED, Texts.joinWords(ending.beslutsTyp(), dateText(ending)))));
+		decisionsOf(fsId).stream()
+			.filter(decision -> decision.beslutad() == null && CodeTexts.isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS) && isAfter(decision, grant))
+			.findFirst()
+			.ifPresent(undated -> hits.add(RuleHit.of(UNPARSEABLE, "det beviljande beslutet %d saknar datum och kan vara det senaste".formatted(undated.beslutsId()))));
 		final var diaryNumber = grantErrand == null ? null : DiaryNumbers.normalize(grantErrand.diarieNr());
 		if (diaryNumber == null) {
 			hits.add(RuleHit.of(DIARY_NUMBER_MISSING, "det beviljande ärendet saknar diarienummer"));
@@ -589,14 +720,30 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * @return the latest decision that ended the permit after it was granted (G18), empty when there is none or no grant
+	 * @return the latest decision that ended the permit after it was granted (G18), also one without a date that was
+	 *         entered after the grant; empty when there is none or no grant
 	 */
 	private Optional<DecisionRow> endingAfter(final Integer fsId, final DecisionRow grant) {
 		return grant == null ? Optional.empty()
 			: decisionsOf(fsId).stream()
-				.filter(decision -> isOneOf(decision.beslutsTyp(), ENDING_DECISIONS))
-				.filter(decision -> DECISION_ORDER.compare(decision, grant) > 0)
+				.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), ENDING_DECISIONS))
+				.filter(decision -> isAfter(decision, grant))
 				.max(DECISION_ORDER);
+	}
+
+	/**
+	 * @return true when the decision came after the other: by their dates, or by their ids, which follow the order the
+	 *         decisions were entered in, when either has no date
+	 */
+	private static boolean isAfter(final DecisionRow decision, final DecisionRow other) {
+		if (decision.beslutad() == null || other.beslutad() == null) {
+			return Comparator.nullsFirst(Comparator.<Integer>naturalOrder()).compare(decision.beslutsId(), other.beslutsId()) > 0;
+		}
+		return DECISION_ORDER.compare(decision, other) > 0;
+	}
+
+	private static String dateText(final DecisionRow decision) {
+		return Optional.ofNullable(SourceValues.format(decision.beslutsDatum())).orElse(UNDATED);
 	}
 
 	/**
@@ -637,8 +784,8 @@ public final class AlkolCandidateFactory {
 	 * @return the date of the notification: the first registration of the product, or, when the product is only a mark on
 	 *         the sales place, the earliest date of the place (G22); no date at all hits G23
 	 */
-	private NotifiedDate notifiedDate(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands, final List<EventRow> events, final List<RuleHit> hits) {
-		if (errands.isEmpty() && events.isEmpty()) {
+	private NotifiedDate notifiedDate(final SalesPlaceRow place, final Product product, final Registrations registrations, final List<RuleHit> hits) {
+		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
 			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.parameterText()));
 			final var earliest = earliestDate(place.fsId()).orElse(null);
 			if (earliest == null) {
@@ -646,7 +793,10 @@ public final class AlkolCandidateFactory {
 			}
 			return new NotifiedDate(earliest, earliest != null);
 		}
-		final var first = Stream.concat(errands.stream().map(ErrandRow::oppnad), events.stream().map(EventRow::tidpunkt).filter(Objects::nonNull).map(LocalDateTime::toLocalDate))
+		// The current holder's first registration, or the first of all when every one is a former holder's (G19)
+		final var current = registrations.ofCurrentHolder();
+		final var dated = current.errands().isEmpty() && current.events().isEmpty() ? registrations : current;
+		final var first = Stream.concat(dated.errands().stream().map(AlkolCandidateFactory::errandDate), dated.events().stream().map(AlkolCandidateFactory::dateOf))
 			.filter(Objects::nonNull)
 			.min(Comparator.naturalOrder())
 			.orElse(null);
@@ -662,7 +812,7 @@ public final class AlkolCandidateFactory {
 	private static String latestDiaryNumber(final List<ErrandRow> errands, final List<EventRow> events) {
 		return errands.stream()
 			.filter(errand -> errand.diarieNr() != null)
-			.max(Comparator.comparing(ErrandRow::oppnad, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(ErrandRow::arendeId))
+			.max(Comparator.comparing(AlkolCandidateFactory::errandDate, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(ErrandRow::arendeId))
 			.map(ErrandRow::diarieNr)
 			.or(() -> events.stream()
 				.filter(event -> event.diarieNr() != null)
@@ -679,10 +829,10 @@ public final class AlkolCandidateFactory {
 			return List.of();
 		}
 		return decisionsOf(fsId).stream()
-			.filter(decision -> isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
-			.filter(decision -> DECISION_ORDER.compare(decision, grant) < 0)
+			.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
+			.filter(decision -> isAfter(grant, decision))
 			.sorted(DECISION_ORDER)
-			.map(decision -> Texts.join(", ", Arrays.asList(SourceValues.format(decision.beslutsDatum()), Optional.ofNullable(errandsById.get(decision.arendeId())).map(ErrandRow::diarieNr).orElse(null))))
+			.map(decision -> Texts.join(", ", Arrays.asList(dateText(decision), Optional.ofNullable(errandsById.get(decision.arendeId())).map(ErrandRow::diarieNr).orElse(null))))
 			.filter(Objects::nonNull)
 			.toList();
 	}
@@ -695,7 +845,7 @@ public final class AlkolCandidateFactory {
 			return null;
 		}
 		return decisionsOf(fsId).stream()
-			.filter(decision -> DECISION_ORDER.compare(decision, grant) > 0)
+			.filter(decision -> isAfter(decision, grant))
 			.max(DECISION_ORDER)
 			.map(this::decisionText)
 			.orElse(null);
@@ -739,8 +889,18 @@ public final class AlkolCandidateFactory {
 		return Texts.join(", ", Arrays.asList(CodeTexts.textOf(snapshot.decisionTypes(), decision.beslutsTyp()), SourceValues.format(decision.beslutsDatum())));
 	}
 
+	/**
+	 * @return true when the place is in the view FS_GT_Tobak, also when a later decision ended its permit (G18)
+	 */
 	private boolean hasPermit(final Integer fsId) {
 		return fsId != null && snapshot.permitView().containsKey(fsId);
+	}
+
+	/**
+	 * @return true when the place is in the view FS_GT_Tobak and no decision ended its permit after its latest grant
+	 */
+	private boolean hasCurrentPermit(final Integer fsId) {
+		return hasPermit(fsId) && endingAfter(fsId, latestGrant(fsId).orElse(null)).isEmpty();
 	}
 
 	private boolean hasCeased(final Integer fsId) {
@@ -765,38 +925,24 @@ public final class AlkolCandidateFactory {
 
 	private Optional<DecisionRow> latestGrant(final Integer fsId) {
 		return decisionsOf(fsId).stream()
-			.filter(decision -> isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
+			.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS))
 			.max(DECISION_ORDER);
 	}
 
 	/**
-	 * The kinds of permit: the columns of the view, or the type of the latest granting decision when the view shows none.
+	 * The kinds of permit, which give both its type and its kinds of sale on the post: the columns of the view, or the
+	 * type of the latest granting decision when the view shows none.
 	 */
-	private List<String> permitKinds(final Integer fsId, final DecisionRow grant) {
-		final var view = snapshot.permitView().get(fsId);
-		final var kinds = new ArrayList<String>();
-		if (view != null) {
-			if (view.retail()) {
-				kinds.add("Detaljhandel");
-			}
-			if (view.wholesale()) {
-				kinds.add("Partihandel");
-			}
-			if (view.distance()) {
-				kinds.add("Distanshandel");
-			}
+	private static List<PermitKind> permitKinds(final PermitViewRow view, final DecisionRow grant) {
+		final var kinds = Arrays.stream(PermitKind.values())
+			.filter(kind -> view != null && kind.isInView(view))
+			.toList();
+		if (!kinds.isEmpty() || grant == null) {
+			return kinds;
 		}
-		if (kinds.isEmpty() && grant != null && grant.beslutsTyp() != null) {
-			switch (grant.beslutsTyp().toUpperCase(Locale.ROOT)) {
-				case "GTDE" -> kinds.add("Detaljhandel");
-				case "GTPH" -> kinds.add("Partihandel");
-				case "GTDI" -> kinds.add("Distanshandel");
-				default -> {
-					// Not a granting decision, no kind to add
-				}
-			}
-		}
-		return kinds;
+		return Arrays.stream(PermitKind.values())
+			.filter(kind -> kind.decision().equalsIgnoreCase(Optional.ofNullable(grant.beslutsTyp()).map(String::strip).orElse("")))
+			.toList();
 	}
 
 	private static List<String> notifiedProducts(final SalesPlaceRow place) {
@@ -815,15 +961,15 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * Whether a notification of folköl is about serving: the latest notification of folköl decides, otherwise the category
-	 * of the sales place (section 7.4).
+	 * Whether a notification of folköl is about serving: the latest notification of folköl decides, an errand or an event
+	 * that registers one, not one that confirms it; otherwise the category of the sales place (section 7.4).
 	 */
-	private boolean isServing(final SalesPlaceRow place, final List<ErrandRow> errands, final List<EventRow> events) {
+	private boolean isServing(final SalesPlaceRow place, final Product product, final List<ErrandRow> errands, final List<EventRow> events) {
 		record Registration(LocalDateTime when, boolean serving) {
 		}
 		final var latest = Stream.concat(
-			errands.stream().map(errand -> new Registration(Optional.ofNullable(errand.oppnad()).map(LocalDate::atStartOfDay).orElse(null), Product.FOLKOL.isServingCode(errand.arendetyp()))),
-			events.stream().map(event -> new Registration(event.tidpunkt(), Product.FOLKOL.isServingCode(event.handelseTyp()))))
+			errands.stream().map(errand -> new Registration(Optional.ofNullable(errandDate(errand)).map(LocalDate::atStartOfDay).orElse(null), product.isServingCode(errand.arendetyp()))),
+			events.stream().filter(product::isRegistration).map(event -> new Registration(event.tidpunkt(), product.isServingCode(event.handelseTyp()))))
 			.max(Comparator.comparing(Registration::when, Comparator.nullsFirst(Comparator.naturalOrder())));
 		if (latest.isPresent()) {
 			return latest.get().serving();
@@ -838,8 +984,8 @@ public final class AlkolCandidateFactory {
 	 */
 	private Optional<LocalDate> earliestDate(final Integer fsId) {
 		return Stream.concat(
-			errandsByPlace.getOrDefault(fsId, List.of()).stream().map(ErrandRow::oppnad),
-			eventsByPlace.getOrDefault(fsId, List.of()).stream().map(EventRow::tidpunkt).filter(Objects::nonNull).map(LocalDateTime::toLocalDate))
+			errandsByPlace.getOrDefault(fsId, List.of()).stream().map(AlkolCandidateFactory::errandDate),
+			eventsByPlace.getOrDefault(fsId, List.of()).stream().map(AlkolCandidateFactory::dateOf))
 			.filter(Objects::nonNull)
 			.min(Comparator.naturalOrder());
 	}
@@ -901,17 +1047,14 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * The parameters of the tobacco permit, under the keys of the AoT solution (section 7.4). The kinds of sale come from
-	 * the view FS_GT_Tobak.
+	 * The parameters of the tobacco permit, under the keys of the AoT solution (section 7.4). The kinds of sale are the
+	 * kinds of the permit.
 	 */
-	private static Map<String, String> permitAssetParameters(final Holder holder, final Place premises, final PermitViewRow view, final String diaryNumber) {
+	private static Map<String, String> permitAssetParameters(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber) {
 		final var parameters = new AssetParameters()
 			.holder(holder)
 			.premises(premises, null);
-		Optional.ofNullable(view).ifPresent(kinds -> parameters
-			.flag(AssetParameters.SALES_RETAIL, kinds.retail())
-			.flag(AssetParameters.SALES_WHOLESALE, kinds.wholesale())
-			.flag(AssetParameters.SALES_ONLINE, kinds.distance()));
+		Arrays.stream(PermitKind.values()).forEach(kind -> parameters.flag(kind.salesParameter(), kinds.contains(kind)));
 		return parameters
 			.text(AssetParameters.CASE_NUMBER, diaryNumber)
 			.text(AssetParameters.DIARY_NUMBER, diaryNumber)
@@ -927,10 +1070,6 @@ public final class AlkolCandidateFactory {
 			case TOBACCO_FREE_NICOTINE_NOTIFICATION -> "försäljning av tobaksfria nikotinprodukter";
 			default -> throw new IllegalArgumentException("Inte en anmälan: " + type);
 		};
-	}
-
-	private static boolean isOneOf(final String code, final Set<String> codes) {
-		return code != null && codes.stream().anyMatch(code::equalsIgnoreCase);
 	}
 
 	private void indexErrands() {
@@ -992,6 +1131,27 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
+	 * The registrations of a product on a sales place.
+	 *
+	 * @param errands      the errands of the product's types
+	 * @param events       the events that register or confirm the product, with or without an errand
+	 * @param formerIds    the ArendeID of the errands of former holders
+	 * @param formerEvents the events of former holders
+	 */
+	private record Registrations(List<ErrandRow> errands, List<EventRow> events, Set<Integer> formerIds, Set<EventRow> formerEvents) {
+
+		Registrations ofCurrentHolder() {
+			return new Registrations(errands.stream().filter(errand -> !formerIds.contains(errand.arendeId())).toList(),
+				events.stream().filter(event -> !formerEvents.contains(event)).toList(), Set.of(), Set.of());
+		}
+
+		Registrations ofFormerHolders() {
+			return new Registrations(errands.stream().filter(errand -> formerIds.contains(errand.arendeId())).toList(),
+				events.stream().filter(formerEvents::contains).toList(), formerIds, formerEvents);
+		}
+	}
+
+	/**
 	 * The date of a notification.
 	 *
 	 * @param date      the date, null when unknown
@@ -1011,26 +1171,76 @@ public final class AlkolCandidateFactory {
 	}
 
 	/**
-	 * The products that are notified, with the errand types and event types that register a notification (section 7.4,
-	 * decisions 21 and 38).
+	 * The kinds of tobacco permit: the column of the view FS_GT_Tobak and the type of the granting decision that give the
+	 * kind, its text, and the parameter of the post that tells its kind of sale (section 7.4).
+	 */
+	enum PermitKind {
+
+		RETAIL("GTDE", "Detaljhandel", AssetParameters.SALES_RETAIL),
+		WHOLESALE("GTPH", "Partihandel", AssetParameters.SALES_WHOLESALE),
+		DISTANCE("GTDI", "Distanshandel", AssetParameters.SALES_ONLINE);
+
+		private final String decision;
+		private final String text;
+		private final String salesParameter;
+
+		PermitKind(final String decision, final String text, final String salesParameter) {
+			this.decision = decision;
+			this.text = text;
+			this.salesParameter = salesParameter;
+		}
+
+		String decision() {
+			return decision;
+		}
+
+		String text() {
+			return text;
+		}
+
+		String salesParameter() {
+			return salesParameter;
+		}
+
+		boolean isInView(final PermitViewRow view) {
+			return switch (this) {
+				case RETAIL -> view.retail();
+				case WHOLESALE -> view.wholesale();
+				case DISTANCE -> view.distance();
+			};
+		}
+	}
+
+	/**
+	 * The products that are notified, with the errand types and event types that register a notification, and the event
+	 * types and templates of the letters that confirm one (section 7.4, decisions 21 and 38).
 	 */
 	enum Product {
 
-		FOLKOL("FOLKOL", "Folköl", Set.of("Fföl", "SÖL"), Set.of("014", "015", "BeaFol"), Set.of("SÖL", "015")),
-		ECIGARETTER("ECIGARETTER", "E-cigaretter och påfyllningsbehållare", Set.of("ec"), Set.of("105", "BekAnm"), Set.of()),
-		TOBAKSFRI_NIKOTIN("TOBAKSFRI_NIKOTIN", "Tobaksfria nikotinprodukter", Set.of("tn"), Set.of("047"), Set.of());
+		FOLKOL("FOLKOL", "Folköl", Set.of("Fföl", "SÖL"), Set.of("014", "015"), Set.of("BeaFol"), Set.of("BEKFOL", "MOTFOL"), Set.of("SÖL", "015")),
+		ECIGARETTER("ECIGARETTER", "E-cigaretter och påfyllningsbehållare", Set.of("ec"), Set.of("105"), Set.of("BekAnm"), Set.of("BEKECI"), Set.of()),
+		TOBAKSFRI_NIKOTIN("TOBAKSFRI_NIKOTIN", "Tobaksfria nikotinprodukter", Set.of("tn"), Set.of("047"), Set.of(), Set.of("MTN"), Set.of());
 
 		private final String code;
 		private final String parameterText;
 		private final Set<String> errandTypes;
-		private final Set<String> eventTypes;
+		private final Set<String> registrationEvents;
+		private final Set<String> confirmationEvents;
+		private final Set<String> confirmationTemplates;
 		private final Set<String> servingCodes;
 
-		Product(final String code, final String parameterText, final Set<String> errandTypes, final Set<String> eventTypes, final Set<String> servingCodes) {
+		/**
+		 * @param confirmationTemplates the templates of the letters that confirm a notification of the product, in upper
+		 *                              case: the confirmations and the receipts (decision 38)
+		 */
+		Product(final String code, final String parameterText, final Set<String> errandTypes, final Set<String> registrationEvents, final Set<String> confirmationEvents,
+			final Set<String> confirmationTemplates, final Set<String> servingCodes) {
 			this.code = code;
 			this.parameterText = parameterText;
 			this.errandTypes = errandTypes;
-			this.eventTypes = eventTypes;
+			this.registrationEvents = registrationEvents;
+			this.confirmationEvents = confirmationEvents;
+			this.confirmationTemplates = confirmationTemplates;
 			this.servingCodes = servingCodes;
 		}
 
@@ -1055,18 +1265,41 @@ public final class AlkolCandidateFactory {
 		}
 
 		boolean isErrandType(final String code) {
-			return isOneOf(code, errandTypes);
+			return CodeTexts.isOneOf(code, errandTypes);
 		}
 
-		boolean isEventType(final String code) {
-			return isOneOf(code, eventTypes);
+		/**
+		 * @return true for an event that registers a notification of the product
+		 */
+		boolean isRegistration(final EventRow event) {
+			return CodeTexts.isOneOf(event.handelseTyp(), registrationEvents);
+		}
+
+		/**
+		 * @return true for an event that registers or confirms a notification of the product. A letter made from the
+		 *         template of a confirmation is of the product of that template, whatever the type of its event; any
+		 *         other event confirms by its type.
+		 */
+		boolean concerns(final EventRow event) {
+			if (isRegistration(event)) {
+				return true;
+			}
+			return ofTemplate(event.mall()).map(product -> product == this).orElseGet(() -> CodeTexts.isOneOf(event.handelseTyp(), confirmationEvents));
+		}
+
+		boolean isConfirmationTemplate(final String template) {
+			return PermitFiles.isTemplate(template, confirmationTemplates);
+		}
+
+		private static Optional<Product> ofTemplate(final String template) {
+			return Arrays.stream(values()).filter(product -> product.isConfirmationTemplate(template)).findFirst();
 		}
 
 		/**
 		 * @return true for an errand type or event type that notifies serving rather than sales of the product
 		 */
 		boolean isServingCode(final String code) {
-			return isOneOf(code, servingCodes);
+			return CodeTexts.isOneOf(code, servingCodes);
 		}
 
 		ErrandType errandType(final boolean serving) {

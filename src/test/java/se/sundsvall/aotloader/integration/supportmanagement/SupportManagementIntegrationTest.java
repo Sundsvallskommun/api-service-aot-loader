@@ -31,10 +31,12 @@ import se.sundsvall.dept44.problem.ThrowableProblem;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
@@ -79,6 +81,17 @@ class SupportManagementIntegrationTest {
 	}
 
 	@Test
+	void findErrandsFailsRatherThanMissTheErrandsBeyondTheLastPage() {
+		final var fullPage = IntStream.range(0, SupportManagementIntegration.PAGE_SIZE).mapToObj(i -> new Errand().id("p" + i)).toList();
+		when(client.findErrands(eq(MUNICIPALITY_ID), eq(NAMESPACE), anyString(), anyInt(), eq(100))).thenReturn(new PageErrand().content(fullPage).last(false));
+
+		assertThatThrownBy(() -> integration.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "A"))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("SupportManagement har fler än 1000 ärenden som matchar den externa taggen");
+		verify(client, times(SupportManagementIntegration.MAX_PAGES)).findErrands(eq(MUNICIPALITY_ID), eq(NAMESPACE), anyString(), anyInt(), eq(100));
+	}
+
+	@Test
 	void findErrandsStopsAtAnEmptyAnswerAndRefusesQuotes() {
 		when(client.findErrands(eq(MUNICIPALITY_ID), eq(NAMESPACE), anyString(), eq(0), eq(100))).thenReturn(null);
 
@@ -111,6 +124,18 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getLabelTree(MUNICIPALITY_ID)).isEmpty();
 		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).extracting(Config::getName).containsExactly("SEND_EMAIL");
 		assertThat(integration.getActionConfigs(MUNICIPALITY_ID)).isEmpty();
+	}
+
+	@Test
+	void deleteErrandTellsWhetherThereWasOne() {
+		when(client.deleteErrand(MUNICIPALITY_ID, NAMESPACE, "a")).thenReturn(ResponseEntity.noContent().build());
+		when(client.deleteErrand(MUNICIPALITY_ID, NAMESPACE, "gone")).thenThrow(Problem.valueOf(NOT_FOUND, "Finns inte"));
+		when(client.deleteErrand(MUNICIPALITY_ID, NAMESPACE, "decided")).thenThrow(Problem.valueOf(CONFLICT, "Har beslut"));
+
+		assertThat(integration.deleteErrand(MUNICIPALITY_ID, "a")).isTrue();
+		assertThat(integration.deleteErrand(MUNICIPALITY_ID, "gone")).isFalse();
+		assertThatThrownBy(() -> integration.deleteErrand(MUNICIPALITY_ID, "decided")).isInstanceOf(ThrowableProblem.class);
+		verify(client).deleteErrand(MUNICIPALITY_ID, NAMESPACE, "a");
 	}
 
 	@Test
@@ -172,17 +197,18 @@ class SupportManagementIntegrationTest {
 	@Test
 	void aFileRefusedBySupportManagementIsToldApartFromOtherFailures() {
 		when(client.createAttachment(eq(MUNICIPALITY_ID), eq(NAMESPACE), eq("a"), any(), any())).thenThrow(
-			Problem.valueOf(BAD_REQUEST, "Ogiltig fil"),
 			Problem.valueOf(CONTENT_TOO_LARGE, "För stor"),
 			Problem.valueOf(UNSUPPORTED_MEDIA_TYPE, "Filtypen tas inte emot"),
 			Problem.valueOf(UNPROCESSABLE_CONTENT, "Ogiltig"),
+			Problem.valueOf(BAD_REQUEST, "Could not read input stream!"),
 			Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte"),
 			Problem.valueOf(FORBIDDEN, "Ingen behörighet"));
 
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
-		assertThat(integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isEmpty();
+		// SupportManagement answers 400 when it cannot read the upload, which says nothing about the file
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Could not read");
 		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Tjänsten svarar inte");
 		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "a", "beslut.pdf", CONTENT, null)).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Ingen behörighet");
 	}

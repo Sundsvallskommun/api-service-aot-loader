@@ -45,6 +45,9 @@ integration:
     url: http://localhost:${wiremock.server.port:}/support-management
 aot-loader:
   errand-status: CLOSED
+  cleanup:
+    enabled: true
+  result-directory: target/it-resultat
   errand-types:
     serving-permit:
       category: ALCOHOL

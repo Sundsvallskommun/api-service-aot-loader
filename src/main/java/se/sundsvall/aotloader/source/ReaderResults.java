@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
 
@@ -13,15 +14,15 @@ import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
  */
 public final class ReaderResults {
 
-	private static final Comparator<Candidate> ORDER = Comparator
-		.comparing((Candidate candidate) -> candidate.key().kind())
-		.thenComparing(candidate -> leadingNumber(candidate.key().sourceId()))
-		.thenComparing(candidate -> candidate.key().sourceId());
+	private static final Comparator<ItemKey> ORDER = Comparator
+		.comparing(ItemKey::kind)
+		.thenComparing(key -> leadingNumber(key.sourceId()))
+		.thenComparing(ItemKey::sourceId);
 
 	private ReaderResults() {}
 
 	/**
-	 * @return the candidates and notices of all results, the candidates by kind and then by id
+	 * @return the candidates and notices of all results, each by kind and then by id
 	 */
 	public static ReaderResult combine(final List<ReaderResult> results) {
 		final var candidates = new ArrayList<Candidate>();
@@ -30,7 +31,8 @@ public final class ReaderResults {
 			candidates.addAll(result.candidates());
 			notices.addAll(result.notices());
 		});
-		candidates.sort(ORDER);
+		candidates.sort(Comparator.comparing(Candidate::key, ORDER));
+		notices.sort(Comparator.comparing(Notice::key, ORDER));
 		return new ReaderResult(candidates, notices);
 	}
 

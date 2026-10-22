@@ -24,7 +24,8 @@ public record ItemKey(Source source, Kind kind, String sourceId) {
 	 *         "ALKT-TILLSTAND-123"
 	 */
 	public String migrationId() {
-		return "%s-%s-%s".formatted(source, kind, sourceId);
+		// The names, not toString, since the value is a key the target systems keep
+		return "%s-%s-%s".formatted(source.name(), kind.name(), sourceId);
 	}
 
 	@Override

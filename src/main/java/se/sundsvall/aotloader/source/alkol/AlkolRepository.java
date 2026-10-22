@@ -29,19 +29,21 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
 
 import static java.util.stream.Collectors.groupingBy;
 import static se.sundsvall.aotloader.service.model.Source.ALKOL;
+import static se.sundsvall.aotloader.source.Rows.bit;
 import static se.sundsvall.aotloader.source.Rows.byKey;
 import static se.sundsvall.aotloader.source.Rows.date;
 import static se.sundsvall.aotloader.source.Rows.dateTime;
 import static se.sundsvall.aotloader.source.Rows.flag;
 import static se.sundsvall.aotloader.source.Rows.integer;
-import static se.sundsvall.aotloader.source.Rows.isSet;
 import static se.sundsvall.aotloader.source.Rows.text;
 import static se.sundsvall.aotloader.source.Rows.texts;
 
 /**
  * Reads AlkOL, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
  * queries only select. The view FS_GT_Tobak is read as the system's own list of current tobacco permits (sections 7.4
- * and 7.7); its columns are read whatever their type, since its definition is not visible to the account.
+ * and 7.7). Its definition is not visible to the account, but its columns are bits (analysis round 6), and a value that
+ * is
+ * no bit makes the permit's kinds unreadable rather than set.
  */
 @Repository
 public class AlkolRepository {
@@ -50,11 +52,13 @@ public class AlkolRepository {
 		SELECT f.FSID, f.Namn, f.GatuAdress, f.PostNummer, f.PostOrt, f.Telefon1, f.Email, f.[Område], f.Kategori,
 		       f.[ÄgareOrgNr], f.Notering, f.OLTYP, f.TOBAKTYP, f.ECIGTYP, f.TobaksfriNikotinTyp, f.Upphort, f.Agarid
 		FROM dbo.[FörsäljningsStällen] f
+		ORDER BY f.FSID
 		""";
 
 	private static final String SELECT_PERMIT_VIEW = """
 		SELECT v.FSID, v.GTDE, v.GTPH, v.GTDI
 		FROM dbo.FS_GT_Tobak v
+		ORDER BY v.FSID
 		""";
 
 	private static final String SELECT_OWNERS = """
@@ -97,6 +101,7 @@ public class AlkolRepository {
 		FROM dbo.[PBI_ägare] p
 		WHERE p.AgarID IS NOT NULL
 		  AND (p.PASSIV IS NULL OR p.PASSIV = 0)
+		ORDER BY p.AgarID, p.PBIAGID
 		""";
 
 	private static final String SELECT_VISITS = """
@@ -104,11 +109,13 @@ public class AlkolRepository {
 		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.TillsynsOmgangsNr, t.AnmaltBesok,
 		       t.TTypOL, t.TTypTOBAK, t.TTypNIKOTIN, t.TTypECIG, t.TTypTobaksfriNikotin
 		FROM dbo.[Tillsyn_Tillfälle] t
+		ORDER BY t.TillsynsTillfalleNr
 		""";
 
 	private static final String SELECT_ROUNDS = """
 		SELECT o.TillsynsOmgangsID, o.Omgangsnamn, o.StartDatum, o.SlutDatum, o.Fritext
 		FROM dbo.[Tillsyn_Omgång] o
+		ORDER BY o.TillsynsOmgangsID, o.StartDatum, o.SlutDatum, o.Omgangsnamn
 		""";
 
 	// The visits and errands name their handlers with the number of the user, AnvID, but the decisions name who made them
@@ -148,15 +155,18 @@ public class AlkolRepository {
 	}
 
 	/**
-	 * @return what the migration needs from AlkOL
+	 * @return what the migration needs from AlkOL, read in one snapshot of the database when it allows one
 	 */
 	public AlkolSnapshot readSnapshot() {
-		final var jdbc = sourceDatabases.jdbcTemplate(ALKOL);
+		return sourceDatabases.read(ALKOL, AlkolRepository::snapshotOf);
+	}
+
+	private static AlkolSnapshot snapshotOf(final JdbcTemplate jdbc) {
 		final var users = readUserNames(jdbc);
 		return new AlkolSnapshot(
 			// FSID, AgarID, ArendeID and SokandeID are primary keys, and the query of the persons leaves out rows without owner
 			jdbc.query(SELECT_PLACES, (rs, _) -> toPlace(rs)),
-			byKey(jdbc.query(SELECT_PERMIT_VIEW, (rs, _) -> toPermitView(rs)), PermitViewRow::fsId),
+			PermitViewRow.bySalesPlace(jdbc.query(SELECT_PERMIT_VIEW, (rs, _) -> toPermitView(rs))),
 			byKey(jdbc.query(SELECT_OWNERS, (rs, _) -> PartyRows.toOwner(rs)), ContactRow::id),
 			jdbc.query(SELECT_ERRANDS, (rs, _) -> toErrand(rs)),
 			jdbc.query(SELECT_DECISIONS, (rs, _) -> toDecision(rs)),
@@ -176,7 +186,7 @@ public class AlkolRepository {
 				codeTable(jdbc, "TillsynsArt"),
 				codeTable(jdbc, "Anmarkningar"),
 				users.byNumber(),
-				// Tillsyn_Omgång has no primary key in AlkOL, so the first row of an id counts
+				// Tillsyn_Omgång has no primary key in AlkOL, so the first row of an id, by its dates and name, counts
 				byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id)),
 			users.byCode());
 	}
@@ -244,7 +254,11 @@ public class AlkolRepository {
 	}
 
 	static PermitViewRow toPermitView(final ResultSet rs) throws SQLException {
-		return new PermitViewRow(integer(rs, "FSID"), isSet(rs, "GTDE"), isSet(rs, "GTPH"), isSet(rs, "GTDI"));
+		final var retail = bit(rs, "GTDE");
+		final var wholesale = bit(rs, "GTPH");
+		final var distance = bit(rs, "GTDI");
+		return new PermitViewRow(integer(rs, "FSID"), retail.orElse(false), wholesale.orElse(false), distance.orElse(false),
+			retail.isEmpty() || wholesale.isEmpty() || distance.isEmpty());
 	}
 
 	static ErrandRow toErrand(final ResultSet rs) throws SQLException {

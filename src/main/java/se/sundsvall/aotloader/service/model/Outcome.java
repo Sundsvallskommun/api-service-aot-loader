@@ -26,6 +26,12 @@ public enum Outcome {
 	/** Something went wrong; the item is taken up again in the next run. */
 	FEL,
 
-	/** The run stopped, or reached its limit, before the item. */
-	EJ_KORD
+	/** The run reached its limit before the item could be written; the next run takes it. */
+	EJ_KORD,
+
+	/** A cleanup removed what the migration wrote for the item, and the item from the status table. */
+	RENSAD,
+
+	/** A dry run of a cleanup found what it would remove for the item. */
+	SKULLE_RENSAS
 }

@@ -3,6 +3,7 @@ package se.sundsvall.aotloader.support;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import se.sundsvall.aotloader.service.model.LegalId;
 
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
@@ -14,11 +15,14 @@ import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 public final class LegalIds {
 
 	private static final String ORGANIZATION_PREFIX = "16";
+	// Blanks of every kind, the no-break space among them, plus signs and dashes of every kind, as a number copied from a
+	// document may have them
+	private static final Pattern SEPARATORS = Pattern.compile("[+\\h\\v\\p{Pd}\\u2212]");
 
 	private LegalIds() {}
 
 	/**
-	 * Normalizes a number from a source. Hyphens, plus signs and blanks are removed. Ten digits with a third digit of 2 or
+	 * Normalizes a number from a source. Dashes, plus signs and blanks are removed. Ten digits with a third digit of 2 or
 	 * more is an organization number. Any other ten digits is a personal identity number, whose century is chosen so that
 	 * the date of birth is not after today and the age is below 100, or at least 100 when the number was written with a
 	 * plus sign. Twelve digits is a personal identity number with its century, or an organization number when it starts
@@ -33,7 +37,7 @@ public final class LegalIds {
 			return Optional.empty();
 		}
 		final var plus = raw.indexOf('+') >= 0;
-		final var digits = raw.replaceAll("[-+\\s]", "");
+		final var digits = SEPARATORS.matcher(raw).replaceAll("");
 		if (!digits.matches("\\d+")) {
 			return Optional.empty();
 		}
@@ -72,12 +76,12 @@ public final class LegalIds {
 	}
 
 	/**
-	 * @return the number without hyphens, plus signs and blanks, for comparing numbers written in different ways; empty
+	 * @return the number without dashes, plus signs and blanks, for comparing numbers written in different ways; empty
 	 *         when nothing remains
 	 */
 	public static Optional<String> digitsOf(final String raw) {
 		return Optional.ofNullable(raw)
-			.map(value -> value.replaceAll("[-+\\s]", ""))
+			.map(value -> SEPARATORS.matcher(value).replaceAll(""))
 			.filter(value -> !value.isEmpty());
 	}
 

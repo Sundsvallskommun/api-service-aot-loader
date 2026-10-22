@@ -2,6 +2,7 @@
 	"id": "${json-unit.any-string}",
 	"municipalityId": "2281",
 	"dryRun": true,
+	"cleanup": false,
 	"sources": [
 		"ALKT",
 		"ALKOL"

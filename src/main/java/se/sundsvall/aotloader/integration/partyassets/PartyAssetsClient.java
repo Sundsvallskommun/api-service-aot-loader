@@ -7,6 +7,7 @@ import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +56,14 @@ public interface PartyAssetsClient {
 		@PathVariable String municipalityId,
 		@PathVariable String id,
 		@RequestBody AssetUpdateRequest asset);
+
+	/**
+	 * Deletes the post with its attachments. The relation PartyAssets wrote for it stays.
+	 */
+	@DeleteMapping(path = "/{municipalityId}/assets/{id}", produces = ALL_VALUE)
+	ResponseEntity<Void> deleteAsset(
+		@PathVariable String municipalityId,
+		@PathVariable String id);
 
 	@GetMapping(path = "/{municipalityId}/assets/{id}/attachments", produces = APPLICATION_JSON_VALUE)
 	List<AssetAttachment> getAttachments(

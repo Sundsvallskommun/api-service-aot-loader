@@ -10,9 +10,6 @@ import feign.okhttp.OkHttpClient;
 import java.io.IOException;
 import java.util.Set;
 import javax.net.ssl.X509TrustManager;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.cloud.openfeign.FeignBuilderCustomizer;
-import org.springframework.stereotype.Component;
 import se.sundsvall.dept44.security.Truststore;
 
 import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
@@ -29,31 +26,28 @@ import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
  * request refused with 401, which changed nothing, and the capability keeps any retryer from sending a request
  * that may have changed something again after an IO error.</li>
  * </ul>
+ * It is added to a client through {@link NoResend}, never as a bean of its own.
  */
-@Component
 public class NoResendCapability implements Capability {
 
 	private static final Set<HttpMethod> SAFE_METHODS = Set.of(HttpMethod.GET, HttpMethod.HEAD, HttpMethod.OPTIONS);
 	private static final String RETRY_AFTER = "Retry-After";
 
 	private final Client client;
-	private final FeignBuilderCustomizer customizer = builder -> builder.addCapability(this);
 
-	public NoResendCapability(final ObjectProvider<Truststore> truststore) {
+	/**
+	 * @param truststore the trust store of dept44, null when there is none
+	 */
+	public NoResendCapability(final Truststore truststore) {
 		final var builder = new okhttp3.OkHttpClient.Builder()
 			.retryOnConnectionFailure(false)
 			.followRedirects(false)
 			.followSslRedirects(false)
 			.addNetworkInterceptor(chain -> withoutRetryAfter(chain.request(), chain.proceed(chain.request())));
-		truststore.ifAvailable(store -> builder.sslSocketFactory(store.getSSLContext().getSocketFactory(), (X509TrustManager) store.getTrustManagerFactory().getTrustManagers()[0]));
+		if (truststore != null) {
+			builder.sslSocketFactory(truststore.getSSLContext().getSocketFactory(), (X509TrustManager) truststore.getTrustManagerFactory().getTrustManagers()[0]);
+		}
 		this.client = new OkHttpClient(builder.build());
-	}
-
-	/**
-	 * @return the customizer that adds the capability to a client
-	 */
-	public FeignBuilderCustomizer customizer() {
-		return customizer;
 	}
 
 	@Override

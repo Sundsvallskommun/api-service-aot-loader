@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import se.sundsvall.aotloader.api.model.ReviewException;
 import se.sundsvall.aotloader.api.model.ReviewExceptionRequest;
-import se.sundsvall.aotloader.service.MigrationService;
+import se.sundsvall.aotloader.service.ReviewExceptionService;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Source;
@@ -45,9 +45,9 @@ import static se.sundsvall.aotloader.api.MigrationResource.SOURCE_ID_PATTERN;
 @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class)))
 class ReviewExceptionResource {
 
-	private final MigrationService service;
+	private final ReviewExceptionService service;
 
-	ReviewExceptionResource(final MigrationService service) {
+	ReviewExceptionResource(final ReviewExceptionService service) {
 		this.service = service;
 	}
 

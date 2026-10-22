@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
+import generated.se.sundsvall.supportmanagement.Category;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
@@ -9,10 +10,12 @@ import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
 import generated.se.sundsvall.supportmanagement.Role;
+import generated.se.sundsvall.supportmanagement.Status;
 import generated.se.sundsvall.supportmanagement.UpdateErrandAttachmentRequest;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -74,6 +77,15 @@ public interface SupportManagementClient {
 		@PathVariable String errandId,
 		@RequestBody Errand errand);
 
+	/**
+	 * Deletes the errand with its attachments, investigations and measures. Its relations stay.
+	 */
+	@DeleteMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}", produces = ALL_VALUE)
+	ResponseEntity<Void> deleteErrand(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId);
+
 	@GetMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/attachments", produces = APPLICATION_JSON_VALUE)
 	List<ErrandAttachment> getAttachments(
 		@PathVariable String municipalityId,
@@ -129,6 +141,16 @@ public interface SupportManagementClient {
 
 	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/roles", produces = APPLICATION_JSON_VALUE)
 	List<Role> getRoles(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/statuses", produces = APPLICATION_JSON_VALUE)
+	List<Status> getStatuses(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/categories", produces = APPLICATION_JSON_VALUE)
+	List<Category> getCategories(
 		@PathVariable String municipalityId,
 		@PathVariable String namespace);
 }

@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -39,13 +38,14 @@ public final class Rows {
 	}
 
 	public static LocalDate date(final ResultSet rs, final String column) throws SQLException {
-		final var timestamp = rs.getTimestamp(column);
-		return timestamp == null ? null : timestamp.toLocalDateTime().toLocalDate();
+		final var dateTime = dateTime(rs, column);
+		return dateTime == null ? null : dateTime.toLocalDate();
 	}
 
+	// Read as a local date and time, not as a Timestamp, whose way through the time zone of the JVM moves a time in the
+	// hour skipped when summer time begins
 	public static LocalDateTime dateTime(final ResultSet rs, final String column) throws SQLException {
-		final var timestamp = rs.getTimestamp(column);
-		return timestamp == null ? null : timestamp.toLocalDateTime();
+		return rs.getObject(column, LocalDateTime.class);
 	}
 
 	public static boolean flag(final ResultSet rs, final String column) throws SQLException {
@@ -58,20 +58,21 @@ public final class Rows {
 	}
 
 	/**
-	 * Interprets a column whose type is not known, e.g. a column of a view whose definition cannot be read: a bit or a
-	 * number other than 0, a date, or a text other than blank, "0" or "false" is set.
+	 * Reads a bit strictly, e.g. a column of a view whose definition cannot be read: a bit, or a whole number 0 or 1. A
+	 * missing value is not set.
+	 *
+	 * @return the value, or empty when the column holds anything else
 	 */
-	public static boolean isSet(final ResultSet rs, final String column) throws SQLException {
+	public static Optional<Boolean> bit(final ResultSet rs, final String column) throws SQLException {
 		final var value = rs.getObject(column);
 		return switch (value) {
-			case null -> false;
-			case final Boolean b -> b;
-			case final Number n -> n.doubleValue() != 0;
-			case final String s -> {
-				final var trimmed = s.strip().toLowerCase(Locale.ROOT);
-				yield !trimmed.isEmpty() && !"0".equals(trimmed) && !"false".equals(trimmed);
-			}
-			default -> true;
+			case null -> Optional.of(false);
+			case final Boolean b -> Optional.of(b);
+			case final Integer i when i == 0 || i == 1 -> Optional.of(i == 1);
+			case final Short s when s == 0 || s == 1 -> Optional.of(s == 1);
+			case final Byte b when b == 0 || b == 1 -> Optional.of(b == 1);
+			case final Long l when l == 0 || l == 1 -> Optional.of(l == 1);
+			default -> Optional.empty();
 		};
 	}
 

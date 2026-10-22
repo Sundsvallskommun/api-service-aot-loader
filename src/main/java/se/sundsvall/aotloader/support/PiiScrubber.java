@@ -10,12 +10,14 @@ import java.util.regex.Pattern;
 public final class PiiScrubber {
 
 	// Bounded by anything but a digit, so that a number written next to a word or a hyphen, as in a file name, is found,
-	// and with up to three characters of any kind between its parts, as in 700101_1234 or "700101 - 1234"
-	private static final Pattern LEGAL_ID = Pattern.compile("(?<!\\d)(\\d{2})?\\d{6}[^\\p{Alnum}]{0,3}\\d{4}(?!\\d)");
+	// with up to three characters of any kind before the last four digits, as in 700101_1234 or "700101 - 1234", and a
+	// blank or none between the parts of the date, as in "1990 01 01-1234"
+	private static final Pattern LEGAL_ID = Pattern.compile("(?<!\\d)(?:\\d{2}\\h?)?\\d{2}\\h?\\d{2}\\h?\\d{2}[^\\p{Alnum}]{0,3}\\d{4}(?!\\d)");
 	private static final Pattern UUID = Pattern.compile("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}");
 	// A domain with at least one dot, matched without a repeated group, whose recursion could overflow the stack. It
-	// does not end with a dot, which is the full stop of a sentence
-	private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]*[\\w-]");
+	// does not end with a dot, which is the full stop of a sentence. Its letters are those of any language, as in
+	// åsa@räksmörgås.se
+	private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]*[\\w-]", Pattern.UNICODE_CHARACTER_CLASS);
 	private static final String MASKED_NUMBER = "[nummer]";
 
 	private PiiScrubber() {}

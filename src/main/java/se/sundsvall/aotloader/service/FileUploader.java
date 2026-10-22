@@ -12,8 +12,8 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,6 +30,7 @@ import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.source.files.LegalBasis;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.MigrationException;
 
 import static java.util.stream.Collectors.joining;
@@ -66,33 +67,46 @@ class FileUploader {
 	 * errand, with the same name and content, is not uploaded again, but gets the purpose and date it lacks. A file that
 	 * cannot be uploaded for good is listed in the report.
 	 *
+	 * @return                    the ids of the attachments of the files that are material of the investigation (decision
+	 *                            60),
+	 *                            uploaded now or found on the errand, by name and content
 	 * @throws MigrationException when the file area or a file cannot be read, or a purpose of a file was not read for the
 	 *                            municipality, so that the step is made again in the next run
 	 */
-	void upload(final Candidate candidate, final RunContext context, final String municipalityId, final String errandId, final ReportNotes notes) {
+	Set<String> upload(final Candidate candidate, final RunContext context, final String municipalityId, final String errandId, final ReportNotes notes) {
 		if (candidate.files().isEmpty()) {
-			return;
+			return Set.of();
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var attached = new ArrayList<>(supportManagement.getAttachments(municipalityId, errandId).stream().map(AttachedFile::of).toList());
 		final var problems = new FileProblems();
+		final var material = new LinkedHashSet<String>();
 		for (final var reference : candidate.files()) {
 			final var lookup = readableLookup(fileArea, reference, candidate);
-			problemOf(reference, lookup).ifPresentOrElse(
-				problem -> problems.add(problem, lookup.name()),
-				() -> uploadFile(municipalityId, errandId, lookup, wanted(candidate.detailsOf(reference), context, municipalityId), attached, problems));
+			final var problem = problemOf(reference, lookup);
+			if (problem.isPresent()) {
+				problems.add(problem.get(), lookup.name());
+				continue;
+			}
+			final var details = candidate.detailsOf(reference);
+			uploadFile(municipalityId, errandId, lookup, wanted(details, context, municipalityId), attached, problems)
+				.filter(_ -> isMaterial(candidate, reference))
+				.ifPresent(material::add);
 		}
 		reportAndFailOnUnreadable(problems, notes, candidate);
+		return material;
 	}
 
 	/**
 	 * Links the errand's attachments of the files that are material of its investigation to the investigation (decision
-	 * 60), found on the errand by name regardless of case. An attachment already linked is left as it is, and a file that
-	 * is not on the errand is left out; the upload lists it. An errand without an investigation links nothing.
+	 * 60). An attachment already linked is left as it is. An errand without an investigation links nothing.
+	 *
+	 * @param material the ids of the attachments of the material, as the upload gives them; a file that is not on the
+	 *                 errand
+	 *                 is not among them, and the upload lists it
 	 */
-	void linkToInvestigation(final Candidate candidate, final String municipalityId, final String errandId, final ReportNotes notes) {
-		final var names = investigationFileNames(candidate);
-		if (names.isEmpty()) {
+	void linkToInvestigation(final Candidate candidate, final String municipalityId, final String errandId, final Set<String> material, final ReportNotes notes) {
+		if (candidate.investigation() == null || material.isEmpty()) {
 			return;
 		}
 		final var investigation = supportManagement.getInvestigations(municipalityId, errandId).stream().findFirst();
@@ -100,12 +114,9 @@ class FileUploader {
 			return;
 		}
 		final var linked = Optional.ofNullable(investigation.get().getAttachments()).orElse(List.of()).stream().map(ErrandAttachment::getId).collect(toSet());
-		final var material = supportManagement.getAttachments(municipalityId, errandId).stream()
-			.filter(attachment -> attachment.getFileName() != null && names.contains(attachment.getFileName().toLowerCase(Locale.ROOT)))
-			.toList();
 		material.stream()
-			.filter(attachment -> !linked.contains(attachment.getId()))
-			.forEach(attachment -> supportManagement.linkInvestigationAttachment(municipalityId, errandId, investigation.get().getId(), attachment.getId()));
+			.filter(attachmentId -> !linked.contains(attachmentId))
+			.forEach(attachmentId -> supportManagement.linkInvestigationAttachment(municipalityId, errandId, investigation.get().getId(), attachmentId));
 		notes.line(investigationMaterial(material.size()));
 	}
 
@@ -114,26 +125,10 @@ class FileUploader {
 	}
 
 	/**
-	 * @return the names of the files that are material of the investigation, as {@link #nameKey} gives them, when the
-	 *         candidate has an investigation to link them to
+	 * @return true when the file is material of the investigation, and the candidate has an investigation to link it to
 	 */
-	private static Set<String> investigationFileNames(final Candidate candidate) {
-		if (candidate.investigation() == null) {
-			return Set.of();
-		}
-		return candidate.files().stream()
-			.filter(reference -> candidate.detailsOf(reference).investigation())
-			.map(FileUploader::nameKey)
-			.filter(Objects::nonNull)
-			.collect(toSet());
-	}
-
-	/**
-	 * @return the name of the file a reference names, as the file area finds it and the attachment gets it, in lower case;
-	 *         null when it names none
-	 */
-	private static String nameKey(final FileReference reference) {
-		return Optional.ofNullable(FileArea.fileNameOf(reference.name())).map(name -> name.toLowerCase(Locale.ROOT)).orElse(null);
+	private static boolean isMaterial(final Candidate candidate, final FileReference reference) {
+		return candidate.investigation() != null && candidate.detailsOf(reference).investigation();
 	}
 
 	/**
@@ -168,7 +163,8 @@ class FileUploader {
 			notes.line("Lagrum: tillståndets beslut eller bevis gick inte att läsa");
 			return candidate;
 		}
-		notes.line(legalBasis.isPresent() ? "Lagrum: ur tillståndets beslut eller bevis" : "Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget");
+		notes.line(legalBasis.map(value -> "Lagrum: %d ur tillståndets beslut eller bevis".formatted(value.split("; ").length))
+			.orElse("Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget"));
 		return legalBasis.map(value -> candidate.withAsset(asset.withParameter(ASSET_PARAMETER_LEGAL_BASIS, value))).orElse(candidate);
 	}
 
@@ -206,20 +202,19 @@ class FileUploader {
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var problems = new FileProblems();
-		final var investigationNames = investigationFileNames(candidate);
 		var material = 0;
 		for (final var reference : candidate.files()) {
 			final var lookup = fileArea.find(reference);
 			final var problem = problemOf(reference, lookup);
 			problem.ifPresent(found -> problems.add(found, lookup.name()));
-			if (problem.isEmpty() && investigationNames.contains(nameKey(reference))) {
+			if (problem.isEmpty() && isMaterial(candidate, reference)) {
 				material++;
 			}
 		}
 		if (candidate.asset() != null && !candidate.assetFiles().isEmpty()) {
 			notes.line("Till %s i PartyAssets: %s".formatted(AssetWords.of(candidate.key().kind()).definite(), categoryCounts(candidate, context, context.municipalityId())));
 		}
-		if (!investigationNames.isEmpty()) {
+		if (candidate.files().stream().anyMatch(reference -> isMaterial(candidate, reference))) {
 			notes.line(investigationMaterial(material));
 		}
 		problems.report(notes, maxFileSizeText());
@@ -357,23 +352,30 @@ class FileUploader {
 		};
 	}
 
-	private void uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final Wanted wanted, final List<AttachedFile> attached,
+	/**
+	 * @return the id of the attachment of the file, uploaded now or already on the errand; empty when it was not uploaded
+	 */
+	private Optional<String> uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final Wanted wanted, final List<AttachedFile> attached,
 		final FileProblems problems) {
 		final var read = readContent(lookup, problems);
 		if (read.isEmpty()) {
-			return;
+			return Optional.empty();
 		}
 		final var content = read.get();
 		final var file = new AttachedFile(lookup.name(), sha256(content), content.length);
 		final var existing = attached.stream().filter(file::isSameAs).findFirst();
 		if (existing.isPresent()) {
 			completeAttachment(municipalityId, errandId, existing.get(), wanted);
-			return;
+			return Optional.ofNullable(existing.get().id());
 		}
-		supportManagement.createAttachment(municipalityId, errandId, lookup.name(), content, wanted.received()).ifPresentOrElse(id -> {
-			Optional.ofNullable(wanted.purposeId()).ifPresent(purposeId -> supportManagement.updateAttachment(municipalityId, errandId, id, purposeId, null));
-			attached.add(new AttachedFile(file.name(), file.hash(), file.size(), id, wanted.purposeId(), wanted.received()));
-		}, () -> problems.add(FileProblem.REJECTED, lookup.name()));
+		final var id = supportManagement.createAttachment(municipalityId, errandId, lookup.name(), content, wanted.received());
+		if (id.isEmpty()) {
+			problems.add(FileProblem.REJECTED, lookup.name());
+			return Optional.empty();
+		}
+		Optional.ofNullable(wanted.purposeId()).ifPresent(purposeId -> supportManagement.updateAttachment(municipalityId, errandId, id.get(), purposeId, null));
+		attached.add(new AttachedFile(file.name(), file.hash(), file.size(), id.get(), wanted.purposeId(), wanted.received()));
+		return id;
 	}
 
 	/**
@@ -485,12 +487,12 @@ class FileUploader {
 		}
 
 		/**
-		 * @return true for the same name, regardless of case, and the same content: the same hash, or the same size when a
-		 *         hash is missing. Without either, the files are taken to differ, since a file uploaded twice is better than
-		 *         one that is never uploaded.
+		 * @return true for the same name, composed and regardless of case, and the same content: the same hash, or the same
+		 *         size when a hash is missing. Without either, the files are taken to differ, since a file uploaded twice is
+		 *         better than one that is never uploaded.
 		 */
 		boolean isSameAs(final AttachedFile other) {
-			if (name == null || !name.equalsIgnoreCase(other.name())) {
+			if (name == null || !FileNames.normalized(name).equals(FileNames.normalized(other.name()))) {
 				return false;
 			}
 			if (hash != null && other.hash() != null) {

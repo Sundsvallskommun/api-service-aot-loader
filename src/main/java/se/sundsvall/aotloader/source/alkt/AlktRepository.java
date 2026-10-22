@@ -61,7 +61,8 @@ public class AlktRepository {
 	private static final String HANDELSE_DATUM = "HandelseDatumTid";
 	private static final String NO_INSPECTION_KIND = "01";
 
-	// The table has no key: the order numbers the permits without ObjektID the same way in every run
+	// The table has no key: the order numbers the permits without ObjektID the same way in every run, as long as their
+	// rows differ in the columns of the order
 	private static final String SELECT_PERMITS = """
 		SELECT g.ObjektID, g.GTAgarID, g.Starkol, g.Vin, g.Spritdrycker, g.AJADrycker, g.ALP, g.AretRunt,
 		       g.ArligPeriodStart, g.ArligPeriodSlut, g.PeriodStart, g.PeriodSlut,
@@ -84,6 +85,7 @@ public class AlktRepository {
 		SELECT o.ObjektID, o.AgarID, o.RestaurangBeteckning, o.ObjektGrupp1, o.ServeringsNamn, o.ServeringsGAdress,
 		       o.ServeringsPNr, o.ServeringsPOrt, o.TelefonNr1, o.Email, o.OmradesBeteckning, o.ObjBifogadfil, o.ObjBifogadfil2
 		FROM dbo.Objekt o
+		ORDER BY o.ObjektID
 		""";
 
 	private static final String SELECT_OWNERS = """
@@ -161,6 +163,7 @@ public class AlktRepository {
 		FROM dbo.[PBI_ägare] p
 		WHERE p.AgarID IS NOT NULL
 		  AND (p.PASSIV IS NULL OR p.PASSIV = 0)
+		ORDER BY p.AgarID, p.PBIAGID
 		""";
 
 	private static final String SELECT_APPLICANTS = """
@@ -180,11 +183,13 @@ public class AlktRepository {
 		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.ServPersAgarePaPlats, t.ServPersEjKollat, t.ServPersEjpaPlats,
 		       t.TillsynsOmgangsNr
 		FROM dbo.[Tillsyn_Tillfälle] t
+		ORDER BY t.TillsynsTillfalleNr
 		""";
 
 	private static final String SELECT_ROUNDS = """
 		SELECT o.TillsynsOmgangsID, o.Omgangsnamn, o.StartDatum, o.SlutDatum, o.Fritext
 		FROM dbo.[Tillsyn_Omgång] o
+		ORDER BY o.TillsynsOmgangsID
 		""";
 
 	private static final String SELECT_HANDLERS = """
@@ -214,10 +219,13 @@ public class AlktRepository {
 	}
 
 	/**
-	 * @return what the migration needs from AlkT
+	 * @return what the migration needs from AlkT, read in one snapshot of the database when it allows one
 	 */
 	public AlktSnapshot readSnapshot() {
-		final var jdbc = sourceDatabases.jdbcTemplate(ALKT);
+		return sourceDatabases.read(ALKT, AlktRepository::snapshotOf);
+	}
+
+	private static AlktSnapshot snapshotOf(final JdbcTemplate jdbc) {
 		final var errands = byKey(jdbc.query(SELECT_ERRANDS, (rs, _) -> toErrand(rs)), ErrandRow::arendeId);
 		final var eventFiles = EventFiles.of(
 			Stream.concat(

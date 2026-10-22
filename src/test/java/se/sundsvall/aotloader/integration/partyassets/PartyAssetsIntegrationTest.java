@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.CONTENT_TOO_LARGE;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -62,6 +63,19 @@ class PartyAssetsIntegrationTest {
 		assertThat(integration.getAsset(MUNICIPALITY_ID, "1")).map(Asset::getId).contains("1");
 		assertThat(integration.getAsset(MUNICIPALITY_ID, "gone")).isEmpty();
 		assertThatThrownBy(() -> integration.getAsset(MUNICIPALITY_ID, "error")).isInstanceOf(ThrowableProblem.class);
+	}
+
+	@Test
+	void deleteAssetTellsWhetherThereWasOne() {
+		final var integration = new PartyAssetsIntegration(client);
+		when(client.deleteAsset(MUNICIPALITY_ID, "1")).thenReturn(ResponseEntity.noContent().build());
+		when(client.deleteAsset(MUNICIPALITY_ID, "gone")).thenThrow(Problem.valueOf(NOT_FOUND, "Finns inte"));
+		when(client.deleteAsset(MUNICIPALITY_ID, "error")).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+
+		assertThat(integration.deleteAsset(MUNICIPALITY_ID, "1")).isTrue();
+		assertThat(integration.deleteAsset(MUNICIPALITY_ID, "gone")).isFalse();
+		assertThatThrownBy(() -> integration.deleteAsset(MUNICIPALITY_ID, "error")).isInstanceOf(ThrowableProblem.class);
+		verify(client).deleteAsset(MUNICIPALITY_ID, "1");
 	}
 
 	@Test
@@ -104,11 +118,16 @@ class PartyAssetsIntegrationTest {
 		when(client.createAttachment(eq(MUNICIPALITY_ID), eq("1"), file.capture(), eq("Tillståndsbevis")))
 			.thenReturn(ResponseEntity.created(URI.create("/2281/assets/1/attachments/a")).build())
 			.thenThrow(Problem.valueOf(CONTENT_TOO_LARGE, "För stor"))
+			.thenThrow(Problem.valueOf(BAD_REQUEST, "party-assets error: {status=400, title=Invalid file, detail=The uploaded file is empty}"))
+			.thenThrow(Problem.valueOf(BAD_REQUEST, "party-assets error: {status=400, title=Attachments cannot be modified}"))
 			.thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		final var content = "bevis".getBytes(StandardCharsets.UTF_8);
 
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isTrue();
 		assertThat(integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isFalse();
+		assertThat(integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isFalse();
+		// A post that takes no files says nothing about the file
+		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isInstanceOf(ThrowableProblem.class);
 		assertThatThrownBy(() -> integration.createAttachment(MUNICIPALITY_ID, "1", "bevis.rtf", content, "Tillståndsbevis")).isInstanceOf(ThrowableProblem.class);
 		assertThat(file.getValue().getName()).isEqualTo("attachment");
 		assertThat(file.getValue().getOriginalFilename()).isEqualTo("bevis.rtf");

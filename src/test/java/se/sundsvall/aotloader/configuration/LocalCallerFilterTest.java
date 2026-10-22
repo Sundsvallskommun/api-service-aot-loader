@@ -23,6 +23,8 @@ class LocalCallerFilterTest {
 		"localhost, PUT, https://127.0.0.1, none, true",
 		// A page that has its own name resolve to the loopback address
 		"rebound.example.com, GET, -, -, false",
+		// A request without a Host
+		"-, GET, -, -, false",
 		"rebound.example.com:8080, POST, http://rebound.example.com:8080, same-origin, false",
 		// A page of another site that posts a form or makes a request
 		"localhost:8080, POST, https://example.com, cross-site, false",
@@ -38,7 +40,9 @@ class LocalCallerFilterTest {
 	})
 	void onlyThisComputerMayCall(final String host, final String method, final String origin, final String fetchSite, final boolean letThrough) throws Exception {
 		final var request = new MockHttpServletRequest(method, "/2281/migrations/runs");
-		request.addHeader("Host", host);
+		if (host != null) {
+			request.addHeader("Host", host);
+		}
 		if (origin != null) {
 			request.addHeader("Origin", origin);
 		}
@@ -59,6 +63,30 @@ class LocalCallerFilterTest {
 			assertThat(response.getContentType()).startsWith("application/problem+json");
 			assertThat(response.getContentAsString()).startsWith("{\"title\":\"Forbidden\",\"status\":403,\"detail\":\"Anropet ");
 		}
+	}
+
+	@Test
+	void aForwardedHostDoesNotMakeAPageThisComputer() throws Exception {
+		final var request = new MockHttpServletRequest("GET", "/2281/migrations/runs");
+		request.addHeader("Host", "rebound.example.com");
+		request.addHeader("X-Forwarded-Host", "localhost");
+		request.addHeader("Forwarded", "host=localhost");
+		// What a filter that honours the headers would make of the request
+		request.setServerName("localhost");
+		final var response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, new MockFilterChain());
+
+		assertThat(response.getStatus()).isEqualTo(403);
+	}
+
+	@Test
+	void theHostOfAHostHeader() {
+		assertThat(LocalCallerFilter.hostOf("localhost:8080")).isEqualTo("localhost");
+		assertThat(LocalCallerFilter.hostOf(" 127.0.0.1 ")).isEqualTo("127.0.0.1");
+		assertThat(LocalCallerFilter.hostOf("[::1]:8080")).isEqualTo("[::1]");
+		assertThat(LocalCallerFilter.hostOf("[::1")).isEqualTo("[::1");
+		assertThat(LocalCallerFilter.hostOf(null)).isNull();
 	}
 
 	@Test

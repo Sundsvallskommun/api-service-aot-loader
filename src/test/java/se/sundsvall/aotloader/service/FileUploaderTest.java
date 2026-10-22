@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -112,6 +113,25 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void theUploadTellsTheAttachmentsOfTheMaterialByNameAndContent() throws IOException {
+		Files.writeString(documents.resolve("rapport.pdf"), "x");
+		Files.writeString(attachments.resolve("rapport.pdf"), "yy");
+		final var candidate = withInvestigation(Map.of(
+			new FileReference("beslut.rtf", DOCUMENTS), new FileDetails(null, null, true),
+			new FileReference("rapport.pdf", ATTACHMENTS), new FileDetails(null, null, true),
+			// Another file of the same name, which is no material
+			new FileReference("rapport.pdf", DOCUMENTS), FileDetails.NONE));
+		// The decision is on the errand from an earlier run
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new ErrandAttachment().id("a1").fileName("beslut.rtf").fileSize("dokument".length())));
+		when(supportManagement.createAttachment(MUNICIPALITY_ID, ERRAND_ID, "rapport.pdf", "yy".getBytes(StandardCharsets.UTF_8), null)).thenReturn(Optional.of("a2"));
+		when(supportManagement.createAttachment(MUNICIPALITY_ID, ERRAND_ID, "rapport.pdf", "x".getBytes(StandardCharsets.UTF_8), null)).thenReturn(Optional.of("a3"));
+
+		final var material = uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+
+		assertThat(material).containsExactlyInAnyOrder("a1", "a2");
+	}
+
+	@Test
 	void aFileThatSupportManagementRefusesIsListed() {
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
 		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.empty());
@@ -178,14 +198,10 @@ class FileUploaderTest {
 		// The investigation has the answer linked already, from an earlier run
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1")
 			.attachments(List.of(new ErrandAttachment().id("a1").fileName("remissvar.pdf")))));
-		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
-			new ErrandAttachment().id("a1").fileName("remissvar.pdf"),
-			new ErrandAttachment().id("a2").fileName("UTREDNING.rtf"),
-			new ErrandAttachment().id("a3").fileName("ansokan.pdf"),
-			new ErrandAttachment().id("a4")));
 		final var notes = new ReportNotes();
 
-		uploader.linkToInvestigation(candidate, MUNICIPALITY_ID, ERRAND_ID, notes);
+		// The attachments of the material, as the upload gives them
+		uploader.linkToInvestigation(candidate, MUNICIPALITY_ID, ERRAND_ID, Set.of("a1", "a2"), notes);
 
 		verify(supportManagement).linkInvestigationAttachment(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "a2");
 		verify(supportManagement, times(1)).linkInvestigationAttachment(anyString(), anyString(), anyString(), anyString());
@@ -198,10 +214,10 @@ class FileUploaderTest {
 		final var notes = new ReportNotes();
 
 		// A candidate without an investigation, one without material, and an errand whose investigation is missing
-		uploader.linkToInvestigation(withDetails(material), MUNICIPALITY_ID, ERRAND_ID, notes);
-		uploader.linkToInvestigation(withInvestigation(Map.of(new FileReference("ansokan.pdf", ATTACHMENTS), FileDetails.NONE)), MUNICIPALITY_ID, ERRAND_ID, notes);
+		uploader.linkToInvestigation(withDetails(material), MUNICIPALITY_ID, ERRAND_ID, Set.of("a1"), notes);
+		uploader.linkToInvestigation(withInvestigation(Map.of(new FileReference("ansokan.pdf", ATTACHMENTS), FileDetails.NONE)), MUNICIPALITY_ID, ERRAND_ID, Set.of(), notes);
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		uploader.linkToInvestigation(withInvestigation(material), MUNICIPALITY_ID, ERRAND_ID, notes);
+		uploader.linkToInvestigation(withInvestigation(material), MUNICIPALITY_ID, ERRAND_ID, Set.of("a1"), notes);
 
 		verify(supportManagement, never()).getAttachments(anyString(), anyString());
 		verify(supportManagement, never()).linkInvestigationAttachment(anyString(), anyString(), anyString(), anyString());

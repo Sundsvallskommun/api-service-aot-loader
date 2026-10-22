@@ -2,7 +2,7 @@ package se.sundsvall.aotloader.source.alkol;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
@@ -20,8 +20,8 @@ class AlkolRepositoryTest {
 	@Test
 	void theTimeOfAVisitIsTheTimeOfDayAndMidnightIsNoTime() throws SQLException {
 		final var rs = mock(ResultSet.class);
-		when(rs.getTimestamp("StartTid")).thenReturn(Timestamp.valueOf("1899-12-30 14:05:00"));
-		when(rs.getTimestamp("SlutTid")).thenReturn(Timestamp.valueOf("1899-12-30 00:00:00"));
+		when(rs.getObject("StartTid", LocalDateTime.class)).thenReturn(LocalDateTime.of(1899, 12, 30, 14, 5));
+		when(rs.getObject("SlutTid", LocalDateTime.class)).thenReturn(LocalDateTime.of(1899, 12, 30, 0, 0));
 
 		assertThat(AlkolRepository.time(rs, "StartTid")).isEqualTo("14:05");
 		assertThat(AlkolRepository.time(rs, "SlutTid")).isNull();

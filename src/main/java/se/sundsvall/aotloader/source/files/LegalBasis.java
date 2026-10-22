@@ -23,6 +23,8 @@ public final class LegalBasis {
 	// name of the law.
 	private static final Pattern REFERENCE = Pattern.compile("\\b\\d++\\s*+kap\\.?+\\s*+\\d++\\s*+(?:[a-z]\\s*+)?+§[^.;§\\n]{0,80}?\\(\\d{4}:\\d++\\)",
 		Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+	// A paragraph on how to appeal names the law of the appeal, which is no legal basis of the permit
+	private static final Pattern APPEAL = Pattern.compile("[oö]verklag", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 	// The groups whose content is no text of the document, such as pictures and embedded objects
 	private static final Set<String> HIDDEN_GROUPS = Set.of("pict", "shppict", "nonshppict", "object", "objdata", "datastore", "themedata", "colorschememapping", "fonttbl",
 		"colortbl", "stylesheet", "info", "listtable", "listoverridetable", "rsidtbl", "latentstyles", "generator", "xmlnstbl");
@@ -32,7 +34,9 @@ public final class LegalBasis {
 	/**
 	 * @param  content the document
 	 * @return         the references to the law the document states, in the order it states them, joined with "; " when
-	 *                 there are several; empty when the document is no RTF or states none
+	 *                 there are several, leaving out those of a paragraph on how to appeal; empty when the document is no
+	 *                 RTF
+	 *                 or states none
 	 */
 	public static Optional<String> of(final byte[] content) {
 		if (content == null || !new String(content, 0, Math.min(content.length, RTF_START.length()), StandardCharsets.US_ASCII).equals(RTF_START)) {
@@ -41,7 +45,9 @@ public final class LegalBasis {
 		final var references = new LinkedHashSet<String>();
 		// A non-breaking space, written as the escaped character a0 or as Unicode 160 in the document, separates the words as a
 		// space does
-		REFERENCE.matcher(text(new String(content, WINDOWS_1252)).replace('\u00A0', ' ')).results()
+		text(new String(content, WINDOWS_1252)).replace('\u00A0', ' ').lines()
+			.filter(paragraph -> !APPEAL.matcher(paragraph).find())
+			.flatMap(paragraph -> REFERENCE.matcher(paragraph).results())
 			.map(match -> match.group().replace("§", " § ").replaceAll("\\s+", " ").strip())
 			.forEach(references::add);
 		return Optional.ofNullable(Texts.join("; ", references));
@@ -140,7 +146,8 @@ public final class LegalBasis {
 				appendUnicode(parameter, text);
 				return afterFallback(rtf, after);
 			}
-			case "par", "line", "tab", "cell", "row" -> text.append(' ');
+			case "par" -> text.append('\n');
+			case "line", "tab", "cell", "row" -> text.append(' ');
 			default -> {
 				// A control word ends at its parameter
 			}

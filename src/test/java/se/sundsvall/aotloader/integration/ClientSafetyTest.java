@@ -18,10 +18,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import se.sundsvall.dept44.configuration.feign.FeignMultiCustomizer;
 import se.sundsvall.dept44.configuration.feign.retryer.ActionRetryer;
-import se.sundsvall.dept44.security.Truststore;
 import se.sundsvall.dept44.support.Identifier;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -199,7 +197,7 @@ class ClientSafetyTest {
 	}
 
 	private static NoResendCapability capability() {
-		return new NoResendCapability(new StaticListableBeanFactory().getBeanProvider(Truststore.class));
+		return new NoResendCapability(null);
 	}
 
 	private Client timingOut() {

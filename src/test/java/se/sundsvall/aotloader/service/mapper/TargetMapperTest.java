@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,17 @@ class TargetMapperTest {
 			tuple("premisesPhone", "Serveringsställets telefon", List.of("060-2")),
 			tuple("restaurantNumber", "Valt restaurangnummer", List.of("12345678")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+	}
+
+	@Test
+	void theLegalBasisKeepsTheReferencesThatFitWhole() {
+		final var first = "8 kap. 2 § alkohollagen (2010:1622)";
+		final var many = String.join("; ", Collections.nCopies(10, first));
+
+		assertThat(TargetMapper.legalBasisWithin(null)).isNull();
+		assertThat(TargetMapper.legalBasisWithin(first)).isEqualTo(first);
+		assertThat(TargetMapper.legalBasisWithin(many)).doesNotContain("se ärendet").isEqualTo(String.join("; ", Collections.nCopies(6, first)));
+		assertThat(TargetMapper.legalBasisWithin("x".repeat(300))).hasSize(255).endsWith("…");
 	}
 
 	@Test

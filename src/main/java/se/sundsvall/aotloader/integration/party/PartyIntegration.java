@@ -30,12 +30,11 @@ public class PartyIntegration {
 		try {
 			return client.getPartyId(municipalityId, legalId.type().name(), legalId.number())
 				.filter(partyId -> !partyId.isBlank());
-		} catch (final ThrowableProblem problem) {
-			LOG.warn("Lookup of a {} number in Party failed with status {}", legalId.type(), problem.getStatus());
-			throw new MigrationException("Uppslaget i Party misslyckades (%s)".formatted(problem.getStatus()));
 		} catch (final RuntimeException e) {
-			LOG.warn("Lookup of a {} number in Party failed: {}", legalId.type(), e.getClass().getSimpleName());
-			throw new MigrationException("Uppslaget i Party misslyckades (%s)".formatted(e.getClass().getSimpleName()));
+			// The status of a problem, the class of any other error: the message may hold the number
+			final var cause = e instanceof final ThrowableProblem problem ? String.valueOf(problem.getStatus()) : e.getClass().getSimpleName();
+			LOG.warn("Lookup of a {} number in Party failed: {}", legalId.type(), cause);
+			throw new MigrationException("Uppslaget i Party misslyckades (%s)".formatted(cause));
 		}
 	}
 }

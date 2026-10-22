@@ -170,5 +170,10 @@ public final class InspectionCandidates {
 		public InspectionErrand {
 			handlers = handlers == null ? List.of() : List.copyOf(handlers);
 		}
+
+		@Override
+		public String toString() {
+			return "InspectionErrand[source=" + source + ", arendeId=" + arendeId + ", typeCode=" + typeCode + "]";
+		}
 	}
 }

@@ -22,8 +22,9 @@ public record ReaderResult(List<Candidate> candidates, List<Notice> notices) {
 	 * @param key       the identity the row is listed under
 	 * @param placeName the name of the place
 	 * @param outcome   the outcome listed
+	 * @param rule      the code of the rule or notice, as the column of the rules shows it, e.g. G1 or Ö1
 	 * @param detail    what was found, never names or numbers of persons or companies
 	 */
-	public record Notice(ItemKey key, String placeName, Outcome outcome, String detail) {
+	public record Notice(ItemKey key, String placeName, Outcome outcome, String rule, String detail) {
 	}
 }

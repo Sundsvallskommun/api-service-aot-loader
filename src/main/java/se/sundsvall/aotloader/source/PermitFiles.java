@@ -1,8 +1,12 @@
 package se.sundsvall.aotloader.source;
 
-import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import se.sundsvall.aotloader.support.FileNames;
+
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
 /**
  * Tells which files of a permit or a notification go on its post in PartyAssets besides the certificate (decisions 34,
@@ -23,7 +27,7 @@ public final class PermitFiles {
 	 *         tillstands_bevis.pdf, and not another certificate such as Mottagningsbevis.pdf
 	 */
 	public static boolean isCertificate(final String name) {
-		return name != null && CERTIFICATE_NAME.matcher(name.toLowerCase(Locale.ROOT)).find();
+		return name != null && CERTIFICATE_NAME.matcher(FileNames.normalized(name)).find();
 	}
 
 	/**
@@ -35,7 +39,7 @@ public final class PermitFiles {
 		if (name == null) {
 			return false;
 		}
-		final var lowerCase = name.toLowerCase(Locale.ROOT);
+		final var lowerCase = FileNames.normalized(name);
 		return DECISION_NAME.matcher(lowerCase).find() && !OTHER_DOCUMENT_NAME.matcher(lowerCase).find();
 	}
 
@@ -43,14 +47,30 @@ public final class PermitFiles {
 	 * @return true for a file whose name tells it is a drawing, e.g. Planritning.pdf or "ritning våning 2.pdf"
 	 */
 	public static boolean isDrawing(final String name) {
-		return name != null && name.toLowerCase(Locale.ROOT).contains(DRAWING_WORD);
+		return name != null && FileNames.normalized(name).contains(DRAWING_WORD);
 	}
 
 	/**
-	 * @param  templates the codes of the templates, in upper case
+	 * Marks the files of a decision that are the permit decision for the post (decision 39): its document when it is made
+	 * from one of the templates, and its attachment when the name tells it is a permit, a decision or a certificate. The
+	 * others, such as an investigation, a referral answer or a receipt letter, stay on the errand only.
+	 *
+	 * @param templates the templates of the documents that are permit decisions
+	 */
+	public static void markPermitDecision(final FileList files, final String template, final String document, final String attachment, final Set<String> templates) {
+		if (isTemplate(template, templates)) {
+			files.add(document, DOCUMENTS, ASSET_CATEGORY_DECISION);
+		}
+		if (isDecision(attachment)) {
+			files.add(attachment, ATTACHMENTS, ASSET_CATEGORY_DECISION);
+		}
+	}
+
+	/**
+	 * @param  templates the codes of the templates
 	 * @return           true when the code of a document template is one of the codes, regardless of case
 	 */
 	public static boolean isTemplate(final String code, final Set<String> templates) {
-		return code != null && templates.contains(code.strip().toUpperCase(Locale.ROOT));
+		return CodeTexts.isOneOf(code, templates);
 	}
 }

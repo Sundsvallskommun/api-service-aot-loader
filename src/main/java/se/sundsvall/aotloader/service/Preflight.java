@@ -37,14 +37,18 @@ import se.sundsvall.aotloader.support.Texts;
 import static java.util.stream.Collectors.toCollection;
 import static se.sundsvall.aotloader.Constants.LABEL_ATTRIBUTE_PROCESS_BLOCKED;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
+import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 
 /**
  * The checks before a run (section 9): what the configuration still waits for, that the file area and the source
  * databases are configured, that the account of each source database may only read, and in the namespace of the
- * municipality of the run that the labels exist, with the label for migrated errands blocking processes, and that no
- * action is active (R6). A real run does not start when a check fails; a dry run lists the problems and goes on.
+ * municipality of the run that the labels exist, with the label for migrated errands blocking processes, that the
+ * roles, the closed status and the classification the errands get exist, that the attachment purposes and measure
+ * types exist, and that no action is active (R6). A real run does not start when a check fails; a dry run lists the
+ * problems and goes on.
  */
 @Component
 public class Preflight {
@@ -78,6 +82,9 @@ public class Preflight {
 		final var labels = readLabels(municipalityId, problems);
 		labels.ifPresent(found -> checkLabels(found, types, problems));
 		checkActions(municipalityId, problems);
+		checkRoles(municipalityId, types, problems);
+		checkStatus(municipalityId, problems);
+		checkClassifications(municipalityId, types, problems);
 		checkMeasures(municipalityId, types, problems);
 		final var purposes = readPurposes(municipalityId, problems);
 		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())), Map.of(municipalityId, purposes));
@@ -202,7 +209,6 @@ public class Preflight {
 		if (visitTypes.isEmpty()) {
 			return;
 		}
-		checkMeasureRole(municipalityId, problems);
 		// A blank measure type is reported with the settings of the errand type
 		final var measureTypes = visitTypes.stream()
 			.map(type -> properties.errandType(type).measureType())
@@ -213,18 +219,83 @@ public class Preflight {
 		}
 	}
 
-	private void checkMeasureRole(final String municipalityId, final List<String> problems) {
-		final var role = properties.roles().measureAddedBy();
-		if (Texts.isBlank(role)) {
-			problems.add("Rollen som tillsynsbesökens åtgärder läggs till med är inte angiven (aot-loader.roles.measure-added-by, beslut 57)");
+	/**
+	 * The roles the errands of the run give their stakeholders and measures must exist in the namespace: the holder's and
+	 * the contacts' on a permit, a notification and an inspection errand, and the role measures are added by on a visit.
+	 */
+	private void checkRoles(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
+		final var roles = properties.roles();
+		final var wanted = new TreeSet<String>();
+		if (types.stream().anyMatch(type -> type.getKind() == TILLSTAND || type.getKind() == ANMALAN)) {
+			wanted.add(roles.permitHolder());
+			wanted.add(roles.contact());
+		}
+		if (types.stream().anyMatch(type -> type.getKind() == TILLSYN)) {
+			Optional.ofNullable(Texts.trimToNull(roles.inspectionHolder())).ifPresent(wanted::add);
+			wanted.add(roles.contact());
+		}
+		if (types.stream().anyMatch(type -> type.getKind() == TILLSYNSBESOK)) {
+			if (Texts.isBlank(roles.measureAddedBy())) {
+				problems.add("Rollen som tillsynsbesökens åtgärder läggs till med är inte angiven (aot-loader.roles.measure-added-by, beslut 57)");
+			} else {
+				wanted.add(roles.measureAddedBy());
+			}
+		}
+		wanted.removeIf(Texts::isBlank);
+		if (wanted.isEmpty()) {
 			return;
 		}
 		try {
-			if (supportManagement.getRoles(municipalityId).stream().map(Role::getName).noneMatch(role::equals)) {
-				problems.add("Rollen %s finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (aot-loader.roles.measure-added-by, beslut 57)".formatted(role));
-			}
+			final var found = supportManagement.getRoles(municipalityId).stream().map(Role::getName).collect(Collectors.toSet());
+			wanted.stream()
+				.filter(role -> !found.contains(role))
+				.forEach(role -> problems.add("Rollen %s finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)".formatted(role)));
 		} catch (final RuntimeException e) {
 			problems.add("Rollerna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+		}
+	}
+
+	/**
+	 * The closed status the errands get must exist in the namespace and not be deprecated (decision 5).
+	 */
+	private void checkStatus(final String municipalityId, final List<String> problems) {
+		final var status = Texts.trimToNull(properties.errandStatus());
+		if (status == null) {
+			return;
+		}
+		try {
+			if (supportManagement.getStatuses(municipalityId).stream().noneMatch(found -> status.equals(found.getName()) && !Boolean.TRUE.equals(found.getDeprecated()))) {
+				problems.add("Statusen %s finns inte i namnrymden, eller är inaktuell (aot-loader.errand-status, beslut 5)".formatted(status));
+			}
+		} catch (final RuntimeException e) {
+			problems.add("Statusarna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+		}
+	}
+
+	/**
+	 * The category and type of each errand type of the run must exist in the namespace, the type under its category
+	 * (decision 5).
+	 */
+	private void checkClassifications(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
+		// A blank classification is reported with the settings of the errand type
+		final var wanted = types.stream()
+			.map(properties::errandType)
+			.filter(settings -> !Texts.isBlank(settings.category()) && !Texts.isBlank(settings.type()))
+			.map(settings -> settings.category() + "/" + settings.type())
+			.collect(toCollection(TreeSet::new));
+		if (wanted.isEmpty()) {
+			return;
+		}
+		try {
+			final var found = supportManagement.getCategories(municipalityId).stream()
+				.filter(category -> category.getName() != null)
+				.flatMap(category -> Optional.ofNullable(category.getTypes()).orElse(Set.of()).stream().map(type -> category.getName() + "/" + type.getName()))
+				.collect(Collectors.toSet());
+			wanted.stream()
+				.filter(classification -> !found.contains(classification))
+				.forEach(classification -> problems.add("Klassificeringen %s finns inte i namnrymden (aot-loader.errand-types, beslut 5)".formatted(classification)));
+		} catch (final RuntimeException e) {
+			problems.add("Kategorierna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
 		}
 	}
 

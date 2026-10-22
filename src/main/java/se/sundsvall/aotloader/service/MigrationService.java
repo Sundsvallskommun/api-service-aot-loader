@@ -1,7 +1,6 @@
 package se.sundsvall.aotloader.service;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -13,22 +12,21 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import se.sundsvall.aotloader.api.model.CleanupRequest;
 import se.sundsvall.aotloader.api.model.MigrationItem;
 import se.sundsvall.aotloader.api.model.ReportLine;
-import se.sundsvall.aotloader.api.model.ReviewException;
-import se.sundsvall.aotloader.api.model.ReviewExceptionRequest;
 import se.sundsvall.aotloader.api.model.Run;
 import se.sundsvall.aotloader.api.model.RunRequest;
 import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
 import se.sundsvall.aotloader.integration.db.MigrationRunRepository;
-import se.sundsvall.aotloader.integration.db.ReviewExceptionRepository;
 import se.sundsvall.aotloader.integration.db.RunItemRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
-import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
@@ -45,31 +43,31 @@ import static org.springframework.http.HttpStatus.UNPROCESSABLE_CONTENT;
 import static se.sundsvall.aotloader.configuration.ExecutorConfiguration.MIGRATION_EXECUTOR;
 
 /**
- * Starts runs, one at a time, and answers about runs, reports, the status table and the exception list. Starting a run
- * again never migrates an item twice: an item already migrated is left as it is, and an item that stopped half way
- * continues from where it stopped.
+ * Starts runs and cleanups, one at a time, and answers about runs, reports and the status table.
+ * Starting a run again never migrates an item twice: an item already migrated is left as it is, and an item that
+ * stopped half way continues from where it stopped.
  */
 @Service
 public class MigrationService {
 
 	private final MigrationRunner runner;
+	private final CleanupRunner cleanupRunner;
 	private final RunLock lock;
 	private final ExecutorService executor;
 	private final MigrationRunRepository runRepository;
 	private final RunItemRepository runItemRepository;
 	private final MigrationItemRepository itemRepository;
-	private final ReviewExceptionRepository exceptionRepository;
 	private final Clock clock;
 
-	MigrationService(final MigrationRunner runner, final RunLock lock, @Qualifier(MIGRATION_EXECUTOR) final ExecutorService executor, final MigrationRunRepository runRepository, final RunItemRepository runItemRepository,
-		final MigrationItemRepository itemRepository, final ReviewExceptionRepository exceptionRepository, final Clock clock) {
+	MigrationService(final MigrationRunner runner, final CleanupRunner cleanupRunner, final RunLock lock, @Qualifier(MIGRATION_EXECUTOR) final ExecutorService executor, final MigrationRunRepository runRepository,
+		final RunItemRepository runItemRepository, final MigrationItemRepository itemRepository, final Clock clock) {
 		this.runner = runner;
+		this.cleanupRunner = cleanupRunner;
 		this.lock = lock;
 		this.executor = executor;
 		this.runRepository = runRepository;
 		this.runItemRepository = runItemRepository;
 		this.itemRepository = itemRepository;
-		this.exceptionRepository = exceptionRepository;
 		this.clock = clock;
 	}
 
@@ -82,24 +80,8 @@ public class MigrationService {
 	 */
 	public Run startRun(final String municipalityId, final RunRequest request) {
 		final var scope = scope(request.sources(), request.kinds());
-		final var run = newRun(municipalityId, request.isDryRun(), scope, null, request.limit());
-		acquire(run.getId());
-		try {
-			runRepository.save(run);
-			// Taken before the run starts, since the runner changes the entity in its own thread
-			final var started = toRun(run, Map.of());
-			executor.execute(() -> {
-				try {
-					runner.execute(run, scope, Optional.empty());
-				} finally {
-					lock.release(run.getId());
-				}
-			});
-			return started;
-		} catch (final RuntimeException e) {
-			lock.release(run.getId());
-			throw e;
-		}
+		final var run = newRun(municipalityId, request.dryRunOrDefault(), false, scope, null, request.limit());
+		return startInBackground(run, runner::register, runner::forget, () -> runner.execute(run, scope, Optional.empty()));
 	}
 
 	/**
@@ -111,36 +93,47 @@ public class MigrationService {
 	 *                                                      run did not start, failed or was stopped
 	 */
 	public ReportLine migrateItem(final String municipalityId, final ItemKey key, final boolean dryRun) {
-		if (!runner.supportedKinds().getOrDefault(key.source(), Set.of()).contains(key.kind())) {
-			throw Problem.valueOf(BAD_REQUEST, "%s har inga ärenden av sorten %s".formatted(key.source().getDisplayName(), key.kind()));
-		}
-		final var scope = Map.of(key.source(), Set.of(key.kind()));
-		final var run = newRun(municipalityId, dryRun, scope, key.toString(), null);
-		acquire(run.getId());
-		try {
-			runRepository.save(run);
-			if (runner.execute(run, scope, Optional.of(key)).isEmpty()) {
-				final var message = Optional.ofNullable(run.getMessage()).orElse("Ärendet %s hittades inte".formatted(key));
-				throw Problem.valueOf(run.getStatus() == RunStatus.COMPLETED ? NOT_FOUND : UNPROCESSABLE_CONTENT, message);
-			}
-			return runItemRepository.findByRunIdOrderById(run.getId()).stream()
-				.filter(line -> key.equals(new ItemKey(line.getSource(), line.getKind(), line.getSourceId())))
-				.reduce((_, second) -> second)
-				.map(MigrationService::toReportLine)
-				.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s hittades inte".formatted(key)));
-		} finally {
-			lock.release(run.getId());
-		}
+		final var scope = singleScope(key);
+		final var run = newRun(municipalityId, dryRun, false, scope, key.toString(), null);
+		return runSingle(run, () -> runner.execute(run, scope, Optional.of(key)), "Ärendet %s hittades inte".formatted(key));
 	}
 
 	/**
-	 * Asks a running run to stop before its next item.
+	 * Starts a cleanup in the background, which removes what the migration wrote to the target systems for the items of
+	 * the status table in the scope, and the items (section 10.3).
+	 *
+	 * @return                                              the cleanup, RUNNING
+	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 409 when another run is running, 400 when the request selects
+	 *                                                      nothing
+	 */
+	public Run startCleanup(final String municipalityId, final CleanupRequest request) {
+		final var scope = scope(request.sources(), request.kinds());
+		final var run = newRun(municipalityId, request.dryRunOrDefault(), true, scope, null, request.limit());
+		return startInBackground(run, cleanupRunner::register, cleanupRunner::forget, () -> cleanupRunner.execute(run, scope, Optional.empty()));
+	}
+
+	/**
+	 * Cleans up a single item, or tries it in a dry run, and waits for it.
+	 *
+	 * @return                                              the row of the report for the item
+	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 400 when the source has no items of the kind, 409 when a run is
+	 *                                                      running, 404 when the status table has no such item, 422 when
+	 *                                                      the cleanup did not start or failed
+	 */
+	public ReportLine cleanupItem(final String municipalityId, final ItemKey key, final boolean dryRun) {
+		final var scope = singleScope(key);
+		final var run = newRun(municipalityId, dryRun, true, scope, key.toString(), null);
+		return runSingle(run, () -> cleanupRunner.execute(run, scope, Optional.of(key)), "Ärendet %s finns inte i statustabellen".formatted(key));
+	}
+
+	/**
+	 * Asks a running run or cleanup to stop before its next item.
 	 *
 	 * @return the run
 	 */
 	public Run stopRun(final String municipalityId, final String runId) {
 		final var run = findRun(municipalityId, runId);
-		if (run.getStatus() != RunStatus.RUNNING || !runner.requestStop(runId)) {
+		if (run.getStatus() != RunStatus.RUNNING || !(run.isCleanup() ? cleanupRunner.requestStop(runId) : runner.requestStop(runId))) {
 			throw Problem.valueOf(CONFLICT, "Körningen %s pågår inte".formatted(runId));
 		}
 		return toRun(run, counts(runId));
@@ -162,17 +155,17 @@ public class MigrationService {
 	 */
 	public List<ReportLine> getReport(final String municipalityId, final String runId, final Collection<Outcome> outcomes) {
 		findRun(municipalityId, runId);
-		return runItemRepository.findByRunIdOrderById(runId).stream()
-			.filter(line -> outcomes == null || outcomes.isEmpty() || outcomes.contains(line.getOutcome()))
-			.map(MigrationService::toReportLine)
-			.toList();
+		final var lines = outcomes == null || outcomes.isEmpty() ? runItemRepository.findByRunIdOrderById(runId) : runItemRepository.findByRunIdAndOutcomeInOrderById(runId, outcomes);
+		return lines.stream().map(MigrationService::toReportLine).toList();
 	}
 
 	/**
-	 * @return the rows of the status table, filtered on what is given
+	 * @return the rows of the status table of the municipality, filtered on what is given; an item that never reached a
+	 *         target system has no municipality and is in every one
 	 */
-	public List<MigrationItem> getItems(final Source source, final Kind kind, final ItemStatus status) {
+	public List<MigrationItem> getItems(final String municipalityId, final Source source, final Kind kind, final ItemStatus status) {
 		return itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc().stream()
+			.filter(item -> isOf(item, municipalityId))
 			.filter(item -> source == null || source == item.getSource())
 			.filter(item -> kind == null || kind == item.getKind())
 			.filter(item -> status == null || status == item.getStatus())
@@ -180,39 +173,14 @@ public class MigrationService {
 			.toList();
 	}
 
-	public MigrationItem getItem(final ItemKey key) {
+	/**
+	 * @return the row of the status table of the item, when it is of the municipality, as above
+	 */
+	public MigrationItem getItem(final String municipalityId, final ItemKey key) {
 		return itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId())
+			.filter(item -> isOf(item, municipalityId))
 			.map(MigrationService::toMigrationItem)
 			.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s finns inte i statustabellen".formatted(key)));
-	}
-
-	public List<ReviewException> getExceptions() {
-		return exceptionRepository.findAllByOrderBySourceAscKindAscSourceIdAsc().stream().map(MigrationService::toReviewException).toList();
-	}
-
-	/**
-	 * Adds the item to the exception list, or changes what it says.
-	 */
-	public ReviewException putException(final ItemKey key, final ReviewExceptionRequest request) {
-		final var entity = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId()).orElseGet(() -> {
-			final var created = new ReviewExceptionEntity();
-			created.setSource(key.source());
-			created.setKind(key.kind());
-			created.setSourceId(key.sourceId());
-			created.setCreated(OffsetDateTime.now(clock));
-			return created;
-		});
-		entity.setOutcome(request.outcome());
-		entity.setDecidedBy(request.decidedBy().strip());
-		entity.setDecidedAt(Optional.ofNullable(request.decidedAt()).orElse(LocalDate.now(clock)));
-		entity.setComment(request.comment());
-		return toReviewException(exceptionRepository.save(entity));
-	}
-
-	public void deleteException(final ItemKey key) {
-		final var entity = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId())
-			.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s finns inte i undantagslistan".formatted(key)));
-		exceptionRepository.delete(entity);
 	}
 
 	/**
@@ -237,17 +205,81 @@ public class MigrationService {
 		return scope;
 	}
 
+	/**
+	 * @return                                              the scope of the single item
+	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 400 when the source has no items of the kind
+	 */
+	private Map<Source, Set<Kind>> singleScope(final ItemKey key) {
+		if (!runner.supportedKinds().getOrDefault(key.source(), Set.of()).contains(key.kind())) {
+			throw Problem.valueOf(BAD_REQUEST, "%s har inga ärenden av sorten %s".formatted(key.source().getDisplayName(), key.kind()));
+		}
+		return Map.of(key.source(), Set.of(key.kind()));
+	}
+
+	/**
+	 * Saves the run and starts the work in the background, under the lock, which the work releases when it is done.
+	 *
+	 * @param  register makes the stop flag of the run, before the work is handed to its thread
+	 * @param  forget   removes the stop flag when the work could not be handed over
+	 * @return          the run, RUNNING
+	 */
+	private Run startInBackground(final MigrationRunEntity run, final Consumer<String> register, final Consumer<String> forget, final Runnable work) {
+		acquire(run.getId());
+		try {
+			runRepository.save(run);
+			// Taken before the run starts, since the runner changes the entity in its own thread
+			final var started = toRun(run, Map.of());
+			register.accept(run.getId());
+			try {
+				executor.execute(() -> {
+					try {
+						work.run();
+					} finally {
+						lock.release(run.getId());
+					}
+				});
+			} catch (final RuntimeException e) {
+				forget.accept(run.getId());
+				throw e;
+			}
+			return started;
+		} catch (final RuntimeException e) {
+			lock.release(run.getId());
+			throw e;
+		}
+	}
+
+	/**
+	 * Saves the run of a single item and does the work under the lock, waiting for it.
+	 *
+	 * @param  notFound the answer when the work finds no item
+	 * @return          the row of the report for the item
+	 */
+	private ReportLine runSingle(final MigrationRunEntity run, final Supplier<Optional<RunItemEntity>> work, final String notFound) {
+		acquire(run.getId());
+		try {
+			runRepository.save(run);
+			// The row as the run made it, also when it could not be saved
+			return work.get()
+				.map(MigrationService::toReportLine)
+				.orElseThrow(() -> Problem.valueOf(run.getStatus() == RunStatus.COMPLETED ? NOT_FOUND : UNPROCESSABLE_CONTENT, Optional.ofNullable(run.getMessage()).orElse(notFound)));
+		} finally {
+			lock.release(run.getId());
+		}
+	}
+
 	private void acquire(final String runId) {
 		if (!lock.tryAcquire(runId)) {
 			throw Problem.valueOf(CONFLICT, "En körning pågår redan (%s). Vänta tills den är klar, eller stoppa den.".formatted(lock.holder().orElse("okänd")));
 		}
 	}
 
-	private MigrationRunEntity newRun(final String municipalityId, final boolean dryRun, final Map<Source, Set<Kind>> scope, final String itemKey, final Integer limit) {
+	private MigrationRunEntity newRun(final String municipalityId, final boolean dryRun, final boolean cleanup, final Map<Source, Set<Kind>> scope, final String itemKey, final Integer limit) {
 		final var run = new MigrationRunEntity();
 		run.setId(UUID.randomUUID().toString());
 		run.setMunicipalityId(municipalityId);
 		run.setDryRun(dryRun);
+		run.setCleanup(cleanup);
 		run.setSources(scope.keySet().stream().map(Source::name).collect(Collectors.joining(",")));
 		run.setKinds(scope.values().stream().flatMap(Set::stream).distinct().sorted().map(Kind::name).collect(Collectors.joining(",")));
 		run.setItemKey(itemKey);
@@ -257,6 +289,10 @@ public class MigrationService {
 		return run;
 	}
 
+	private static boolean isOf(final MigrationItemEntity item, final String municipalityId) {
+		return item.getMunicipalityId() == null || item.getMunicipalityId().equals(municipalityId);
+	}
+
 	private MigrationRunEntity findRun(final String municipalityId, final String runId) {
 		return runRepository.findById(runId)
 			.filter(run -> municipalityId.equals(run.getMunicipalityId()))
@@ -264,11 +300,12 @@ public class MigrationService {
 	}
 
 	private Map<Outcome, Long> counts(final String runId) {
-		return OutcomeCounts.of(runItemRepository.findByRunIdOrderById(runId));
+		return OutcomeCounts.of(runItemRepository, runId);
 	}
 
 	private static Run toRun(final MigrationRunEntity run, final Map<Outcome, Long> counts) {
-		return new Run(run.getId(), run.getMunicipalityId(), run.isDryRun(), split(run.getSources()), split(run.getKinds()), run.getItemKey(), run.getItemLimit(), run.getStatus(), run.getMessage(), run.getStarted(),
+		return new Run(run.getId(), run.getMunicipalityId(), run.isDryRun(), run.isCleanup(), split(run.getSources()), split(run.getKinds()), run.getItemKey(), run.getItemLimit(), run.getStatus(), run.getMessage(),
+			run.getStarted(),
 			run.getFinished(), counts);
 	}
 
@@ -283,9 +320,5 @@ public class MigrationService {
 	private static MigrationItem toMigrationItem(final MigrationItemEntity item) {
 		return new MigrationItem(item.getSource(), item.getKind(), item.getSourceId(), item.getErrandType(), item.getStatus(), item.getFailedStep(), item.getReason(), item.getPlaceNumber(), item.getPlaceName(), item.getMunicipalityId(), item.getErrandId(),
 			item.getErrandNumber(), item.getAssetId(), item.getPartyAssetsId(), item.getRelationId(), item.getLastRunId(), item.getModified());
-	}
-
-	private static ReviewException toReviewException(final ReviewExceptionEntity entity) {
-		return new ReviewException(entity.getSource(), entity.getKind(), entity.getSourceId(), entity.getOutcome(), entity.getDecidedBy(), entity.getDecidedAt(), entity.getComment());
 	}
 }

@@ -18,7 +18,7 @@ public class PayloadLoggingConfiguration {
 	 */
 	@Bean
 	Logbook logbook() {
-		// A log level would not do: dept44 sets its payload logger to TRACE in a file that outranks application.yml
+		// A condition rather than a log level, which can be changed while the service runs; this holds whatever the level
 		return Logbook.builder().condition(_ -> false).build();
 	}
 

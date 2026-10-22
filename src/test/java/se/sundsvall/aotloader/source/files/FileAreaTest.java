@@ -75,10 +75,13 @@ class FileAreaTest {
 	}
 
 	@Test
-	void fileNameOf() {
-		assertThat(FileArea.fileNameOf(" a.pdf ")).isEqualTo("a.pdf");
-		assertThat(FileArea.fileNameOf("x/y\\z.pdf")).isEqualTo("z.pdf");
-		assertThat(FileArea.fileNameOf("..")).isNull();
-		assertThat(FileArea.fileNameOf(" ")).isNull();
+	void aNameWithALetterAndACombiningMarkIsFoundByTheLetter() throws IOException {
+		Files.writeString(attachments.resolve("Tillståndsbevis.pdf"), "bevis");
+		final var fileArea = new FileArea(new FileAreaDirectories(documents.toString(), attachments.toString()), 10);
+
+		final var found = fileArea.find(new FileReference("Tillståndsbevis.pdf", ATTACHMENTS));
+
+		assertThat(found.result()).isEqualTo(LookupResult.FOUND);
+		assertThat(found.size()).isEqualTo(5);
 	}
 }

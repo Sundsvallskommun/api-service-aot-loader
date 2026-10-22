@@ -2,11 +2,14 @@ package se.sundsvall.aotloader.source.alkol;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
+
+import static java.util.stream.Collectors.toMap;
 
 /**
  * What the migration reads from AlkOL in one go. It holds personal data and is never logged or stored.
@@ -92,8 +95,24 @@ public record AlkolSnapshot(
 
 	/**
 	 * A row of the view FS_GT_Tobak: the kinds of current tobacco permit of a sales place.
+	 *
+	 * @param unreadable true when a column of the row holds something else than a bit, whose kind is then not set
 	 */
-	public record PermitViewRow(Integer fsId, boolean retail, boolean wholesale, boolean distance) {
+	public record PermitViewRow(Integer fsId, boolean retail, boolean wholesale, boolean distance, boolean unreadable) {
+
+		/**
+		 * @return the rows by sales place, in the order read; the rows of a place are merged, each kind set when any of
+		 *         them sets it, and rows without a place are left out
+		 */
+		public static Map<Integer, PermitViewRow> bySalesPlace(final List<PermitViewRow> rows) {
+			return rows.stream()
+				.filter(row -> row.fsId() != null)
+				.collect(toMap(PermitViewRow::fsId, row -> row, PermitViewRow::merge, LinkedHashMap::new));
+		}
+
+		private PermitViewRow merge(final PermitViewRow other) {
+			return new PermitViewRow(fsId, retail || other.retail(), wholesale || other.wholesale(), distance || other.distance(), unreadable || other.unreadable());
+		}
 	}
 
 	/**

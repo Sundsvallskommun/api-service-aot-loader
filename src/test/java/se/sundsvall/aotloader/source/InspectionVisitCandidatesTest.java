@@ -86,4 +86,12 @@ class InspectionVisitCandidatesTest {
 			.isEqualTo(InvestigationTexts.of(new Part("Anteckning", "Lugnt i baren.")));
 		assertThat(InspectionVisitCandidates.roundName(null)).isNull();
 	}
+
+	@Test
+	void theContentOfAVisitShowsNoNamesOrRemarks() {
+		final var visit = new VisitRow(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
+		final var content = new InspectionVisitCandidates.VisitContent(visit, "Tillsynsbesök", "14:05", List.of("Anmärkning"), List.of("Tolvan Tolvansson"), List.of("Saknade utbildning"), null);
+
+		assertThat(content).hasToString("VisitContent[visit=VisitRow[tillfalleNr=900], kind=Tillsynsbesök]");
+	}
 }

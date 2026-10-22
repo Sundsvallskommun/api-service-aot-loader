@@ -38,12 +38,15 @@ class SupportTest {
 			.isEqualTo("Beslut_[nummer].pdf, [nummer], [nummer], [nummer]");
 		assertThat(PiiScrubber.scrub("Ärende 2026-10-12 klockan 14.30, telefon 060-123 456")).isEqualTo("Ärende 2026-10-12 klockan 14.30, telefon 060-123 456");
 		assertThat(PiiScrubber.scrub("Domän a@" + "b.".repeat(50_000) + "se")).isEqualTo("Domän [e-post]");
+		assertThat(PiiScrubber.scrub("Till anna@räksmörgås.se, björn@foo.se och åsa.öberg@företag.se.")).isEqualTo("Till [e-post], [e-post] och [e-post].");
+		assertThat(PiiScrubber.scrub("Nummer 1990 01 01-1234, 90 01 01 1234 och 19900101 1234")).isEqualTo("Nummer [nummer], [nummer] och [nummer]");
 	}
 
 	@Test
 	void diaryNumbers() {
 		assertThat(DiaryNumbers.normalize(" ian-2019 12345 ")).isEqualTo("IAN201912345");
 		assertThat(DiaryNumbers.normalize(" - ")).isNull();
+		assertThat(DiaryNumbers.normalize("ian–2019 12345")).isEqualTo("IAN201912345");
 		assertThat(DiaryNumbers.normalize(null)).isNull();
 	}
 

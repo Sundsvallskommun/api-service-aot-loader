@@ -4,6 +4,8 @@ import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
+import generated.se.sundsvall.relation.Relation;
+import generated.se.sundsvall.relation.ResourceIdentifier;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.support.MigrationException;
 
+import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.TAG_MIGRATION_ID;
 
@@ -75,6 +78,13 @@ class TargetWriter {
 	}
 
 	/**
+	 * @return true when the errand exists and is active, as when an earlier run activated it but lost the answer
+	 */
+	boolean isActive(final String municipalityId, final String errandId) {
+		return supportManagement.getErrand(municipalityId, errandId).map(errand -> errand.getLifecycle() == LifecycleEnum.ACTIVE).orElse(false);
+	}
+
+	/**
 	 * Makes the draft an active errand, the last step of the flow.
 	 */
 	void activate(final String municipalityId, final String errandId) {
@@ -84,7 +94,9 @@ class TargetWriter {
 	/**
 	 * Finds the post in PartyAssets, by its id in the status table or by the errand id and the partyId, and creates it
 	 * only when neither finds it. A 409 on the create means it exists after all; it is then read, since the answer has no
-	 * id. A post found, made by an earlier run, is brought up to date with what the item gives now.
+	 * id. A post found, made by an earlier run, is brought up to date with what the item gives now. A post that is to be
+	 * EXPIRED is made, and given its content, while ACTIVE, since an EXPIRED post takes no change of its content and no
+	 * files: the caller gives it its files and then EXPIRED. One that is EXPIRED and already has its content is left so.
 	 *
 	 * @param  candidate          the item
 	 * @param  municipalityId     the municipality the item belongs to
@@ -92,25 +104,43 @@ class TargetWriter {
 	 * @param  partyAssetsId      the id of the post in the status table, null when it has none
 	 * @param  parties            the partyIds; the holder's is required unless the post is found by its id
 	 * @param  expired            true when the post is to be EXPIRED, false when ACTIVE
+	 * @param  earlierErrand      true when the errand is one an earlier run made, which may have made the post for a holder
+	 *                            the source has changed since; the post is then also looked for through the relation
+	 *                            PartyAssets writes from the errand to it
 	 * @param  notes              the report of the item, told what was found and changed
-	 * @return                    the id PartyAssets gave the post
+	 * @return                    the id PartyAssets gave the post, and the status it has now
 	 * @throws MigrationException when the post found has a status the migration never gives, or belongs to another party
 	 *                            than the item now gives; it is then left as it is
 	 */
-	String ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties, final boolean expired,
-		final ReportNotes notes) {
+	Post ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties, final boolean expired,
+		final boolean earlierErrand, final ReportNotes notes) {
 		final var words = AssetWords.of(candidate.key().kind());
 		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, words, notes))
-			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId));
+			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId))
+			.or(() -> earlierErrand && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
 			final var wanted = mapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
-			return bringUpToDate(municipalityId, found.get(), wanted, words, notes);
+			if (expired && found.get().getStatus() == Status.EXPIRED && mapper.toContentUpdate(found.get(), wanted).isEmpty() && Objects.equals(found.get().getPartyId(), wanted.getPartyId())) {
+				unchangeable(found.get(), wanted, words).ifPresent(notes::line);
+				return new Post(found.get().getId(), Status.EXPIRED);
+			}
+			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), words, notes), Status.ACTIVE);
 		}
-		final var wanted = mapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), expired);
-		return partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
-			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId)
-				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes));
+		final var wanted = mapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
+		return new Post(partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
+			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
+				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes)),
+			Status.ACTIVE);
+	}
+
+	/**
+	 * A post in PartyAssets.
+	 *
+	 * @param id     the id PartyAssets gave it
+	 * @param status its status
+	 */
+	record Post(String id, Status status) {
 	}
 
 	/**
@@ -147,7 +177,24 @@ class TargetWriter {
 		}
 		notes.line(status == Status.ACTIVE
 			? "%s i PartyAssets hade status ACTIVE medan %s fick sina filer, eftersom %s med status EXPIRED inte tar emot filer".formatted(words.capitalized(), words.pronoun(), words.indefinite())
-			: "%s i PartyAssets fick status EXPIRED igen när %s hade fått sina filer".formatted(words.capitalized(), words.pronoun()));
+			: "%s i PartyAssets fick status EXPIRED sist, när %s hade fått sitt innehåll och sina filer".formatted(words.capitalized(), words.pronoun()));
+	}
+
+	/**
+	 * @return the post of the errand found through the relations from the errand, whatever its party; empty when none
+	 */
+	private Optional<Asset> assetRelatedTo(final String municipalityId, final String errandId) {
+		return relations.findRelationsFrom(municipalityId, errandId).stream()
+			.map(Relation::getTarget)
+			.filter(Objects::nonNull)
+			// The relations the migration writes go to errands
+			.filter(target -> !RELATION_SERVICE_SUPPORT_MANAGEMENT.equalsIgnoreCase(target.getService()))
+			.map(ResourceIdentifier::getResourceId)
+			.filter(Objects::nonNull)
+			.map(id -> partyAssets.getAsset(municipalityId, id))
+			.flatMap(Optional::stream)
+			.filter(asset -> errandId.equals(asset.getAssetId()))
+			.findFirst();
 	}
 
 	private static String holderPartyId(final PartyIds parties) {

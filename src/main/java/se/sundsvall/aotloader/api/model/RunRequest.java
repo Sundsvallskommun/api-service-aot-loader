@@ -28,7 +28,7 @@ public record RunRequest(
 	/**
 	 * @return false only when the request says so
 	 */
-	public boolean isDryRun() {
+	public boolean dryRunOrDefault() {
 		return !Boolean.FALSE.equals(dryRun);
 	}
 }

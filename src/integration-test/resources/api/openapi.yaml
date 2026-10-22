@@ -10,6 +10,9 @@ servers:
 - url: http://localhost:53344
   description: Generated server url
 tags:
+- name: Cleanup
+  description: "Removes migrated errands, their permits in PartyAssets and their relations\
+    \ from a test environment"
 - name: Migration
   description: "Runs the migration of permits, notifications and inspection errands\
     \ from AlkT and AlkOL"
@@ -464,6 +467,159 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/items/{source}/{kind}/{sourceId}/cleanup:
+    post:
+      tags:
+      - Cleanup
+      summary: "Clean up a single item, or try it in a dry run"
+      description: "Removes what the migration wrote for one item of the status table,\
+        \ as a cleanup does, and waits for it."
+      operationId: cleanupItem
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      - name: dryRun
+        in: query
+        description: A dry run removes nothing
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: OK - the row of the report for the item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportLine"
+        "404":
+          description: Not Found - the status table has no such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict - a run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable - the cleanup did not start or failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/cleanups:
+    post:
+      tags:
+      - Cleanup
+      summary: Start a cleanup
+      description: "Starts a cleanup in the background and answers at once. For every\
+        \ item of the status table in the selection it removes the relations the migration\
+        \ and PartyAssets wrote from its errand, its permit in PartyAssets and its\
+        \ errand in SupportManagement, and then the item, so that the next run migrates\
+        \ it anew. A permit is removed only when its asset id is the errand's, and\
+        \ an errand only when it carries the item's tag migreringsid. A cleanup is\
+        \ a dry run unless the request says dryRun false, and then only reads and\
+        \ reports what it would remove. It is followed and stopped as a run, and its\
+        \ report has the outcomes RENSAD, SKULLE_RENSAS and FEL. Only one run or cleanup\
+        \ at a time."
+      operationId: startCleanup
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupRequest"
+        required: true
+      responses:
+        "202":
+          description: Accepted - the cleanup has started
+          headers:
+            Location:
+              description: "The cleanup, as a run"
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "409":
+          description: Conflict - another run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /{municipalityId}/migrations/runs/{runId}:
     get:
       tags:
@@ -550,6 +706,8 @@ paths:
             - VANTAR
             - FEL
             - EJ_KORD
+            - RENSAD
+            - SKULLE_RENSAS
       responses:
         "200":
           description: OK
@@ -616,6 +774,8 @@ paths:
             - VANTAR
             - FEL
             - EJ_KORD
+            - RENSAD
+            - SKULLE_RENSAS
       responses:
         "200":
           description: OK
@@ -810,9 +970,9 @@ components:
         type:
           type: string
           format: uri
-        title:
-          type: string
         detail:
+          type: string
+        title:
           type: string
         status:
           type: integer
@@ -915,13 +1075,15 @@ components:
           minimum: 1
     Run:
       type: object
-      description: A run of the migration
+      description: "A run of the migration, or of a cleanup"
       properties:
         id:
           type: string
         municipalityId:
           type: string
         dryRun:
+          type: boolean
+        cleanup:
           type: boolean
         sources:
           type: array
@@ -990,12 +1152,51 @@ components:
           - VANTAR
           - FEL
           - EJ_KORD
+          - RENSAD
+          - SKULLE_RENSAS
         rules:
           type: string
         detail:
           type: string
         errandNumber:
           type: string
+    CleanupRequest:
+      type: object
+      description: What a cleanup is to remove from the target systems
+      properties:
+        dryRun:
+          type: boolean
+          default: true
+          description: A dry run only reads and reports what it would remove. A cleanup
+            is a dry run unless this says false.
+        sources:
+          type: array
+          description: "The sources whose items to clean up, all when left out"
+          items:
+            type: string
+            enum:
+            - ALKT
+            - ALKOL
+          maxItems: 2147483647
+          minItems: 1
+        kinds:
+          type: array
+          description: "The kinds of item to clean up, all when left out"
+          items:
+            type: string
+            enum:
+            - TILLSTAND
+            - ANMALAN
+            - TILLSYN
+            - TILLSYNSBESOK
+          maxItems: 2147483647
+          minItems: 1
+        limit:
+          type: integer
+          format: int32
+          description: "The largest number of items the cleanup takes, no limit when\
+            \ left out"
+          minimum: 1
     MigrationItem:
       type: object
       description: A row of the status table

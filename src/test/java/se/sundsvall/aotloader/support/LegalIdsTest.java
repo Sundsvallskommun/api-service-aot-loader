@@ -70,6 +70,11 @@ class LegalIdsTest {
 		assertThat(LegalIds.digitsOf(" 556677-8899 ")).contains("5566778899");
 		assertThat(LegalIds.digitsOf("19800101+1234")).contains("198001011234");
 		assertThat(LegalIds.digitsOf(" - ")).isEmpty();
+		assertThat(LegalIds.digitsOf("556677–8899")).contains("5566778899");
+		assertThat(LegalIds.digitsOf("556677 8899")).contains("5566778899");
+		assertThat(LegalIds.normalize("556677‑8899", TODAY)).contains(new LegalId("5566778899", ENTERPRISE));
+		assertThat(LegalIds.normalize("19121212−1212", TODAY)).contains(new LegalId("191212121212", PRIVATE));
+		assertThat(LegalIds.normalize("121212— 1212", TODAY)).contains(new LegalId("201212121212", PRIVATE));
 		assertThat(LegalIds.digitsOf(null)).isEmpty();
 	}
 

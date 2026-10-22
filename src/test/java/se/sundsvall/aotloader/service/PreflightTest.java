@@ -1,11 +1,14 @@
 package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
+import generated.se.sundsvall.supportmanagement.Category;
 import generated.se.sundsvall.supportmanagement.Config;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.Role;
+import generated.se.sundsvall.supportmanagement.Status;
+import generated.se.sundsvall.supportmanagement.Type;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -76,7 +79,33 @@ class PreflightTest {
 			.toList());
 		lenient().when(supportManagement.getMeasureTypes(MUNICIPALITY_ID))
 			.thenReturn(List.of(new MeasureType().name("MEASURE_ALCOHOL_INSPECTION_VISIT"), new MeasureType().name("MEASURE_TOBACCO_INSPECTION_VISIT")));
-		lenient().when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("MEASURER")));
+		lenient().when(supportManagement.getRoles(MUNICIPALITY_ID))
+			.thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("CONTACT"), new Role().name("INSPECTED"), new Role().name("MEASURER")));
+		lenient().when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenReturn(List.of(new Status().name("NEW"), new Status().name("SOLVED")));
+		lenient().when(supportManagement.getCategories(MUNICIPALITY_ID)).thenReturn(Arrays.stream(ErrandType.values())
+			.map(type -> new Category().name("CATEGORY_" + type).types(Set.of(new Type().name("TYPE_" + type))))
+			.toList());
+	}
+
+	@Test
+	void theRolesTheStatusAndTheClassificationsOfTheErrandsMustExist() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
+		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY")));
+		when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenReturn(List.of(new Status().name("SOLVED").deprecated(true)));
+		when(supportManagement.getCategories(MUNICIPALITY_ID)).thenReturn(List.of(new Category().name("CATEGORY_SERVING_PERMIT").types(Set.of(new Type().name("OTHER")))));
+
+		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN))).problems()).containsExactly(
+			"Rollen CONTACT finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)",
+			"Rollen INSPECTED finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)",
+			"Statusen SOLVED finns inte i namnrymden, eller är inaktuell (aot-loader.errand-status, beslut 5)",
+			"Klassificeringen CATEGORY_ALCOHOL_INSPECTION/TYPE_ALCOHOL_INSPECTION finns inte i namnrymden (aot-loader.errand-types, beslut 5)",
+			"Klassificeringen CATEGORY_SERVING_PERMIT/TYPE_SERVING_PERMIT finns inte i namnrymden (aot-loader.errand-types, beslut 5)");
+
+		when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		when(supportManagement.getCategories(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).contains(
+			"Statusarna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel", "Kategorierna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
 	}
 
 	@Test
@@ -106,7 +135,7 @@ class PreflightTest {
 		// SupportManagement refuses a measure added by a role the namespace lacks
 		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY")));
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems())
-			.containsExactly("Rollen MEASURER finns inte i namnrymden, så tillsynsbesökens anmärkningar kan inte bli åtgärder (aot-loader.roles.measure-added-by, beslut 57)");
+			.containsExactly("Rollen MEASURER finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)");
 
 		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly("Rollerna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");

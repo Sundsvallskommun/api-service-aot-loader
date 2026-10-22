@@ -49,7 +49,7 @@ class SourceSupportTest {
 
 	@Test
 	void readerResultsAreOrderedByKindAndId() {
-		final var notice = new Notice(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-INGEN"), null, Outcome.MIGRERAS_INTE, null);
+		final var notice = new Notice(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-INGEN"), null, Outcome.MIGRERAS_INTE, null, null);
 		final var result = ReaderResults.combine(List.of(
 			new ReaderResult(List.of(candidate(Kind.TILLSYN, "5"), candidate(Kind.TILLSTAND, "10")), List.of(notice)),
 			new ReaderResult(List.of(candidate(Kind.TILLSTAND, "9"), candidate(Kind.ANMALAN, "2-FOLKOL"), candidate(Kind.ANMALAN, "10-ECIGARETTER"), candidate(Kind.ANMALAN, "2-ECIGARETTER")), List.of())));
@@ -114,6 +114,8 @@ class SourceSupportTest {
 		assertThat(PermitFiles.isCertificate("Tillståndsbevis 2023.pdf")).isTrue();
 		assertThat(PermitFiles.isCertificate("TILLSTANDS_BEVIS.pdf")).isTrue();
 		assertThat(PermitFiles.isCertificate("Mottagningsbevis.pdf")).isFalse();
+		assertThat(PermitFiles.isCertificate("Tillståndsbevis.pdf")).isTrue();
+		assertThat(PermitFiles.isDecision("Begäran om beslut.pdf")).isFalse();
 		assertThat(PermitFiles.isCertificate("Delgivningsbevis tillstånd.pdf")).isFalse();
 		assertThat(PermitFiles.isCertificate(null)).isFalse();
 	}
@@ -193,16 +195,17 @@ class SourceSupportTest {
 		final var rs = mock(ResultSet.class);
 		when(rs.getString("t")).thenReturn("  text  ");
 		when(rs.getString("blank")).thenReturn("  ");
-		when(rs.getTimestamp("d")).thenReturn(Timestamp.valueOf(LocalDateTime.of(2026, 1, 2, 23, 59)));
+		when(rs.getObject("d", LocalDateTime.class)).thenReturn(LocalDateTime.of(2026, 1, 2, 23, 59));
 		when(rs.getBoolean("f")).thenReturn(true);
 		when(rs.getInt("i")).thenReturn(5);
 		when(rs.getInt("null")).thenReturn(0);
 		when(rs.wasNull()).thenReturn(false, true);
 		when(rs.getObject("bit")).thenReturn(Boolean.TRUE);
-		when(rs.getObject("number")).thenReturn(0);
+		when(rs.getObject("zero")).thenReturn(0);
+		when(rs.getObject("one")).thenReturn((short) 1);
+		when(rs.getObject("two")).thenReturn(2);
 		when(rs.getObject("text")).thenReturn(" FALSE ");
 		when(rs.getObject("date")).thenReturn(Timestamp.valueOf(LocalDateTime.of(2026, 1, 2, 0, 0)));
-		when(rs.getObject("other")).thenReturn("GTDE");
 
 		assertThat(Rows.text(rs, "t")).isEqualTo("text");
 		assertThat(Rows.text(rs, "blank")).isNull();
@@ -214,12 +217,43 @@ class SourceSupportTest {
 		assertThat(Rows.flag(rs, "f")).isTrue();
 		assertThat(Rows.integer(rs, "i")).isEqualTo(5);
 		assertThat(Rows.integer(rs, "null")).isNull();
-		assertThat(Rows.isSet(rs, "bit")).isTrue();
-		assertThat(Rows.isSet(rs, "number")).isFalse();
-		assertThat(Rows.isSet(rs, "text")).isFalse();
-		assertThat(Rows.isSet(rs, "date")).isTrue();
-		assertThat(Rows.isSet(rs, "other")).isTrue();
-		assertThat(Rows.isSet(rs, "missing")).isFalse();
+		assertThat(Rows.bit(rs, "bit")).contains(true);
+		assertThat(Rows.bit(rs, "zero")).contains(false);
+		assertThat(Rows.bit(rs, "one")).contains(true);
+		assertThat(Rows.bit(rs, "missing")).contains(false);
+		assertThat(Rows.bit(rs, "two")).isEmpty();
+		assertThat(Rows.bit(rs, "text")).isEmpty();
+		assertThat(Rows.bit(rs, "date")).isEmpty();
+	}
+
+	@Test
+	void bitTakesZeroAndOneOfEveryWholeNumberType() throws SQLException {
+		final var rs = mock(ResultSet.class);
+		when(rs.getObject("int0")).thenReturn(0);
+		when(rs.getObject("int1")).thenReturn(1);
+		when(rs.getObject("int3")).thenReturn(3);
+		when(rs.getObject("short0")).thenReturn((short) 0);
+		when(rs.getObject("short2")).thenReturn((short) 2);
+		when(rs.getObject("byte0")).thenReturn((byte) 0);
+		when(rs.getObject("byte1")).thenReturn((byte) 1);
+		when(rs.getObject("byte3")).thenReturn((byte) 3);
+		when(rs.getObject("long0")).thenReturn(0L);
+		when(rs.getObject("long1")).thenReturn(1L);
+		when(rs.getObject("long7")).thenReturn(7L);
+		when(rs.getObject("false")).thenReturn(Boolean.FALSE);
+
+		assertThat(Rows.bit(rs, "int0")).contains(false);
+		assertThat(Rows.bit(rs, "int1")).contains(true);
+		assertThat(Rows.bit(rs, "int3")).isEmpty();
+		assertThat(Rows.bit(rs, "short0")).contains(false);
+		assertThat(Rows.bit(rs, "short2")).isEmpty();
+		assertThat(Rows.bit(rs, "byte0")).contains(false);
+		assertThat(Rows.bit(rs, "byte1")).contains(true);
+		assertThat(Rows.bit(rs, "byte3")).isEmpty();
+		assertThat(Rows.bit(rs, "long0")).contains(false);
+		assertThat(Rows.bit(rs, "long1")).contains(true);
+		assertThat(Rows.bit(rs, "long7")).isEmpty();
+		assertThat(Rows.bit(rs, "false")).contains(false);
 	}
 
 	@Test
@@ -232,6 +266,8 @@ class SourceSupportTest {
 		assertThat(jdbc.getQueryTimeout()).isEqualTo(5);
 		assertThat(jdbc.queryForObject("SELECT 1", Integer.class)).isEqualTo(1);
 		assertThat(databases.jdbcTemplate(Source.ALKT).getDataSource()).isSameAs(jdbc.getDataSource());
+		// H2 has no snapshot isolation of SQL Server, so the reads run as they are
+		assertThat(databases.<Integer>read(Source.ALKT, template -> template.queryForObject("SELECT 2", Integer.class))).isEqualTo(2);
 		assertThatThrownBy(() -> databases.jdbcTemplate(Source.ALKOL))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Källdatabasen för AlkOL är inte konfigurerad");
@@ -246,7 +282,7 @@ class SourceSupportTest {
 		assertThat(properties.errandType(ErrandType.SERVING_PERMIT).assetType()).isEqualTo("AssetSERVING_PERMIT");
 		assertThat(properties.database(Source.ALKT)).isPresent();
 		assertThat(properties.fileArea(Source.ALKT).documents()).isEqualTo("documents");
-		assertThat(properties.fileArea(Source.ALKT)).hasToString("FileAreaDirectories[configured=true]");
+		assertThat(properties.fileArea(Source.ALKT)).hasToString("FileAreaDirectories[documents=true, attachments=true]");
 		assertThat(properties.database(Source.ALKT).orElseThrow()).hasToString("Database[configured=true]");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).sourceErrandTypes()).containsOnlyKeys("it");
 

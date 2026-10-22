@@ -12,7 +12,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import se.sundsvall.aotloader.Application;
 import se.sundsvall.aotloader.api.model.ReviewException;
 import se.sundsvall.aotloader.api.model.ReviewExceptionRequest;
-import se.sundsvall.aotloader.service.MigrationService;
+import se.sundsvall.aotloader.service.ReviewExceptionService;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
@@ -34,7 +34,7 @@ class ReviewExceptionResourceTest {
 	private static final String MUNICIPALITY_ID = "2281";
 
 	@MockitoBean
-	private MigrationService service;
+	private ReviewExceptionService service;
 
 	@Autowired
 	private WebTestClient webTestClient;

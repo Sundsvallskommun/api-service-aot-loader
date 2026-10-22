@@ -9,7 +9,7 @@ public enum RunStatus {
 	COMPLETED,
 	/** Stopped on request, between two items. */
 	STOPPED,
-	/** Could not start or could not read a source. */
+	/** Could not start, could not read a source, or ended by an unexpected error. */
 	FAILED,
 	/** Was running when the application stopped. */
 	ABORTED

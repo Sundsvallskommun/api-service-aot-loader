@@ -85,6 +85,33 @@ class MigrationResourceTest {
 	}
 
 	@Test
+	void aForwardedHostIsNotTakenForThisComputer() {
+		// Through the whole chain of filters, where dept44 would otherwise honour the forwarded host
+		webTestClient.get().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.header("Host", "rebound.example.com")
+			.header("X-Forwarded-Host", "localhost")
+			.header("Forwarded", "host=localhost")
+			.exchange()
+			.expectStatus().isForbidden();
+
+		verifyNoInteractions(service);
+	}
+
+	@Test
+	void theCleanupIsNotThereUnlessTheEnvironmentTurnsItOn() {
+		webTestClient.post().uri("/{municipalityId}/migrations/cleanups", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue(new RunRequest(false, null, null, null))
+			.exchange()
+			.expectStatus().isNotFound();
+		webTestClient.post().uri("/{municipalityId}/migrations/items/ALKT/TILLSTAND/1/cleanup?dryRun=false", MUNICIPALITY_ID)
+			.exchange()
+			.expectStatus().isNotFound();
+
+		verifyNoInteractions(service);
+	}
+
+	@Test
 	void startRunWithInvalidLimitAndMunicipality() {
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
@@ -199,14 +226,14 @@ class MigrationResourceTest {
 	@Test
 	void items() {
 		final var item = new MigrationItem(Source.ALKT, Kind.TILLSTAND, "1", null, ItemStatus.KLAR, null, null, null, null, "2281", null, null, null, null, null, null, null);
-		when(service.getItems(Source.ALKT, null, ItemStatus.KLAR)).thenReturn(List.of(item));
-		when(service.getItem(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"))).thenReturn(item);
+		when(service.getItems(MUNICIPALITY_ID, Source.ALKT, null, ItemStatus.KLAR)).thenReturn(List.of(item));
+		when(service.getItem(MUNICIPALITY_ID, new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"))).thenReturn(item);
 
 		webTestClient.get().uri("/{municipalityId}/migrations/items?source=ALKT&status=KLAR", MUNICIPALITY_ID).exchange().expectStatus().isOk().expectBodyList(MigrationItem.class).hasSize(1);
 		webTestClient.get().uri("/{municipalityId}/migrations/items/ALKT/TILLSTAND/1", MUNICIPALITY_ID).exchange().expectStatus().isOk().expectBody(MigrationItem.class).isEqualTo(item);
 	}
 
 	private static Run run(final RunStatus status) {
-		return new Run(RUN_ID, MUNICIPALITY_ID, true, List.of("ALKT"), List.of("TILLSTAND"), null, null, status, null, OffsetDateTime.parse("2026-10-12T10:00:00+02:00"), null, Map.of(Outcome.MIGRERAD, 1L));
+		return new Run(RUN_ID, MUNICIPALITY_ID, true, false, List.of("ALKT"), List.of("TILLSTAND"), null, null, status, null, OffsetDateTime.parse("2026-10-12T10:00:00+02:00"), null, Map.of(Outcome.MIGRERAD, 1L));
 	}
 }

@@ -2,7 +2,6 @@ package se.sundsvall.aotloader.service;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
@@ -16,17 +15,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import se.sundsvall.aotloader.api.model.ReviewExceptionRequest;
+import se.sundsvall.aotloader.api.model.CleanupRequest;
 import se.sundsvall.aotloader.api.model.RunRequest;
 import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
 import se.sundsvall.aotloader.integration.db.MigrationRunRepository;
-import se.sundsvall.aotloader.integration.db.ReviewExceptionRepository;
 import se.sundsvall.aotloader.integration.db.RunItemRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
-import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
-import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Kind;
@@ -42,6 +38,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
@@ -62,6 +59,9 @@ class MigrationServiceTest {
 	private MigrationRunner runner;
 
 	@Mock
+	private CleanupRunner cleanupRunner;
+
+	@Mock
 	private ExecutorService executor;
 
 	@Mock
@@ -73,16 +73,13 @@ class MigrationServiceTest {
 	@Mock
 	private MigrationItemRepository itemRepository;
 
-	@Mock
-	private ReviewExceptionRepository exceptionRepository;
-
 	private final RunLock lock = new RunLock();
 	private MigrationService service;
 
 	@BeforeEach
 	void setUp() {
 		lenient().when(runner.supportedKinds()).thenReturn(Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN), Source.ALKOL, Set.of(Kind.values())));
-		service = new MigrationService(runner, lock, executor, runRepository, runItemRepository, itemRepository, exceptionRepository, CLOCK);
+		service = new MigrationService(runner, cleanupRunner, lock, executor, runRepository, runItemRepository, itemRepository, CLOCK);
 	}
 
 	@Test
@@ -152,14 +149,13 @@ class MigrationServiceTest {
 	@Test
 	void migrateItem() {
 		final var key = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		when(runner.execute(any(), eq(Map.of(Source.ALKT, Set.of(TILLSTAND))), eq(Optional.of(key)))).thenReturn(Optional.of(new ItemResult(Outcome.MIGRERAD, List.of(), null, "ALKT-1")));
 		final var line = new RunItemEntity();
 		line.setSource(Source.ALKT);
 		line.setKind(TILLSTAND);
 		line.setSourceId("1");
 		line.setOutcome(Outcome.MIGRERAD);
 		line.setErrandNumber("ALKT-1");
-		when(runItemRepository.findByRunIdOrderById(any())).thenReturn(List.of(line));
+		when(runner.execute(any(), eq(Map.of(Source.ALKT, Set.of(TILLSTAND))), eq(Optional.of(key)))).thenReturn(Optional.of(line));
 
 		final var result = service.migrateItem(MUNICIPALITY_ID, key, false);
 
@@ -203,7 +199,10 @@ class MigrationServiceTest {
 		when(runRepository.findByMunicipalityIdOrderByStartedDesc(MUNICIPALITY_ID)).thenReturn(List.of(run));
 		when(runRepository.findById("run-id")).thenReturn(Optional.of(run));
 		when(runItemRepository.findByRunIdOrderById("run-id")).thenReturn(List.of(line(Outcome.MIGRERAD), line(Outcome.FEL), line(Outcome.FEL)));
+		when(runItemRepository.findByRunIdAndOutcomeInOrderById("run-id", List.of(Outcome.FEL))).thenReturn(List.of(line(Outcome.FEL), line(Outcome.FEL)));
+		when(runItemRepository.countOutcomes("run-id")).thenReturn(List.of(count(Outcome.FEL, 2), count(Outcome.MIGRERAD, 1)));
 
+		// In the order of the outcomes, whatever order the database gives them in
 		assertThat(service.getRuns(MUNICIPALITY_ID)).singleElement().satisfies(r -> assertThat(r.outcomes()).containsExactly(Map.entry(Outcome.MIGRERAD, 1L), Map.entry(Outcome.FEL, 2L)));
 		assertThat(service.getRun(MUNICIPALITY_ID, "run-id").sources()).containsExactly("ALKT");
 		assertThat(service.getReport(MUNICIPALITY_ID, "run-id", List.of())).hasSize(3);
@@ -211,6 +210,92 @@ class MigrationServiceTest {
 		assertThat(service.getReport(MUNICIPALITY_ID, "run-id", List.of(Outcome.FEL))).hasSize(2);
 		assertThatThrownBy(() -> service.getRun("2260", "run-id"))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(NOT_FOUND));
+	}
+
+	private static RunItemRepository.OutcomeCount count(final Outcome outcome, final long amount) {
+		return new RunItemRepository.OutcomeCount() {
+
+			@Override
+			public Outcome getOutcome() {
+				return outcome;
+			}
+
+			@Override
+			public long getAmount() {
+				return amount;
+			}
+		};
+	}
+
+	@Test
+	void startCleanupIsADryRunUnlessAskedOtherwise() {
+		final var run = service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(null, List.of(Source.ALKT), null, 5));
+
+		assertThat(run.dryRun()).isTrue();
+		assertThat(run.cleanup()).isTrue();
+		assertThat(run.limit()).isEqualTo(5);
+		assertThat(lock.holder()).contains(run.id());
+		final var task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+
+		task.getValue().run();
+
+		final var entity = ArgumentCaptor.forClass(MigrationRunEntity.class);
+		verify(cleanupRunner).execute(entity.capture(), eq(Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN))), eq(Optional.empty()));
+		assertThat(entity.getValue().isCleanup()).isTrue();
+		verify(runner, never()).execute(any(), any(), any());
+		assertThat(lock.holder()).isEmpty();
+		// A cleanup holds the same lock as a run
+		service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(false, null, null, null));
+		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null)))
+			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(CONFLICT));
+	}
+
+	@Test
+	void cleanupItem() {
+		final var key = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		final var line = new RunItemEntity();
+		line.setSource(Source.ALKT);
+		line.setKind(TILLSTAND);
+		line.setSourceId("1");
+		line.setOutcome(Outcome.RENSAD);
+		when(cleanupRunner.execute(any(), eq(Map.of(Source.ALKT, Set.of(TILLSTAND))), eq(Optional.of(key)))).thenReturn(Optional.of(line));
+
+		assertThat(service.cleanupItem(MUNICIPALITY_ID, key, false).outcome()).isEqualTo(Outcome.RENSAD);
+
+		final var run = ArgumentCaptor.forClass(MigrationRunEntity.class);
+		verify(runRepository).save(run.capture());
+		assertThat(run.getValue().isCleanup()).isTrue();
+		assertThat(run.getValue().isDryRun()).isFalse();
+		assertThat(run.getValue().getItemKey()).isEqualTo("ALKT/TILLSTAND/1");
+		assertThat(lock.holder()).isEmpty();
+	}
+
+	@Test
+	void cleanupItemThatIsNotInTheStatusTable() {
+		final var key = new ItemKey(Source.ALKT, TILLSTAND, "9");
+		doAnswer(invocation -> {
+			invocation.<MigrationRunEntity>getArgument(0).setStatus(RunStatus.COMPLETED);
+			return Optional.empty();
+		}).when(cleanupRunner).execute(any(), any(), any());
+
+		assertThatThrownBy(() -> service.cleanupItem(MUNICIPALITY_ID, key, true))
+			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> {
+				assertThat(problem.getStatus()).isEqualTo(NOT_FOUND);
+				assertThat(problem.getDetail()).isEqualTo("Ärendet ALKT/TILLSTAND/9 finns inte i statustabellen");
+			});
+		assertThat(lock.holder()).isEmpty();
+	}
+
+	@Test
+	void stopCleanup() {
+		final var cleanup = runEntity(RunStatus.RUNNING);
+		cleanup.setCleanup(true);
+		when(runRepository.findById("run-id")).thenReturn(Optional.of(cleanup));
+		when(cleanupRunner.requestStop("run-id")).thenReturn(true);
+
+		assertThat(service.stopRun(MUNICIPALITY_ID, "run-id").cleanup()).isTrue();
+		verify(runner, never()).requestStop(any());
 	}
 
 	@Test
@@ -233,44 +318,18 @@ class MigrationServiceTest {
 		when(itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(item));
 		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKOL, ANMALAN, "1-FOLKOL")).thenReturn(Optional.of(item));
 
-		assertThat(service.getItems(null, null, null)).hasSize(1);
-		assertThat(service.getItems(Source.ALKOL, ANMALAN, ItemStatus.KLAR)).hasSize(1);
-		assertThat(service.getItems(Source.ALKT, null, null)).isEmpty();
-		assertThat(service.getItems(null, TILLSTAND, null)).isEmpty();
-		assertThat(service.getItems(null, null, ItemStatus.FEL)).isEmpty();
-		assertThat(service.getItem(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL")).status()).isEqualTo(ItemStatus.KLAR);
-		assertThatThrownBy(() -> service.getItem(new ItemKey(Source.ALKOL, ANMALAN, "2-FOLKOL")))
+		assertThat(service.getItems(MUNICIPALITY_ID, null, null, null)).hasSize(1);
+		assertThat(service.getItems(MUNICIPALITY_ID, Source.ALKOL, ANMALAN, ItemStatus.KLAR)).hasSize(1);
+		assertThat(service.getItems(MUNICIPALITY_ID, Source.ALKT, null, null)).isEmpty();
+		assertThat(service.getItems(MUNICIPALITY_ID, null, TILLSTAND, null)).isEmpty();
+		assertThat(service.getItems(MUNICIPALITY_ID, null, null, ItemStatus.FEL)).isEmpty();
+		assertThat(service.getItem(MUNICIPALITY_ID, new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL")).status()).isEqualTo(ItemStatus.KLAR);
+		// An item written to another municipality is not among those of the municipality asked for
+		item.setMunicipalityId("2262");
+		assertThat(service.getItems(MUNICIPALITY_ID, null, null, null)).isEmpty();
+		assertThatThrownBy(() -> service.getItem(MUNICIPALITY_ID, new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL")))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(NOT_FOUND));
-	}
-
-	@Test
-	void exceptions() {
-		final var key = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		when(exceptionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-		final var created = service.putException(key, new ReviewExceptionRequest(ExceptionOutcome.MIGRERA, " handlaggare ", null, "Kommentar"));
-
-		assertThat(created.outcome()).isEqualTo(ExceptionOutcome.MIGRERA);
-		assertThat(created.decidedBy()).isEqualTo("handlaggare");
-		assertThat(created.decidedAt()).isEqualTo(LocalDate.of(2026, 10, 12));
-		assertThat(created.sourceId()).isEqualTo("1");
-
-		final var existing = new ReviewExceptionEntity();
-		existing.setSource(Source.ALKT);
-		existing.setKind(TILLSTAND);
-		existing.setSourceId("1");
-		lenient().when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
-		when(exceptionRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(existing));
-
-		final var changed = service.putException(key, new ReviewExceptionRequest(ExceptionOutcome.MIGRERA_SOM_UTGANGET, "annan", LocalDate.of(2026, 9, 1), null));
-		assertThat(changed.outcome()).isEqualTo(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		assertThat(changed.decidedAt()).isEqualTo(LocalDate.of(2026, 9, 1));
-		assertThat(service.getExceptions()).hasSize(1);
-
-		service.deleteException(key);
-		verify(exceptionRepository).delete(existing);
-
-		assertThatThrownBy(() -> service.deleteException(new ItemKey(Source.ALKT, TILLSTAND, "2")))
+		assertThatThrownBy(() -> service.getItem(MUNICIPALITY_ID, new ItemKey(Source.ALKOL, ANMALAN, "2-FOLKOL")))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(NOT_FOUND));
 	}
 

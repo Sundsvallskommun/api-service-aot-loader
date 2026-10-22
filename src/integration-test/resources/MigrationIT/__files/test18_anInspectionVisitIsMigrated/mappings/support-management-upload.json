@@ -1,5 +1,6 @@
 {
 	"name": "support-management-upload",
+	"priority": 5,
 	"scenarioName": "attachments",
 	"newScenarioState": "Uploaded",
 	"request": {

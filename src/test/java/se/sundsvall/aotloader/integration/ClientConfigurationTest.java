@@ -1,5 +1,6 @@
 package se.sundsvall.aotloader.integration;
 
+import feign.Capability;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import java.util.ArrayList;
@@ -49,11 +50,11 @@ class ClientConfigurationTest {
 	@Mock
 	private ObjectProvider<Truststore> truststore;
 
-	private NoResendCapability noResend;
+	private NoResend noResend;
 
 	@BeforeEach
 	void setUp() {
-		noResend = new NoResendCapability(truststore);
+		noResend = new NoResend(truststore);
 	}
 
 	@Test
@@ -77,6 +78,13 @@ class ClientConfigurationTest {
 		final var template = customize("relation", repository -> RelationConfigurationAccess.customizer(repository, 10, 30, TestData.properties(), noResend), 1, true);
 
 		assertThat(template.headers()).containsEntry("X-Sent-By", List.of("alkt-migration; type=migration"));
+	}
+
+	@Test
+	void theHolderOfTheCapabilityIsNoCapability() {
+		// Spring Cloud OpenFeign adds every Capability bean to every client, and Party would then get it too
+		assertThat(Capability.class.isAssignableFrom(NoResend.class)).isFalse();
+		assertThat(noResend.customizer()).isSameAs(noResend.customizer());
 	}
 
 	@Test

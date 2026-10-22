@@ -1,6 +1,5 @@
 package se.sundsvall.aotloader.source;
 
-import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -11,6 +10,7 @@ import java.util.regex.Pattern;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.Map.entry;
@@ -120,8 +120,8 @@ public final class FilePurposes {
 	 */
 	public static FileDetails ofGenerated(final Source source, final String template, final String eventType, final LocalDateTime received) {
 		final var purpose = ofDocument(source, template);
-		return new FileDetails(purpose, received, isReferral(purpose) || isOneOf(template, INVESTIGATION_TEMPLATES.get(source))
-			|| isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
+		return new FileDetails(purpose, received, isReferral(purpose) || CodeTexts.isOneOf(template, INVESTIGATION_TEMPLATES.get(source))
+			|| CodeTexts.isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
 	}
 
 	/**
@@ -133,7 +133,7 @@ public final class FilePurposes {
 	 */
 	public static FileDetails ofAttached(final Source source, final String eventType, final String name, final LocalDateTime received) {
 		final var purpose = ofAttachment(source, eventType, name);
-		return new FileDetails(purpose, received, isReferral(purpose) || isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
+		return new FileDetails(purpose, received, isReferral(purpose) || CodeTexts.isOneOf(eventType, INVESTIGATION_EVENTS.get(source)));
 	}
 
 	/**
@@ -165,7 +165,7 @@ public final class FilePurposes {
 		final var type = Optional.ofNullable(Texts.trimToNull(eventType)).map(code -> code.toUpperCase(Locale.ROOT)).orElse("");
 		// Composed, so that an å, ä or ö written as a letter and a combining mark matches too. The flag CANON_EQ would
 		// do that in the patterns, but then their lookbehinds no longer stop a match after a letter.
-		final var lowerCase = Optional.ofNullable(name).map(text -> Normalizer.normalize(text, Normalizer.Form.NFC).toLowerCase(Locale.ROOT)).orElse("");
+		final var lowerCase = Optional.ofNullable(FileNames.normalized(name)).orElse("");
 		if (RESPONSE_EVENTS.get(source).contains(type)) {
 			return RESPONDENTS.stream()
 				.filter(respondent -> respondent.getKey().matcher(lowerCase).find())
@@ -202,9 +202,5 @@ public final class FilePurposes {
 
 	private static boolean isReferral(final String purpose) {
 		return purpose != null && REFERRALS.contains(purpose);
-	}
-
-	private static boolean isOneOf(final String code, final Set<String> codes) {
-		return Optional.ofNullable(Texts.trimToNull(code)).map(value -> codes.contains(value.toUpperCase(Locale.ROOT))).orElse(false);
 	}
 }

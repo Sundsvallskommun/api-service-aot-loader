@@ -8,13 +8,14 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.RunStatus;
 
 /**
- * A run of the migration.
+ * A run of the migration, or of a cleanup.
  *
  * @param id             the id of the run
  * @param municipalityId the municipality
  * @param dryRun         true for a dry run
+ * @param cleanup        true for a cleanup, which removes what the migration wrote to the target systems
  * @param sources        the sources read
- * @param kinds          the kinds migrated
+ * @param kinds          the kinds migrated or cleaned up
  * @param itemKey        the single item of the run, null for a full run
  * @param limit          the largest number of items written, null for no limit
  * @param status         the status of the run
@@ -23,11 +24,12 @@ import se.sundsvall.aotloader.service.model.RunStatus;
  * @param finished       when the run finished, null while it runs
  * @param outcomes       the number of report rows per outcome
  */
-@Schema(description = "A run of the migration")
+@Schema(description = "A run of the migration, or of a cleanup")
 public record Run(
 	String id,
 	String municipalityId,
 	boolean dryRun,
+	boolean cleanup,
 	List<String> sources,
 	List<String> kinds,
 	String itemKey,

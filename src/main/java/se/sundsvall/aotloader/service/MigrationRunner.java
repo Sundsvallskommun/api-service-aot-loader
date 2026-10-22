@@ -1,8 +1,5 @@
 package se.sundsvall.aotloader.service;
 
-import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -15,8 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
-import se.sundsvall.aotloader.integration.db.MigrationRunRepository;
-import se.sundsvall.aotloader.integration.db.RunItemRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -47,22 +42,17 @@ public class MigrationRunner {
 	private final ItemMigrator migrator;
 	private final Preflight preflight;
 	private final TargetGuard targetGuard;
-	private final MigrationRunRepository runRepository;
-	private final RunItemRepository runItemRepository;
+	private final RunRecords records;
 	private final AotLoaderProperties properties;
-	private final Clock clock;
 	private final Map<String, AtomicBoolean> stopFlags = new ConcurrentHashMap<>();
 
-	MigrationRunner(final List<SourceReader> readers, final ItemMigrator migrator, final Preflight preflight, final TargetGuard targetGuard, final MigrationRunRepository runRepository, final RunItemRepository runItemRepository,
-		final AotLoaderProperties properties, final Clock clock) {
+	MigrationRunner(final List<SourceReader> readers, final ItemMigrator migrator, final Preflight preflight, final TargetGuard targetGuard, final RunRecords records, final AotLoaderProperties properties) {
 		readers.forEach(reader -> this.readers.put(reader.source(), reader));
 		this.migrator = migrator;
 		this.preflight = preflight;
 		this.targetGuard = targetGuard;
-		this.runRepository = runRepository;
-		this.runItemRepository = runItemRepository;
+		this.records = records;
 		this.properties = properties;
-		this.clock = clock;
 	}
 
 	/**
@@ -72,6 +62,21 @@ public class MigrationRunner {
 		final var kinds = new EnumMap<Source, Set<Kind>>(Source.class);
 		readers.forEach((source, reader) -> kinds.put(source, reader.kinds()));
 		return kinds;
+	}
+
+	/**
+	 * Makes the stop flag of a run before the run starts, so that a stop asked for while the run waits for its thread is
+	 * taken before its first item.
+	 */
+	public void register(final String runId) {
+		stopFlags.computeIfAbsent(runId, _ -> new AtomicBoolean());
+	}
+
+	/**
+	 * Removes the stop flag of a run that never started.
+	 */
+	public void forget(final String runId) {
+		stopFlags.remove(runId);
 	}
 
 	/**
@@ -93,10 +98,10 @@ public class MigrationRunner {
 	 * @param  run    the run, saved as RUNNING
 	 * @param  scope  the sources and their kinds
 	 * @param  single the one item to migrate, empty for every item of the scope
-	 * @return        the result of the single item, whatever its outcome; empty for a full run, and when the item was not
-	 *                found or the run stopped or failed before it
+	 * @return        the row of the report of the single item, whatever its outcome, also when it could not be saved; empty
+	 *                for a full run, and when the item was not found or the run stopped or failed before it
 	 */
-	public Optional<ItemResult> execute(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
+	public Optional<RunItemEntity> execute(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
 		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
 		try {
@@ -105,14 +110,14 @@ public class MigrationRunner {
 				migrate(run, scope, single, context, progress);
 			});
 		} catch (final RuntimeException e) {
-			LOG.error("Run {} failed: {}", run.getId(), e.getClass().getSimpleName(), e);
+			LOG.error("Run {} failed: {}", run.getId(), e.getClass().getSimpleName(), ErrorTexts.forLog(e));
 			progress.fail("Körningen avbröts av ett oväntat fel: " + ErrorTexts.describe(e));
 		} catch (final Error e) {
 			progress.fail("Körningen avbröts av ett oväntat fel: " + e.getClass().getSimpleName());
 			throw e;
 		} finally {
 			stopFlags.remove(run.getId());
-			finish(run, progress);
+			records.finish(run, progress);
 		}
 		return Optional.ofNullable(progress.singleResult);
 	}
@@ -149,7 +154,7 @@ public class MigrationRunner {
 		if (progress.limitReached) {
 			progress.note("Gränsen på %d ärenden nåddes; resten tas i nästa körning".formatted(run.getItemLimit()));
 		}
-		if (single.isPresent() && progress.singleResult == null && progress.status == RunStatus.COMPLETED) {
+		if (single.isPresent() && progress.singleResult == null && progress.status() == RunStatus.COMPLETED) {
 			progress.note("Ärendet %s finns inte i källan, eller är inte ett ärende som migreras".formatted(single.get()));
 		}
 	}
@@ -168,7 +173,7 @@ public class MigrationRunner {
 			return true;
 		}
 		if (single.isEmpty()) {
-			result.get().notices().forEach(notice -> saveLine(run, notice));
+			result.get().notices().forEach(notice -> saveLine(run, notice, progress));
 		}
 		return migrateItems(run, result.get().candidates(), single, context, progress);
 	}
@@ -189,11 +194,10 @@ public class MigrationRunner {
 			context.recordOutcome(candidate.key(), result.outcome());
 			if (result.outcome() == Outcome.EJ_KORD) {
 				progress.limitReached = true;
-			} else {
-				saveLine(run, candidate, result);
-				if (single.isPresent()) {
-					progress.singleResult = result;
-				}
+			}
+			final var line = saveLine(run, candidate, result, progress);
+			if (single.isPresent()) {
+				progress.singleResult = line;
 			}
 		}
 		return true;
@@ -218,80 +222,33 @@ public class MigrationRunner {
 		return source -> new FileArea(properties.fileArea(source), properties.maxFileSize().toBytes());
 	}
 
-	private void saveLine(final MigrationRunEntity run, final Candidate candidate, final ItemResult result) {
-		final var line = newLine(run, candidate.key());
+	private RunItemEntity saveLine(final MigrationRunEntity run, final Candidate candidate, final ItemResult result, final RunProgress progress) {
+		final var line = records.newLine(run, candidate.key());
 		line.setOutcome(result.outcome());
 		line.setRules(Texts.truncate(String.join(",", result.rules()), MAX_RULES_LENGTH, null));
 		line.setDetail(ReportNotes.reportText(result.detail()));
 		line.setPlaceName(candidate.placeName());
 		line.setPlaceNumber(candidate.placeNumber());
 		line.setErrandNumber(result.errandNumber());
-		save(line);
-	}
-
-	private void saveLine(final MigrationRunEntity run, final Notice notice) {
-		final var line = newLine(run, notice.key());
-		line.setOutcome(notice.outcome());
-		line.setDetail(ReportNotes.reportText(notice.detail()));
-		line.setPlaceName(notice.placeName());
-		save(line);
-	}
-
-	private RunItemEntity newLine(final MigrationRunEntity run, final ItemKey key) {
-		final var line = new RunItemEntity();
-		line.setRunId(run.getId());
-		line.setSource(key.source());
-		line.setKind(key.kind());
-		line.setSourceId(key.sourceId());
-		line.setCreated(OffsetDateTime.now(clock));
+		records.save(line, progress);
 		return line;
 	}
 
-	private void save(final RunItemEntity line) {
-		try {
-			runItemRepository.save(line);
-		} catch (final RuntimeException e) {
-			LOG.error("The report row of {}/{}/{} could not be saved: {}", line.getSource(), line.getKind(), line.getSourceId(), e.getClass().getSimpleName());
-		}
-	}
-
-	private void finish(final MigrationRunEntity run, final Progress progress) {
-		run.setStatus(progress.status);
-		run.setFinished(OffsetDateTime.now(clock));
-		run.setMessage(ReportNotes.reportText(Texts.join("\n", progress.messages)));
-		try {
-			runRepository.save(run);
-			LOG.info("Run {} ({}) finished as {}: {}", run.getId(), run.isDryRun() ? "dry run" : "real run", progress.status, OutcomeCounts.of(runItemRepository.findByRunIdOrderById(run.getId())));
-		} catch (final RuntimeException e) {
-			LOG.error("Run {} could not be saved as {}: {}", run.getId(), progress.status, e.getClass().getSimpleName());
-		}
+	private void saveLine(final MigrationRunEntity run, final Notice notice, final RunProgress progress) {
+		final var line = records.newLine(run, notice.key());
+		line.setOutcome(notice.outcome());
+		line.setRules(notice.rule());
+		line.setDetail(ReportNotes.reportText(notice.detail()));
+		line.setPlaceName(notice.placeName());
+		records.save(line, progress);
 	}
 
 	/**
-	 * How far a run has come: its status, its messages and, for a single item, the item's result. A run that failed stays
-	 * FAILED when it is also stopped.
+	 * How far a run has come, and whether it reached its limit and, for a single item, the item's result.
 	 */
-	private static final class Progress {
+	private static final class Progress extends RunProgress {
 
-		private final List<String> messages = new ArrayList<>();
-		private RunStatus status = RunStatus.COMPLETED;
 		private boolean limitReached;
-		private ItemResult singleResult;
-
-		void note(final String message) {
-			messages.add(message);
-		}
-
-		void fail(final String message) {
-			messages.add(message);
-			status = RunStatus.FAILED;
-		}
-
-		void stop() {
-			messages.add("Körningen stoppades på begäran");
-			if (status == RunStatus.COMPLETED) {
-				status = RunStatus.STOPPED;
-			}
-		}
+		private RunItemEntity singleResult;
 	}
 }

@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -13,6 +12,7 @@ import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.source.files.SharedFileNames;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.stream.Collectors.toUnmodifiableMap;
@@ -122,7 +122,11 @@ public final class FileList {
 			.collect(toUnmodifiableMap(entry -> files.get(entry.getKey()), Map.Entry::getValue));
 	}
 
+	/**
+	 * @return the key of a file, by the name the file area finds it under; a reference that names no file keeps its own
+	 *         text, so that the file area reports it
+	 */
 	private static String keyOf(final String name, final FileFolder folder) {
-		return folder + "/" + name.toLowerCase(Locale.ROOT);
+		return folder + "/" + Optional.ofNullable(FileNames.key(name)).orElseGet(() -> FileNames.normalized(name));
 	}
 }

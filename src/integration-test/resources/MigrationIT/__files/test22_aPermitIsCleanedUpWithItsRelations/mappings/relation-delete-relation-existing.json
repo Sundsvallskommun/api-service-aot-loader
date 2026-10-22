@@ -1,0 +1,19 @@
+{
+	"name": "relation-delete-relation-existing",
+	"request": {
+		"method": "DELETE",
+		"url": "/relation/2281/relations/relation-existing",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 204
+	}
+}

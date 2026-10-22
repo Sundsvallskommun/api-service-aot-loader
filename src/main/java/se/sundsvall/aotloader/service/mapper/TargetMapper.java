@@ -51,6 +51,7 @@ import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ASSET_ORIGIN;
 import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_ERRAND_ID;
+import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.Constants.ASSET_TEXT_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_EMAIL;
@@ -84,7 +85,7 @@ public class TargetMapper {
 	static final String CONTACT_PHONE = "PHONE";
 	// Draken writes it on every stakeholder it saves
 	static final String COUNTRY = "SVERIGE";
-	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is
+	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is; not the legal basis
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
 	private static final String INVESTIGATION_ACTIVE = "ACTIVE";
 	private static final String INVESTIGATION_COMPLETED = "COMPLETED";
@@ -193,6 +194,25 @@ public class TargetMapper {
 	}
 
 	/**
+	 * @return the legal basis as long as PartyAssets takes it: the references that fit whole, without pointing to the
+	 *         errand, which does not hold the legal basis; a first reference that does not fit is cut
+	 */
+	static String legalBasisWithin(final String value) {
+		if (value == null || value.length() <= ASSET_TEXT_MAX_LENGTH) {
+			return value;
+		}
+		var kept = "";
+		for (final var reference : value.split("; ")) {
+			final var longer = kept.isEmpty() ? reference : kept + "; " + reference;
+			if (longer.length() > ASSET_TEXT_MAX_LENGTH) {
+				break;
+			}
+			kept = longer;
+		}
+		return kept.isEmpty() ? Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, null) : kept;
+	}
+
+	/**
 	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4).
 	 *
 	 * @param  candidate      the candidate
@@ -208,7 +228,7 @@ public class TargetMapper {
 		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : Texts.title(settings.assetTitle(), asset.titleSuffix());
 		final var parameters = new LinkedHashMap<String, String>();
 		parameters.put(ASSET_PARAMETER_ERRAND_ID, errandId);
-		asset.parameters().forEach((key, value) -> parameters.put(key, Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, TRUNCATED_SUFFIX)));
+		asset.parameters().forEach((key, value) -> parameters.put(key, ASSET_PARAMETER_LEGAL_BASIS.equals(key) ? legalBasisWithin(value) : Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, TRUNCATED_SUFFIX)));
 		parameters.put(PARAMETER_PREMISES_MUNICIPALITY_ID, properties.premisesMunicipalityOf(candidate.place(), municipalityId));
 		return new AssetCreateRequest()
 			.assetId(errandId)

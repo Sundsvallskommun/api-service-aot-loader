@@ -28,13 +28,13 @@
 		}
 	},
 	"response": {
-		"status": 400,
+		"status": 415,
 		"headers": {
 			"Content-Type": "application/problem+json"
 		},
 		"jsonBody": {
-			"title": "Bad Request",
-			"status": 400,
+			"title": "Unsupported Media Type",
+			"status": 415,
 			"detail": "Filen tas inte emot"
 		}
 	}

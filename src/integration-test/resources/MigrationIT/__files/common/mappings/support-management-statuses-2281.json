@@ -1,8 +1,8 @@
 {
-	"name": "support-management-roles-2281",
+	"name": "support-management-statuses-2281",
 	"request": {
 		"method": "GET",
-		"url": "/support-management/2281/AOT/metadata/roles",
+		"url": "/support-management/2281/AOT/metadata/statuses",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -20,14 +20,12 @@
 		},
 		"jsonBody": [
 			{
-				"id": "role-primary",
-				"name": "PRIMARY",
-				"displayName": "Huvudintressent"
+				"id": "status-new",
+				"name": "NEW"
 			},
 			{
-				"id": "role-contact",
-				"name": "CONTACT",
-				"displayName": "Kontakt"
+				"id": "status-closed",
+				"name": "CLOSED"
 			}
 		]
 	}

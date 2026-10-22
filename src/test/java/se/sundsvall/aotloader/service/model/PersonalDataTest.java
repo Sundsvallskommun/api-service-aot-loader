@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
+import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
@@ -68,6 +69,12 @@ class PersonalDataTest {
 		assertHidden(remark);
 		assertHidden(round);
 		assertHidden(new InspectionVisitRows(List.of(visit), Map.of(1, List.of(remark)), Map.of(), Map.of(), Map.of(), Map.of("TT", NAME), Map.of(1, round)));
+		assertHidden(new AlktSnapshot.PermitRow(1, 1, true, false, false, false, false, true, null, null, null, null, false, false, false, false, false, false, false, false, false, true, false,
+			List.of(), "100", "50", NAME + " " + NUMBER, List.of(NAME + " " + NUMBER), null, null, null, null, null, 1));
+		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", "REST", NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
+		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
+		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", List.of(new Parameter("restaurantNumber", null, List.of(NAME)))));
+		assertHidden(new InspectionCandidates.InspectionErrand(Source.ALKT, 1, "07", "Tillsyn", "AOT 2020-1", null, null, List.of(NAME), null, null));
 	}
 
 	@Test

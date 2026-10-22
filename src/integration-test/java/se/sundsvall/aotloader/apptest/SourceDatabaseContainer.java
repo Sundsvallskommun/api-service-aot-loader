@@ -47,6 +47,8 @@ public final class SourceDatabaseContainer {
 			execute("master", "ALTER DATABASE " + ALKT_DATABASE + " SET COMPATIBILITY_LEVEL = 100");
 			execute("master", "CREATE DATABASE " + ALKOL_DATABASE + " COLLATE Finnish_Swedish_CI_AS");
 			execute("master", "ALTER DATABASE " + ALKOL_DATABASE + " SET COMPATIBILITY_LEVEL = 110");
+			// AlkOL is read in one snapshot and AlkT without, so that the runs go both ways
+			execute("master", "ALTER DATABASE " + ALKOL_DATABASE + " SET ALLOW_SNAPSHOT_ISOLATION ON");
 			executeScript(ALKT_DATABASE, "/db/alkt.sql");
 			executeScript(ALKOL_DATABASE, "/db/alkol.sql");
 			execute("master", "CREATE LOGIN " + READER + " WITH PASSWORD = '" + READER_PASSWORD + "'");

@@ -19,4 +19,9 @@ public record Place(String name, String address, String zipCode, String city, St
 	public Place {
 		parameters = parameters == null ? List.of() : List.copyOf(parameters);
 	}
+
+	@Override
+	public String toString() {
+		return "Place[area=" + area + "]";
+	}
 }

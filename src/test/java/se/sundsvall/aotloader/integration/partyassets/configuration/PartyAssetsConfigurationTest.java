@@ -5,6 +5,7 @@ import feign.Response;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import se.sundsvall.aotloader.integration.Fallbacks;
 import se.sundsvall.dept44.configuration.feign.decoder.ProblemErrorDecoder;
 import se.sundsvall.dept44.problem.ThrowableProblem;
 
@@ -14,7 +15,7 @@ class PartyAssetsConfigurationTest {
 
 	@Test
 	void theAnswersTheMigrationTellsApartKeepTheirStatusAndOthersBecome502() {
-		final var decoder = new ProblemErrorDecoder(PartyAssetsConfiguration.CLIENT_ID, PartyAssetsConfiguration.bypassedStatuses());
+		final var decoder = new ProblemErrorDecoder(PartyAssetsConfiguration.CLIENT_ID, Fallbacks.BYPASSED_STATUSES);
 
 		assertThat(statusOf(decoder, 404)).isEqualTo(404);
 		assertThat(statusOf(decoder, 409)).isEqualTo(409);

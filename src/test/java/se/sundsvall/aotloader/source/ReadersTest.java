@@ -51,7 +51,7 @@ class ReadersTest {
 	void alkolReader() {
 		final var repository = mock(AlkolRepository.class);
 		final var place = new AlkolSnapshot.SalesPlaceRow(1, "Butik", null, null, null, null, null, null, null, null, null, true, true, false, false, false, null);
-		when(repository.readSnapshot()).thenReturn(new AlkolSnapshot(List.of(place), Map.of(1, new AlkolSnapshot.PermitViewRow(1, true, false, false)), Map.of(),
+		when(repository.readSnapshot()).thenReturn(new AlkolSnapshot(List.of(place), Map.of(1, new AlkolSnapshot.PermitViewRow(1, true, false, false, false)), Map.of(),
 			List.of(new AlkolSnapshot.ErrandRow(400, 1, "IT", null, null, null, null)), List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
 			new InspectionVisitRows(List.of(new VisitRow(900, 1, null, null, null, null, null, null, null)), Map.of(), Map.of(), Map.of(), Map.of())));
 		final var reader = AlkolReaderAccess.create(repository, TestData.properties(), CLOCK);

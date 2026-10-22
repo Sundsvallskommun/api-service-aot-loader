@@ -25,8 +25,7 @@ import static java.util.Collections.emptyMap;
  * @param errands       the errands by ArendeID
  * @param errandFiles   the files of the errands' events and pictures, by ArendeID
  * @param placeFiles    the files of the events without an errand, by the ObjektID of the event; an event whose errand
- *                      is
- *                      missing counts as one without an errand
+ *                      is missing counts as one without an errand
  * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
  *                      tell which file names are shared
  * @param documents     the documents AlkT generated at events, with the template each was made from
@@ -147,6 +146,11 @@ public record AlktSnapshot(
 		String utfardandeDiarienr,
 		String gtRestaurangBeteckning,
 		Integer beslutsId) {
+
+		@Override
+		public String toString() {
+			return "PermitRow[objektId=" + objektId + ", gtAgarId=" + gtAgarId + ", beslutsId=" + beslutsId + "]";
+		}
 	}
 
 	/**
@@ -172,12 +176,22 @@ public record AlktSnapshot(
 		String omrade,
 		String bifogadfil,
 		String bifogadfil2) {
+
+		@Override
+		public String toString() {
+			return "PlaceRow[objektId=" + objektId + ", agarId=" + agarId + ", objektGrupp1=" + objektGrupp1 + ", omrade=" + omrade + "]";
+		}
 	}
 
 	/**
 	 * A row of ObjVillkor.
 	 */
 	public record ConditionRow(Integer objektId, String code, String text, String validFrom, String validTo) {
+
+		@Override
+		public String toString() {
+			return "ConditionRow[objektId=" + objektId + ", code=" + code + ", validFrom=" + validFrom + ", validTo=" + validTo + "]";
+		}
 	}
 
 	/**

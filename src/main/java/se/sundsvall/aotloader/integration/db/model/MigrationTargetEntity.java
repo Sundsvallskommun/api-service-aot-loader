@@ -23,6 +23,15 @@ public class MigrationTargetEntity {
 	@Column(name = "support_management_url", nullable = false)
 	private String supportManagementUrl;
 
+	@Column(name = "namespace")
+	private String namespace;
+
+	@Column(name = "party_assets_url")
+	private String partyAssetsUrl;
+
+	@Column(name = "relation_url")
+	private String relationUrl;
+
 	@Column(name = "created", nullable = false)
 	private OffsetDateTime created;
 
@@ -40,6 +49,30 @@ public class MigrationTargetEntity {
 
 	public void setSupportManagementUrl(final String supportManagementUrl) {
 		this.supportManagementUrl = supportManagementUrl;
+	}
+
+	public String getNamespace() {
+		return namespace;
+	}
+
+	public void setNamespace(final String namespace) {
+		this.namespace = namespace;
+	}
+
+	public String getPartyAssetsUrl() {
+		return partyAssetsUrl;
+	}
+
+	public void setPartyAssetsUrl(final String partyAssetsUrl) {
+		this.partyAssetsUrl = partyAssetsUrl;
+	}
+
+	public String getRelationUrl() {
+		return relationUrl;
+	}
+
+	public void setRelationUrl(final String relationUrl) {
+		this.relationUrl = relationUrl;
 	}
 
 	public OffsetDateTime getCreated() {
@@ -62,6 +95,6 @@ public class MigrationTargetEntity {
 
 	@Override
 	public String toString() {
-		return "MigrationTargetEntity [id=" + id + ", supportManagementUrl=" + supportManagementUrl + ", created=" + created + "]";
+		return "MigrationTargetEntity [id=" + id + ", supportManagementUrl=" + supportManagementUrl + ", namespace=" + namespace + ", partyAssetsUrl=" + partyAssetsUrl + ", relationUrl=" + relationUrl + ", created=" + created + "]";
 	}
 }

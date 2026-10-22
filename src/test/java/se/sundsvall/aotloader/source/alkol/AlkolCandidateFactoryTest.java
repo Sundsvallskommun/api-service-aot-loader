@@ -58,6 +58,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_DATE_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_OF_FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_ONLY_FLAG;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_COPY_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
@@ -65,6 +66,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 
 class AlkolCandidateFactoryTest {
@@ -77,7 +79,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, true))
 			.owner(owner(10, "556677-8899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), 50))
 			.errand(new ErrandRow(101, 1, "WADE", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
 			.errand(new ErrandRow(102, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
@@ -150,9 +152,9 @@ class AlkolCandidateFactoryTest {
 			.place(place(2, 10))
 			.place(place(3, 10))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false))
-			.view(new PermitViewRow(2, true, false, false))
-			.view(new PermitViewRow(3, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(2, true, false, false, false))
+			.view(new PermitViewRow(3, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", null, LocalDate.of(2019, 7, 1), null))
 			.errand(new ErrandRow(101, 1, "WADE", "IAN-2023-1", null, LocalDate.of(2023, 3, 1), null))
 			.errand(new ErrandRow(200, 2, "WADE", "IAN-2019-2", null, LocalDate.of(2019, 7, 1), null))
@@ -202,7 +204,7 @@ class AlkolCandidateFactoryTest {
 			.place(place(1, 10).withFlags(true, true, false, false))
 			.place(place(2, 10).withFlags(true, false, true, false))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", null, LocalDate.of(2019, 7, 1), null))
 			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null))
 			.event(new EventRow(300, 1, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-1.pdf"))
@@ -212,8 +214,9 @@ class AlkolCandidateFactoryTest {
 			.event(new EventRow(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-2.pdf"))
 			.event(new EventRow(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, null, "ecig-2.pdf"))
 			.event(new EventRow(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "egentillsyn-2.pdf"))
-			// A drawing and a letter among the place's other events follow its notifications' errands, not their posts
+			// A drawing among the place's other events follows its notifications' errands, not their posts
 			.event(new EventRow(306, 2, null, "016", LocalDateTime.of(2020, 1, 4, 9, 0), null, null, null, "Planritning butik.pdf"))
+			// A letter that confirms e-cigarettes, by its template, goes to that notification and its post only
 			.event(new EventRow(307, 2, null, "023", LocalDateTime.of(2020, 1, 5, 9, 0), null, "BekEci", "77777777.rtf", null));
 
 		final var permit = data.factory().permits().candidates().getFirst();
@@ -228,14 +231,15 @@ class AlkolCandidateFactoryTest {
 		assertThat(notifications).extracting(Candidate::key, Candidate::files).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new FileReference("folkol-1.pdf", ATTACHMENTS))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
-				new FileReference("Planritning butik.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))),
+				new FileReference("Planritning butik.pdf", ATTACHMENTS))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
 				new FileReference("Planritning butik.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))));
 		// The notifications get the attachments of the events that register their product on their post too
 		assertThat(notifications).extracting(Candidate::key, Candidate::assetFiles).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-1.pdf", ATTACHMENTS), null))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-2.pdf", ATTACHMENTS), null))),
-			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new AssetFile(new FileReference("ecig-2.pdf", ATTACHMENTS), null))));
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new AssetFile(new FileReference("ecig-2.pdf", ATTACHMENTS), null),
+				new AssetFile(new FileReference("77777777.rtf", DOCUMENTS), null))));
 	}
 
 	@Test
@@ -281,7 +285,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, true))
 			.owner(owner(10, "556677-8899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
 			.errand(new ErrandRow(101, 1, "WAAÄ", "IAN-2021-1", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), null, null, "bilaga.pdf"))
@@ -309,7 +313,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).ceased())
 			.owner(owner(10, "556677-8899"))
-			.view(new PermitViewRow(1, false, false, false))
+			.view(new PermitViewRow(1, false, false, false, false))
 			.errand(new ErrandRow(100, 1, "WAPH", null, null, null, 50))
 			.decision(new DecisionRow(200, 100, "GTPH", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
 			.decision(new DecisionRow(201, 100, "GTDEÅ", LocalDateTime.of(2022, 1, 1, 10, 0), null, null, null, null))
@@ -332,8 +336,8 @@ class AlkolCandidateFactoryTest {
 	void tobaccoPermitWithoutGrantOwnerOrPlace() {
 		final var data = new Data()
 			.place(place(1, 99))
-			.view(new PermitViewRow(1, true, false, false))
-			.view(new PermitViewRow(2, true, false, false));
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(2, true, false, false, false));
 
 		final var candidates = data.factory().permits().candidates();
 
@@ -352,11 +356,11 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, false))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Komplett ansökan", List.of("2", "9")))
 			// The errand of another place has the note its place shows as a parameter already
 			.place(place(2, 10))
-			.view(new PermitViewRow(2, true, false, false))
+			.view(new PermitViewRow(2, true, false, false, false))
 			.errand(new ErrandRow(101, 2, "WADE", "IAN-2019-2", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Notering 2"))
 			.decision(new DecisionRow(1001, 101, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
 			// The permit is valid from a later day, but the trial was completed when the grant was decided
@@ -402,10 +406,10 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "556677-8899"))
 			.owner(owner(11, "5566778899"))
 			.owner(owner(12, "12345"))
-			.view(new PermitViewRow(1, true, false, false))
-			.view(new PermitViewRow(2, true, false, false))
-			.view(new PermitViewRow(3, true, false, false))
-			.view(new PermitViewRow(4, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(2, true, false, false, false))
+			.view(new PermitViewRow(3, true, false, false, false))
+			.view(new PermitViewRow(4, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), null))
 			.errand(new ErrandRow(101, 2, "WADE", "ian 1", null, LocalDate.of(2019, 7, 1), null))
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
@@ -442,7 +446,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withOwnerCopy("19121212-1212"))
 			.owner(owner(10, "121212+1212"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-1", null, LocalDate.of(2019, 7, 1), 50))
 			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 7, 2), "TILLSTT", "bevis.rtf", null))
 			.applicant(new ContactRow(50, "191212121212", "Tolvan", null, null, null, null, null, null, null));
@@ -458,7 +462,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withCategory("lbk"))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false));
+			.view(new PermitViewRow(1, true, false, false, false));
 
 		final var candidate = data.factory().permits().candidates().getFirst();
 
@@ -549,7 +553,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, false))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), null, null))
 			.errand(new ErrandRow(101, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null))
 			.errand(new ErrandRow(102, 1, "SÖL", null, LocalDate.of(2015, 1, 1), null, null))
@@ -567,7 +571,7 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10))
 			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(400, 1, "Tills", "TIL-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), 50, "Klagomål", List.of("2")))
 			.errand(new ErrandRow(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
 			.errand(new ErrandRow(402, 2, "IT", null, LocalDate.of(2020, 1, 1), null, null))
@@ -607,7 +611,7 @@ class AlkolCandidateFactoryTest {
 	void theFilesOfAnInspectionReportAreMaterialOfTheInvestigation() {
 		final var data = new Data()
 			.place(place(1, 10))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(400, 1, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
 			.event(new EventRow(600, 1, 400, "063", LocalDateTime.of(2020, 1, 10, 9, 0), null, null, null, "rapport.pdf"))
 			.event(new EventRow(601, 1, 400, "024", LocalDateTime.of(2020, 1, 11, 9, 0), null, null, null, "anteckning.pdf"));
@@ -623,7 +627,7 @@ class AlkolCandidateFactoryTest {
 	void anInspectionErrandStillOpenEndsAtItsLatestEventOrDecision() {
 		final var data = new Data()
 			.place(place(1, 10))
-			.view(new PermitViewRow(1, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(new ErrandRow(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
 			.decision(new DecisionRow(500, 401, "VT", LocalDateTime.of(2020, 3, 1, 9, 0), null, null, null, null))
 			.event(new EventRow(600, 1, 401, "024", LocalDateTime.of(2020, 3, 5, 10, 0), null, null, null, null))
@@ -655,8 +659,8 @@ class AlkolCandidateFactoryTest {
 		final var data = new Data()
 			.place(place(1, 10))
 			.place(place(3, 10).ceased())
-			.view(new PermitViewRow(1, true, false, false))
-			.view(new PermitViewRow(3, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(3, true, false, false, false))
 			.errand(new ErrandRow(400, 1, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
 			.errand(new ErrandRow(404, 3, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null));
 
@@ -671,8 +675,8 @@ class AlkolCandidateFactoryTest {
 			.place(place(1, 10))
 			.place(place(2, 10))
 			.place(place(3, 10).ceased())
-			.view(new PermitViewRow(1, true, false, false))
-			.view(new PermitViewRow(3, true, false, false))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(3, true, false, false, false))
 			.visit(new VisitRow(900, 1, LocalDate.of(2024, 5, 3), null, "21:30", "22:15", "Kontr", "Köpet nekades.", "55555555.rtf", "protokoll.pdf", List.of("4"), null, 7,
 				List.of("Tobak", "E-cigaretter"), true))
 			.round(new RoundRow(7, "Kontrollköp vecka 18", LocalDate.of(2024, 5, 3), LocalDate.of(2024, 5, 3), null))
@@ -733,6 +737,151 @@ class AlkolCandidateFactoryTest {
 		assertThat(new AlkolCandidateFactory(data.build(), TODAY, allPlaces).visits().candidates()).extracting(candidate -> candidate.key().sourceId())
 			.as("A ceased sales place gets no visits, whatever the settings say")
 			.containsExactly("900", "901", "903");
+	}
+
+	@Test
+	void theRegistrationsOfAFormerHolderStayOnTheErrand() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			.applicant(new ContactRow(50, "5599887766", "Förra ägaren", null, null, null, null, null, null, null))
+			.applicant(new ContactRow(51, "556677-8899", "Bolaget", null, null, null, null, null, null, null))
+			.errand(new ErrandRow(100, 1, "Fföl", "IAN-2009-1", LocalDate.of(2009, 1, 10), LocalDate.of(2009, 3, 1), 50))
+			.event(new EventRow(300, 1, 100, "014", LocalDateTime.of(2009, 1, 10, 9, 0), null, null, null, "anmalan-a.pdf"))
+			.event(new EventRow(301, 1, null, "BeaFol", LocalDateTime.of(2009, 2, 5, 9, 0), null, "BekFol", "11111111.rtf", null))
+			.errand(new ErrandRow(101, 1, "SÖL", "IAN-2019-1", LocalDate.of(2019, 5, 1), LocalDate.of(2019, 6, 1), 51))
+			.event(new EventRow(302, 1, 101, "015", LocalDateTime.of(2019, 5, 1, 9, 0), null, null, null, "anmalan-b.pdf"))
+			.event(new EventRow(303, 1, null, "023", LocalDateTime.of(2019, 5, 10, 9, 0), null, "MotFol", "22222222.rtf", null));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(notification.files()).containsExactlyInAnyOrder(new FileReference("anmalan-a.pdf", ATTACHMENTS), new FileReference("11111111.rtf", DOCUMENTS),
+			new FileReference("anmalan-b.pdf", ATTACHMENTS), new FileReference("22222222.rtf", DOCUMENTS));
+		assertThat(notification.assetFiles()).extracting(AssetFile::reference)
+			.containsExactlyInAnyOrder(new FileReference("anmalan-b.pdf", ATTACHMENTS), new FileReference("22222222.rtf", DOCUMENTS));
+		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(NOTIFICATION_OF_FORMER_HOLDER, "ArendeID 100, diarienummer IAN-2009-1"));
+		assertThat(notification.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
+		assertThat(parameters(notification)).containsEntry("anmald", List.of("2019-05-01")).containsEntry("diarienummer", List.of("IAN-2019-1"));
+	}
+
+	@Test
+	void aNotificationOnlyAFormerHolderMadeIsHeldForReview() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			.applicant(new ContactRow(50, "5599887766", "Förra ägaren", null, null, null, null, null, null, null))
+			.errand(new ErrandRow(100, 1, "Fföl", null, LocalDate.of(2009, 1, 10), LocalDate.of(2009, 3, 1), 50))
+			.event(new EventRow(300, 1, 100, "014", LocalDateTime.of(2009, 1, 10, 9, 0), null, null, null, "anmalan-a.pdf"));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.containsExactly(tuple(NOTIFICATION_OF_FORMER_HOLDER, "ArendeID 100"), tuple(APPLICANT_NOT_OWNER, "anmälan är gjord av en tidigare ägare"));
+		assertThat(notification.assetFiles()).isEmpty();
+		assertThat(parameters(notification)).containsEntry("anmald", List.of("2009-01-10"));
+	}
+
+	@Test
+	void aConfirmationDoesNotDecideWhetherFolkolIsServed() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			.errand(new ErrandRow(100, 1, "SÖL", "IAN-2020-1", LocalDate.of(2020, 1, 10), LocalDate.of(2020, 2, 1), null))
+			.event(new EventRow(300, 1, null, "015", LocalDateTime.of(2020, 1, 10, 9, 0), null, null, null, null))
+			.event(new EventRow(301, 1, null, "BeaFol", LocalDateTime.of(2020, 1, 14, 9, 0), null, null, null, "bekraftelse.pdf"));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(notification.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
+		assertThat(notification.assetFiles()).extracting(AssetFile::reference).containsExactly(new FileReference("bekraftelse.pdf", ATTACHMENTS));
+	}
+
+	@Test
+	void theTextsOfANotificationGoInItsEventLogAndItsErrandsNotes() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			.errand(new ErrandRow(100, 1, "Fföl", "IAN-2020-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null, "Anteckning om anmälan"))
+			.event(new EventRow(300, 1, 100, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, null, "Anmälan om folköl"))
+			.event(new EventRow(301, 1, null, "BeaFol", LocalDateTime.of(2020, 1, 5, 9, 0), null, null, null, null, "Bekräftelse skickad"))
+			// The place has no permit, so its other events without an errand go to the notification too
+			.event(new EventRow(302, 1, null, "024", LocalDateTime.of(2020, 3, 1, 9, 0), null, null, null, null, "Samtal med butiken"));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(parameters(notification)).containsEntry("noteringar", List.of("Anteckning om anmälan"))
+			.containsEntry("handelselogg", List.of("2020-01-01 014: Anmälan om folköl", "2020-01-05 BeaFol: Bekräftelse skickad", "2020-03-01 Anteckningar: Samtal med butiken"));
+	}
+
+	@Test
+	void aNotificationErrandWithoutAnOpeningDayIsDatedByTheDayItWasRegistered() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(false, false, true, false))
+			.owner(owner(10, "5566778899"))
+			.errand(new ErrandRow(100, 1, "ec", "IAN-1", null, LocalDate.of(2015, 4, 1), null, null, List.of(), LocalDate.of(2015, 3, 2)));
+
+		final var notification = data.factory().notifications().candidates().getFirst();
+
+		assertThat(notification.ruleHits()).isEmpty();
+		assertThat(parameters(notification)).containsEntry("anmald", List.of("2015-03-02"));
+	}
+
+	@Test
+	void decisionsWithoutADateArePlacedByTheirIds() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.place(place(2, 10))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(2, true, false, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(101, 2, "WADE", "IAN-2019-2", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null))
+			// An ending entered after the grant, without a date
+			.decision(new DecisionRow(201, 100, "GTDEÅ", null, null, null, null, null))
+			.decision(new DecisionRow(202, 101, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "22222222.rtf", null))
+			// A grant entered after the dated one, without a date
+			.decision(new DecisionRow(203, 101, "GTDE", null, null, null, null, null));
+
+		final var permits = data.factory().permits().candidates();
+
+		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ENDED, "GTDEÅ utan datum"));
+		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "det beviljande beslutet 203 saknar datum och kan vara det senaste"));
+		assertThat(parameters(permits.get(1))).containsEntry("utfardat", List.of("2019-07-01"));
+	}
+
+	@Test
+	void aKindOfPermitTheViewDoesNotHoldIsHeldForReview() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, true))
+			.errand(new ErrandRow(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, "TillstT", "11111111.rtf", null));
+
+		assertThat(data.factory().permits().candidates().getFirst().ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(UNPARSEABLE, "tillståndstypen i FS_GT_Tobak går inte att tolka"));
+	}
+
+	@Test
+	void theInspectionsOfAPlaceWhosePermitHasEndedAreNotMigrated() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.place(place(2, 10))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(2, true, false, false, false))
+			.errand(new ErrandRow(100, 1, "WADE", null, LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.errand(new ErrandRow(101, 2, "WADE", null, LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.decision(new DecisionRow(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(201, 101, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
+			.decision(new DecisionRow(202, 101, "GTDEU", LocalDateTime.of(2021, 3, 1, 10, 0), null, null, null, null))
+			.errand(new ErrandRow(400, 1, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.errand(new ErrandRow(401, 2, "Tills", null, LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.visit(new VisitRow(900, 1, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null))
+			.visit(new VisitRow(901, 2, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null));
+
+		assertThat(data.factory().inspections().candidates()).extracting(candidate -> candidate.key().sourceId()).containsExactly("400");
+		assertThat(data.factory().visits().candidates()).extracting(candidate -> candidate.key().sourceId()).containsExactly("900");
 	}
 
 	private static Map<String, List<String>> parameters(final Candidate candidate) {

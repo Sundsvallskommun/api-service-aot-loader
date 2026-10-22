@@ -26,7 +26,11 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.Texts;
 
+import static se.sundsvall.aotloader.Constants.ERRAND_NUMBER_MAX_LENGTH;
+import static se.sundsvall.aotloader.Constants.PLACE_NAME_MAX_LENGTH;
+import static se.sundsvall.aotloader.Constants.PLACE_NUMBER_MAX_LENGTH;
 import static se.sundsvall.aotloader.service.model.ItemStatus.ARENDE_SKAPAT;
 import static se.sundsvall.aotloader.service.model.ItemStatus.BILAGOR_KLARA;
 import static se.sundsvall.aotloader.service.model.ItemStatus.GRANSKAS;
@@ -70,7 +74,8 @@ public class ItemMigrator {
 	}
 
 	/**
-	 * Takes the item as far as it can go. Never throws: whatever goes wrong is in the result.
+	 * Takes the item as far as it can go. Never throws: whatever goes wrong is in the result, also a status table that
+	 * cannot be read.
 	 *
 	 * @param  candidate the item
 	 * @param  context   the run
@@ -78,7 +83,14 @@ public class ItemMigrator {
 	 */
 	public ItemResult process(final Candidate candidate, final RunContext context) {
 		final var key = candidate.key();
-		final var existing = itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId());
+		final Optional<MigrationItemEntity> existing;
+		try {
+			existing = itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId());
+		} catch (final RuntimeException e) {
+			final var message = ErrorTexts.describe(e);
+			LOG.warn("Item {} could not be read from the status table: {}", key, message);
+			return new ItemResult(Outcome.FEL, List.of(), "Steg %s: statustabellen gick inte att läsa: %s".formatted(Step.LAS_OCH_BEDOM.getDisplayName(key.kind()), message), null);
+		}
 		if (existing.isPresent() && existing.get().getStatus() == KLAR) {
 			return alreadyMigrated(candidate, context, existing.get());
 		}
@@ -122,8 +134,9 @@ public class ItemMigrator {
 			entity.setCreated(now);
 		}
 		entity.setErrandType(candidate.type());
-		entity.setPlaceName(candidate.placeName());
-		entity.setPlaceNumber(candidate.placeNumber());
+		entity.setPlaceName(Texts.truncate(candidate.placeName(), PLACE_NAME_MAX_LENGTH, null));
+		entity.setPlaceNumber(Texts.truncate(candidate.placeNumber(), PLACE_NUMBER_MAX_LENGTH, null));
+		entity.setErrandNumber(Texts.truncate(entity.getErrandNumber(), ERRAND_NUMBER_MAX_LENGTH, null));
 		entity.setStatus(status);
 		if (status != ItemStatus.FEL) {
 			entity.setFailedStep(null);
@@ -177,20 +190,21 @@ public class ItemMigrator {
 			final var parties = partyResolver.resolve(candidate, municipalityId, context, hits, notes);
 			step = Step.LAS_OCH_BEDOM;
 			final var assessment = assess(hits);
-			if (assessment.decision() == Decision.REVIEW) {
-				return stop(GRANSKAS, Outcome.GRANSKAS, reportTexts(assessment.reasons()));
-			}
-			if (assessment.decision() == Decision.NOT_MIGRATED) {
-				return stop(MIGRERAS_INTE, Outcome.MIGRERAS_INTE, reportTexts(assessment.reasons()));
+			if (assessment.decision() == Decision.REVIEW || assessment.decision() == Decision.NOT_MIGRATED) {
+				if (wasActivated(municipalityId)) {
+					return activatedBefore();
+				}
+				return assessment.decision() == Decision.REVIEW
+					? stop(GRANSKAS, Outcome.GRANSKAS, reportTexts(assessment.reasons()))
+					: stop(MIGRERAS_INTE, Outcome.MIGRERAS_INTE, reportTexts(assessment.reasons()));
 			}
 			final var relationPlan = relationPlanner.plan(candidate, context, notes);
 			if (relationPlan.waits()) {
-				return stop(VANTAR, Outcome.VANTAR, List.of(relationPlan.waitReason()));
+				return wasActivated(municipalityId) ? activatedBefore() : stop(VANTAR, Outcome.VANTAR, List.of(relationPlan.waitReason()));
 			}
 			if (context.dryRun()) {
 				fileUploader.check(candidate, context, notes);
-				fileUploader.withLegalBasis(candidate, context, notes);
-				noteTruncatedParameters();
+				noteTruncatedParameters(fileUploader.withLegalBasis(candidate, context, notes));
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -210,6 +224,7 @@ public class ItemMigrator {
 			saveAs(TILLSTANDSHAVARE_KLAR);
 
 			step = Step.ARENDE;
+			final var earlierErrandId = entity.getErrandId();
 			final var errand = targets.ensureErrand(candidate, municipalityId, entity.getErrandId(), parties, context.labelIds(municipalityId));
 			if (entity.getErrandId() != null && !entity.getErrandId().equals(errand.getId())) {
 				forgetGoneErrand();
@@ -224,8 +239,8 @@ public class ItemMigrator {
 
 			step = Step.BILAGOR;
 			if (!active) {
-				fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
-				fileUploader.linkToInvestigation(candidate, municipalityId, errand.getId(), notes);
+				final var material = fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
+				fileUploader.linkToInvestigation(candidate, municipalityId, errand.getId(), material, notes);
 			}
 			saveAs(BILAGOR_KLARA);
 
@@ -235,7 +250,7 @@ public class ItemMigrator {
 					entity.setPartyAssetsId(targets.findMigratedAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, notes));
 					entity.setAssetId(errand.getId());
 				} else {
-					writeAsset(municipalityId, errand.getId(), parties, expired);
+					writeAsset(municipalityId, errand.getId(), parties, expired, errand.getId().equals(earlierErrandId));
 				}
 				saveAs(TILLSTAND_SKAPAT);
 			}
@@ -257,37 +272,45 @@ public class ItemMigrator {
 
 		/**
 		 * Tells in the report which parameters of the post PartyAssets takes only cut to 255 characters, since a certificate
-		 * the
-		 * new system renders from them would show them cut.
+		 * the new system renders from them would show them cut.
+		 *
+		 * @param withLegalBasis the candidate with the legal basis read from its documents, which is one of the parameters
 		 */
-		private void noteTruncatedParameters() {
-			Optional.ofNullable(candidate.asset()).map(TargetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
+		private void noteTruncatedParameters(final Candidate withLegalBasis) {
+			Optional.ofNullable(withLegalBasis.asset()).map(TargetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
 				.ifPresent(keys -> notes.line("Parametrar som kortas till 255 tecken i PartyAssets: " + String.join(", ", keys)));
 		}
 
 		/**
 		 * Makes the post in PartyAssets of an item whose errand is a draft, or brings the one an earlier run made up to date,
-		 * with its legal basis and its files. An EXPIRED post is ACTIVE while it gets the files it lacks, since an EXPIRED
-		 * post takes none.
+		 * with its legal basis and its files. A post that is to be EXPIRED is ACTIVE while it gets its content and the files it
+		 * lacks, since an EXPIRED post takes neither, and EXPIRED once at the end.
 		 */
-		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired) {
+		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
 			final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
-			noteTruncatedParameters();
-			final var partyAssetsId = targets.ensureAsset(withLegalBasis, municipalityId, errandId, entity.getPartyAssetsId(), parties, expired, notes);
+			noteTruncatedParameters(withLegalBasis);
+			final var post = targets.ensureAsset(withLegalBasis, municipalityId, errandId, entity.getPartyAssetsId(), parties, expired, earlierErrand, notes);
+			final var partyAssetsId = post.id();
 			entity.setPartyAssetsId(partyAssetsId);
 			entity.setAssetId(errandId);
 			if (!expired) {
 				fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-			} else if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) > 0) {
-				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
-				try {
-					fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-				} catch (final RuntimeException e) {
-					restoreExpired(municipalityId, partyAssetsId, e);
-					throw e;
-				}
-				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
+				return;
 			}
+			// An EXPIRED post is ACTIVE while it gets its files, and EXPIRED once at the end
+			if (post.status() == Status.EXPIRED) {
+				if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
+					return;
+				}
+				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
+			}
+			try {
+				fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+			} catch (final RuntimeException e) {
+				restoreExpired(municipalityId, partyAssetsId, e);
+				throw e;
+			}
+			targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
 		}
 
 		/**
@@ -332,6 +355,27 @@ public class ItemMigrator {
 			entity.setAssetId(null);
 			entity.setPartyAssetsId(null);
 			entity.setRelationId(null);
+		}
+
+		/**
+		 * @return true when an earlier run activated the errand of the item, although the status table does not say so
+		 */
+		private boolean wasActivated(final String municipalityId) {
+			return entity != null && entity.getErrandId() != null && targets.isActive(municipalityId, entity.getErrandId());
+		}
+
+		/**
+		 * Counts an item whose errand an earlier run activated as migrated, rather than stopping it as a draft: activating is
+		 * the last step, so everything before it was done, and changes in the source since are not carried over (decision 11).
+		 * A relation that waits for its permit is added by a later run.
+		 */
+		private ItemResult activatedBefore() {
+			notes.lineFirst("Ärendet %s är redan aktivt i SupportManagement och räknas som migrerat. Ändringar i källan efter det förs inte över (beslut 11)"
+				.formatted(Optional.ofNullable(entity.getErrandNumber()).orElse(entity.getErrandId())));
+			if (!context.dryRun()) {
+				saveAs(KLAR);
+			}
+			return notes.result(Outcome.REDAN_MIGRERAD, errandNumber());
 		}
 
 		/**

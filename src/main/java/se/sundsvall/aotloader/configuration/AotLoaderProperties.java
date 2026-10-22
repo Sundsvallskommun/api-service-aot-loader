@@ -233,7 +233,7 @@ public record AotLoaderProperties(
 
 		@Override
 		public String toString() {
-			return "FileAreaDirectories[configured=" + (documents != null && !documents.isBlank()) + "]";
+			return "FileAreaDirectories[documents=" + (documents != null && !documents.isBlank()) + ", attachments=" + (attachments != null && !attachments.isBlank()) + "]";
 		}
 	}
 }

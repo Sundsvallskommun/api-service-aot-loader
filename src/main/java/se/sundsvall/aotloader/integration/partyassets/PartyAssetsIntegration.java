@@ -7,6 +7,7 @@ import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import se.sundsvall.aotloader.integration.Fallbacks;
 import se.sundsvall.aotloader.integration.FileRefusal;
 import se.sundsvall.aotloader.support.ByteArrayMultipartFile;
 import se.sundsvall.aotloader.support.Locations;
@@ -30,14 +31,7 @@ public class PartyAssetsIntegration {
 	 * @return the post, or empty when there is none with the id
 	 */
 	public Optional<Asset> getAsset(final String municipalityId, final String id) {
-		try {
-			return Optional.ofNullable(client.getAsset(municipalityId, id));
-		} catch (final ThrowableProblem problem) {
-			if (problem.getStatus() == NOT_FOUND) {
-				return Optional.empty();
-			}
-			throw problem;
-		}
+		return Fallbacks.unless(NOT_FOUND, Optional.empty(), () -> Optional.ofNullable(client.getAsset(municipalityId, id)));
 	}
 
 	/**
@@ -58,23 +52,28 @@ public class PartyAssetsIntegration {
 	 * @return the internal id of the created post, or empty when PartyAssets answers that it already exists
 	 */
 	public Optional<String> createAsset(final String municipalityId, final String sourceReference, final AssetCreateRequest request) {
-		try {
-			return Optional.of(Locations.idOf(client.createAsset(municipalityId, sourceReference, request), "posten i PartyAssets"));
-		} catch (final ThrowableProblem problem) {
-			if (problem.getStatus() == CONFLICT) {
-				return Optional.empty();
-			}
-			throw problem;
-		}
+		return Fallbacks.unless(CONFLICT, Optional.empty(), () -> Optional.of(Locations.idOf(client.createAsset(municipalityId, sourceReference, request), "posten i PartyAssets")));
 	}
 
 	/**
 	 * Changes the post. What the request leaves out stays as it is, and PartyAssets refuses a change of more than the
-	 * status
-	 * and its reason unless the post is ACTIVE or TEMPORARY.
+	 * status and its reason unless the post is ACTIVE or TEMPORARY.
 	 */
 	public void updateAsset(final String municipalityId, final String id, final AssetUpdateRequest request) {
 		client.updateAsset(municipalityId, id, request);
+	}
+
+	/**
+	 * Deletes the post with its attachments. The relation PartyAssets wrote for the post stays, and is the caller's to
+	 * delete.
+	 *
+	 * @return true when the post was deleted, false when there was none with the id
+	 */
+	public boolean deleteAsset(final String municipalityId, final String id) {
+		return Fallbacks.unless(NOT_FOUND, false, () -> {
+			client.deleteAsset(municipalityId, id);
+			return true;
+		});
 	}
 
 	/**
@@ -97,7 +96,7 @@ public class PartyAssetsIntegration {
 			client.createAttachment(municipalityId, id, new ByteArrayMultipartFile(PartyAssetsClient.ATTACHMENT_PART, fileName, content), category);
 			return true;
 		} catch (final ThrowableProblem problem) {
-			if (FileRefusal.isRefusal(problem)) {
+			if (FileRefusal.isRefusedByPartyAssets(problem)) {
 				return false;
 			}
 			throw problem;

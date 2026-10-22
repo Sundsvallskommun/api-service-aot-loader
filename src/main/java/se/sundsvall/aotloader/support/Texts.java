@@ -90,17 +90,20 @@ public final class Texts {
 		if (end.length() >= maxLength) {
 			throw new IllegalArgumentException("The suffix must be shorter than the maximum length");
 		}
-		return value.substring(0, maxLength - end.length()).stripTrailing() + end;
+		return value.substring(0, cutBefore(value, maxLength - end.length())).stripTrailing() + end;
 	}
 
 	/**
 	 * Splits a value into parts of at most the maximum length, at a blank when there is one in the second half of a part.
 	 *
 	 * @param  value     the value, may be null
-	 * @param  maxLength the maximum length of a part
+	 * @param  maxLength the maximum length of a part, at least 2
 	 * @return           the parts, empty for a blank value
 	 */
 	public static List<String> split(final String value, final int maxLength) {
+		if (maxLength < 2) {
+			throw new IllegalArgumentException("The maximum length must be at least 2");
+		}
 		final var remaining = trimToNull(value);
 		final var parts = new ArrayList<String>();
 		if (remaining == null) {
@@ -110,7 +113,7 @@ public final class Texts {
 		while (rest.length() > maxLength) {
 			var cut = rest.lastIndexOf(' ', maxLength);
 			if (cut < maxLength / 2) {
-				cut = maxLength;
+				cut = cutBefore(rest, maxLength);
 			}
 			parts.add(rest.substring(0, cut).strip());
 			rest = rest.substring(cut).strip();
@@ -119,6 +122,14 @@ public final class Texts {
 			parts.add(rest);
 		}
 		return parts;
+	}
+
+	/**
+	 * @return the index to cut the value at to keep at most the length, one less when the cut would part a character
+	 *         written as two, such as an emoji
+	 */
+	private static int cutBefore(final String value, final int length) {
+		return length > 0 && Character.isHighSurrogate(value.charAt(length - 1)) && Character.isLowSurrogate(value.charAt(length)) ? length - 1 : length;
 	}
 
 	/**

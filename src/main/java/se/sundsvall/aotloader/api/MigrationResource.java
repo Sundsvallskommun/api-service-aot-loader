@@ -179,7 +179,7 @@ class MigrationResource {
 		@Parameter(name = "kind", description = "Only items of the kind") @RequestParam(name = "kind", required = false) final Kind kind,
 		@Parameter(name = "status", description = "Only items with the status") @RequestParam(name = "status", required = false) final ItemStatus status) {
 
-		return ok(service.getItems(source, kind, status));
+		return ok(service.getItems(municipalityId, source, kind, status));
 	}
 
 	@GetMapping(path = "/items/{source}/{kind}/{sourceId}", produces = APPLICATION_JSON_VALUE)
@@ -193,6 +193,6 @@ class MigrationResource {
 		@Parameter(name = "kind", description = "The kind of item") @PathVariable final Kind kind,
 		@Parameter(name = "sourceId", description = "The id of the item in the source", example = "1234") @Pattern(regexp = SOURCE_ID_PATTERN) @PathVariable final String sourceId) {
 
-		return ok(service.getItem(new ItemKey(source, kind, sourceId)));
+		return ok(service.getItem(municipalityId, new ItemKey(source, kind, sourceId)));
 	}
 }

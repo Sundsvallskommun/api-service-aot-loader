@@ -141,3 +141,6 @@ ALTER TABLE dbo.[Ärende] ADD UpplagdDatum datetime NULL
 GO
 UPDATE dbo.[Tillsyn_Tillfälle] SET SlutDatum = '2024-05-03' WHERE TillsynsTillfalleNr = 950
 GO
+-- A procedure that writes, which only an account allowed to run it can run: the check of the account finds it on the administrator
+CREATE PROCEDURE dbo.MarkeraUpphort @FSID int AS UPDATE dbo.[FörsäljningsStällen] SET Upphort = 1 WHERE FSID = @FSID
+GO

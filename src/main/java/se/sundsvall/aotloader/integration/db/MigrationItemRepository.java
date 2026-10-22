@@ -12,4 +12,9 @@ public interface MigrationItemRepository extends JpaRepository<MigrationItemEnti
 	Optional<MigrationItemEntity> findBySourceAndKindAndSourceId(Source source, Kind kind, String sourceId);
 
 	List<MigrationItemEntity> findAllByOrderBySourceAscKindAscSourceIdAsc();
+
+	/**
+	 * @return the item whose errand the migration related to its permit errand with the relation
+	 */
+	Optional<MigrationItemEntity> findByRelationId(String relationId);
 }

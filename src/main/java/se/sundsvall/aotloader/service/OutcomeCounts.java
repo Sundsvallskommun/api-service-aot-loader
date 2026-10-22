@@ -1,10 +1,8 @@
 package se.sundsvall.aotloader.service;
 
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
+import se.sundsvall.aotloader.integration.db.RunItemRepository;
 import se.sundsvall.aotloader.service.model.Outcome;
 
 /**
@@ -14,7 +12,12 @@ final class OutcomeCounts {
 
 	private OutcomeCounts() {}
 
-	static Map<Outcome, Long> of(final List<RunItemEntity> lines) {
-		return lines.stream().collect(Collectors.groupingBy(RunItemEntity::getOutcome, () -> new EnumMap<>(Outcome.class), Collectors.counting()));
+	/**
+	 * @return the number of rows of the run per outcome, counted by the database, in the order of the outcomes
+	 */
+	static Map<Outcome, Long> of(final RunItemRepository repository, final String runId) {
+		final var counts = new EnumMap<Outcome, Long>(Outcome.class);
+		repository.countOutcomes(runId).forEach(count -> counts.put(count.getOutcome(), count.getAmount()));
+		return counts;
 	}
 }

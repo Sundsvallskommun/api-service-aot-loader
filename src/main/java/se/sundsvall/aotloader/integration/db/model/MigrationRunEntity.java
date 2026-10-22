@@ -11,7 +11,7 @@ import java.util.Objects;
 import se.sundsvall.aotloader.service.model.RunStatus;
 
 /**
- * A run of the migration, a full run or the run of a single item.
+ * A run of the migration or of a cleanup, a full run or the run of a single item.
  */
 @Entity
 @Table(name = "migration_run")
@@ -26,6 +26,9 @@ public class MigrationRunEntity {
 
 	@Column(name = "dry_run", nullable = false)
 	private boolean dryRun;
+
+	@Column(name = "cleanup", nullable = false)
+	private boolean cleanup;
 
 	@Column(name = "sources", nullable = false)
 	private String sources;
@@ -74,6 +77,17 @@ public class MigrationRunEntity {
 
 	public void setDryRun(final boolean dryRun) {
 		this.dryRun = dryRun;
+	}
+
+	/**
+	 * @return true for a cleanup, which removes what the migration wrote to the target systems
+	 */
+	public boolean isCleanup() {
+		return cleanup;
+	}
+
+	public void setCleanup(final boolean cleanup) {
+		this.cleanup = cleanup;
 	}
 
 	public String getSources() {
@@ -152,7 +166,8 @@ public class MigrationRunEntity {
 
 	@Override
 	public String toString() {
-		return "MigrationRunEntity [id=" + id + ", municipalityId=" + municipalityId + ", dryRun=" + dryRun + ", sources=" + sources + ", kinds=" + kinds + ", itemKey=" + itemKey + ", itemLimit=" + itemLimit + ", status=" + status + ", message="
+		return "MigrationRunEntity [id=" + id + ", municipalityId=" + municipalityId + ", dryRun=" + dryRun + ", cleanup=" + cleanup + ", sources=" + sources + ", kinds=" + kinds + ", itemKey=" + itemKey + ", itemLimit=" + itemLimit + ", status=" + status
+			+ ", message="
 			+ message + ", started=" + started + ", finished=" + finished + "]";
 	}
 }

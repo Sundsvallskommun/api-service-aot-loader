@@ -30,6 +30,16 @@ class LegalBasisTest {
 	}
 
 	@Test
+	void theLawOfAnAppealIsNoLegalBasis() {
+		final var decision = rtf("""
+			{\\rtf1\\ansi\\pard Kommunen beviljar tillst\\'e5nd enligt 5 kap. 1 \\'a7 lagen om tobak och liknande produkter (2018:2088).\\par
+			Hur man \\'f6verklagar: beslutet kan \\'f6verklagas enligt 9 kap. 2 \\'a7 lagen (2018:2088).\\par
+			OVERKLAGANDE skickas enligt 9 kap. 3 \\'a7 lagen (2018:2088)\\par}""");
+
+		assertThat(LegalBasis.of(decision)).hasValue("5 kap. 1 § lagen om tobak och liknande produkter (2018:2088)");
+	}
+
+	@Test
 	void theLawOfAPermitDecidedUnderTheEarlierLaw() {
 		final var decision = rtf("{\\rtf1 Tillst\\'e5nd enligt 7 kap. 5 \\'a7 alkohollagen (1994:1738)}");
 

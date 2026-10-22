@@ -262,6 +262,11 @@ public final class InspectionVisitCandidates {
 	 * @param staff    the marks about the serving staff as texts (decision 48)
 	 * @param round    the round of inspection the visit was made in, null when none (decision 50)
 	 */
-	private record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> handlers, List<String> staff, RoundRow round) {
+	record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> handlers, List<String> staff, RoundRow round) {
+
+		@Override
+		public String toString() {
+			return "VisitContent[visit=" + visit + ", kind=" + kind + "]";
+		}
 	}
 }

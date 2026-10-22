@@ -43,6 +43,17 @@ class TextsTest {
 	}
 
 	@Test
+	void aCharacterWrittenAsTwoIsNotParted() {
+		final var emoji = "🍺";
+
+		assertThat(Texts.truncate("abc" + emoji + "def", 5, null)).isEqualTo("abc…");
+		assertThat(Texts.truncate("ab" + emoji + "def", 5, null)).isEqualTo("ab" + emoji + "…");
+		assertThat(Texts.split("abc" + emoji + "defgh", 4)).containsExactly("abc", emoji + "de", "fgh");
+		assertThat(Texts.split(emoji + emoji, 3)).containsExactly(emoji, emoji);
+		assertThatThrownBy(() -> Texts.split("abc", 1)).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
 	void join() {
 		assertThat(Texts.join(", ", Arrays.asList(" a ", null, " ", "b"))).isEqualTo("a, b");
 		assertThat(Texts.join(", ", List.of())).isNull();

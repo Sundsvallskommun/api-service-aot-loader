@@ -1,10 +1,8 @@
 {
-	"name": "support-management-get-attachments-uploaded",
-	"scenarioName": "attachments",
-	"requiredScenarioState": "Uploaded",
+	"name": "support-management-get-errand",
 	"request": {
 		"method": "GET",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/attachments",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -34,15 +32,20 @@
 		"headers": {
 			"Content-Type": "application/json"
 		},
-		"jsonBody": [
-			{
-				"id": "x",
-				"fileName": "besöksrapport.pdf"
-			},
-			{
-				"id": "y",
-				"fileName": "foto.jpg"
-			}
-		]
+		"jsonBody": {
+			"id": "11111111-aaaa-bbbb-cccc-000000000001",
+			"errandNumber": "ALKT-2026-1",
+			"lifecycle": "ACTIVE",
+			"externalTags": [
+				{
+					"key": "migreringsid",
+					"value": "ALKT-TILLSTAND-1"
+				},
+				{
+					"key": "diarienummer",
+					"value": "IAN-2019-1"
+				}
+			]
+		}
 	}
 }

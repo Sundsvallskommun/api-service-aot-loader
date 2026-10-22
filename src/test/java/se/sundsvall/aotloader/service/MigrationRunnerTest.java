@@ -84,7 +84,7 @@ class MigrationRunnerTest {
 			lines.add(invocation.getArgument(0));
 			return invocation.getArgument(0);
 		});
-		runner = new MigrationRunner(List.of(alktReader, alkolReader), migrator, preflight, targetGuard, runRepository, runItemRepository, TestData.properties(), CLOCK);
+		runner = new MigrationRunner(List.of(alktReader, alkolReader), migrator, preflight, targetGuard, new RunRecords(runRepository, runItemRepository, new ResultFiles(runItemRepository, null, CLOCK), CLOCK), TestData.properties());
 	}
 
 	@Test
@@ -96,7 +96,7 @@ class MigrationRunnerTest {
 	void aFullRunTakesEveryItemAndListsTheNotices() {
 		final var permit = TestData.permit("1");
 		final var other = TestData.permit("2");
-		final var notice = new Notice(new ItemKey(Source.ALKT, TILLSTAND, "utan-id-1"), null, Outcome.GRANSKAS, "G1");
+		final var notice = new Notice(new ItemKey(Source.ALKT, TILLSTAND, "utan-id-1"), null, Outcome.GRANSKAS, "G1", "G1 Tillståndet saknar ObjektID");
 		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(permit, other), List.of(notice)));
 		when(migrator.process(eq(permit), any())).thenReturn(new ItemResult(Outcome.MIGRERAD, List.of("G13"), "G13 ...", "ALKT-1"));
 		when(migrator.process(eq(other), any())).thenReturn(new ItemResult(Outcome.FEL, List.of(), "Steg Ärende: 502 med 198001011234", null));
@@ -181,7 +181,8 @@ class MigrationRunnerTest {
 
 		assertThat(run.getStatus()).isEqualTo(RunStatus.COMPLETED);
 		assertThat(run.getMessage()).isEqualTo("Gränsen på 1 ärenden nåddes; resten tas i nästa körning");
-		assertThat(lines).hasSize(1);
+		// The item the limit kept from being written is listed, so that the report shows it is left
+		assertThat(lines).extracting(RunItemEntity::getSourceId, RunItemEntity::getOutcome).containsExactly(tuple("1", Outcome.MIGRERAD), tuple("2", Outcome.EJ_KORD));
 	}
 
 	@Test
@@ -204,13 +205,13 @@ class MigrationRunnerTest {
 	@Test
 	void aSingleItem() {
 		final Candidate permit = TestData.permit("2");
-		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("1"), permit), List.of(new Notice(new ItemKey(Source.ALKT, TILLSTAND, "x"), null, Outcome.GRANSKAS, null))));
+		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("1"), permit), List.of(new Notice(new ItemKey(Source.ALKT, TILLSTAND, "x"), null, Outcome.GRANSKAS, null, null))));
 		final var itemResult = new ItemResult(Outcome.SKULLE_MIGRERAS, List.of(), null, null);
 		when(migrator.process(eq(permit), any())).thenReturn(itemResult);
 
 		final var result = runner.execute(run(true, null), Map.of(Source.ALKT, Set.of(TILLSTAND)), Optional.of(permit.key()));
 
-		assertThat(result).contains(itemResult);
+		assertThat(result).hasValueSatisfying(line -> assertThat(line.getOutcome()).isEqualTo(Outcome.SKULLE_MIGRERAS));
 		assertThat(lines).singleElement().extracting(RunItemEntity::getSourceId).isEqualTo("2");
 	}
 

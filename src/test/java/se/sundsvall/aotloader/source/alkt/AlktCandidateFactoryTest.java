@@ -529,8 +529,64 @@ class AlktCandidateFactoryTest {
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
-		assertThat(candidates).hasSize(2).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ROWS_ON_PLACE, "2 rader")));
-		assertThat(candidates.getFirst().ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(DECISION_MISSING, "BeslutsID 999"));
+		// One item per place, built from its first row, since the rows would share their key
+		assertThat(candidates).singleElement().satisfies(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(PERMIT_ROWS_ON_PLACE, "2 rader"), tuple(DECISION_MISSING, "BeslutsID 999")));
+	}
+
+	@Test
+	void theRowsOfOnePlaceWithTheSameDiaryNumberCountOnceForG16() {
+		final var snapshot = snapshot()
+			.permit(permit(1).diaryNumber("IAN-2019-1").build())
+			.permit(permit(1).diaryNumber("IAN-2019-1").build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(PERMIT_ROWS_ON_PLACE).doesNotContain(DIARY_NUMBER_ON_SEVERAL);
+	}
+
+	@Test
+	void anOwnerThatIsMissingIsToldApartFromAPlaceWithoutOwner() {
+		final var snapshot = snapshot().permit(permit(1).build()).place(place(1, 123, "12345678")).build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(LEGAL_ID_INVALID, "AgarID 123 finns inte"));
+	}
+
+	@Test
+	void twoOwnerPostsWithTheSameNumberAreTheSameHolder() {
+		final var snapshot = snapshot()
+			.permit(permit(1).gtAgarId(11).build())
+			.permit(permit(2).gtAgarId(12).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "5566778899"))
+			.owner(owner(11, "556677-8899"))
+			.owner(owner(12, "5599887766"))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(OWNER_DIFFERS);
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).contains(OWNER_DIFFERS);
+	}
+
+	@Test
+	void anIssuingErrandThatIsMissingHitsG13() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(500).build())
+			.decision(new DecisionRow(500, 777, "TDB", LocalDateTime.of(2019, 5, 1, 10, 0), null, null, null, null))
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(NO_ISSUING_ERRAND, "ArendeID 777 finns inte i Ärende"));
 	}
 
 	@Test
@@ -813,9 +869,8 @@ class AlktCandidateFactoryTest {
 		assertThat(visit.type()).isEqualTo(ErrandType.ALCOHOL_INSPECTION_VISIT);
 		assertThat(visit.ruleHits()).isEmpty();
 		assertThat(visit.holder()).isNull();
-		// A visit after the permit was issued concerned its holder (decision 61), one without a day cannot tell, and the permit
-		// of
-		// a place that is missing may be another owner's
+		// A visit after the permit was issued concerned its holder (decision 61), one without a day cannot tell, and the
+		// permit of a place that is missing may be another owner's
 		assertThat(candidates).extracting(candidate -> candidate.permitLink().basis()).containsExactly(Basis.AFTER_ISSUE, Basis.NO_DATE, Basis.ISSUED_TO_OTHER);
 		assertThat(visit.placeName()).isEqualTo("Restaurang 1");
 		assertThat(visit.placeNumber()).isEqualTo("12345678");
@@ -886,5 +941,12 @@ class AlktCandidateFactoryTest {
 
 	private static Map<String, List<String>> parameters(final Candidate candidate) {
 		return candidate.parameters().stream().collect(java.util.stream.Collectors.toMap(Parameter::key, Parameter::values));
+	}
+
+	@Test
+	void theContentOfAPermitShowsOnlyTheKeysOfItsRow() {
+		final var content = new AlktCandidateFactory.PermitContent(permit(1).beslutsId(100).gtAgarId(10).build(), null, List.of("11:00–01:00"), List.of("Ordningsvakt"));
+
+		assertThat(content).hasToString("PermitContent[permit=PermitRow[objektId=1, gtAgarId=10, beslutsId=100]]");
 	}
 }

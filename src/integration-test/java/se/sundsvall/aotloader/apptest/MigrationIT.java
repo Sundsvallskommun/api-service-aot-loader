@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -29,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import se.sundsvall.aotloader.Application;
+import se.sundsvall.aotloader.api.model.MigrationItem;
 import se.sundsvall.aotloader.api.model.Run;
 import se.sundsvall.aotloader.service.model.RunStatus;
 import se.sundsvall.dept44.test.AbstractAppTest;
@@ -49,6 +51,7 @@ import static org.springframework.http.HttpMethod.GET;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.http.HttpMethod.PUT;
 import static org.springframework.http.HttpStatus.ACCEPTED;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.OK;
 import static org.springframework.http.HttpStatus.UNPROCESSABLE_CONTENT;
 
@@ -67,6 +70,8 @@ class MigrationIT extends AbstractAppTest {
 	private static final String PERMIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000001";
 	private static final String INTERRUPTED_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000006";
 	private static final String VISIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000010";
+	private static final Set<String> CHECKS_BEFORE_A_RUN = Set.of("support-management-action-config-2281", "support-management-attachment-purposes-2281", "support-management-labels-2281",
+		"support-management-roles-2281", "support-management-statuses-2281", "support-management-categories-2281");
 	private static final Pattern LOG_EVENT = Pattern.compile("(?m)^(?=\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} \\[)");
 	private static final Path FILE_AREA = createFileArea();
 	private static final Map<String, String> FILE_AREA_BEFORE = snapshot(FILE_AREA);
@@ -123,6 +128,19 @@ class MigrationIT extends AbstractAppTest {
 		return super.verifyStubs();
 	}
 
+	/**
+	 * Checks what {@link #verifyStubs()} checks, except that the mappings every test has for the checks before a run need
+	 * not be called, since a cleanup makes none of those checks.
+	 */
+	private void verifyCleanupStubs() {
+		wiremock.getStubMappings().stream()
+			.filter(stub -> !CHECKS_BEFORE_A_RUN.contains(stub.getName()))
+			.forEach(stub -> assertThat(wiremock.findAll(RequestPatternBuilder.like(stub.getRequest())))
+				.as("Calls that match the whole mapping %s", stub.getName())
+				.isNotEmpty());
+		assertThat(wiremock.findAllUnmatchedRequests()).as("Calls that match no mapping").isEmpty();
+	}
+
 	@Test
 	void test01_aDryRunOfEverythingReportsAndWritesNothing() {
 		final var location = setupCall()
@@ -151,6 +169,16 @@ class MigrationIT extends AbstractAppTest {
 			.withExpectedResponseStatus(OK)
 			.withExpectedResponse("report.json")
 			.sendRequest();
+		// The report is also a file in the result directory, to be sent to the business
+		assertThat(resultFileOf(dryRunId)).content(StandardCharsets.UTF_8).startsWith("﻿Källa;Sort;Käll-id").contains("\"SKULLE_MIGRERAS\"", "\"GRANSKAS\"");
+	}
+
+	private static Path resultFileOf(final String runId) {
+		try (var files = Files.list(Path.of("target", "it-resultat"))) {
+			return files.filter(file -> file.getFileName().toString().endsWith("-torrkorning-" + runId.substring(0, 8) + ".csv")).findFirst().orElseThrow();
+		} catch (final IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 
 	@Test
@@ -407,6 +435,26 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(snapshot(FILE_AREA)).isEqualTo(FILE_AREA_BEFORE);
 	}
 
+	@Test
+	void test21_aDryRunOfACleanupRemovesNothing() {
+		cleanupItem("ALKT/TILLSTAND/1", true);
+
+		verifyCleanupStubs();
+		assertThat(restTemplate.getForEntity(PATH + "/items/ALKT/TILLSTAND/1", String.class).getStatusCode()).isEqualTo(OK);
+	}
+
+	@Test
+	void test22_aPermitIsCleanedUpWithItsRelations() {
+		// The relations from the permit errand to the inspection errands and to the permit in PartyAssets go; one a case
+		// handler wrote stays, since no DELETE of it is mapped
+		cleanupItem("ALKT/TILLSTAND/1", false);
+
+		verifyCleanupStubs();
+		assertThat(restTemplate.getForEntity(PATH + "/items/ALKT/TILLSTAND/1", String.class).getStatusCode()).isEqualTo(NOT_FOUND);
+		assertThat(restTemplate.getForObject(PATH + "/items/ALKT/TILLSYN/701", MigrationItem.class).relationId()).isNull();
+		itemIs("ALKT/TILLSYN/700");
+	}
+
 	/**
 	 * Migrates an item the way a person calling the API does, with the person as sender: the migration must still be the
 	 * only sender the target systems see. The answer is compared with response.json of the test.
@@ -416,6 +464,18 @@ class MigrationIT extends AbstractAppTest {
 			.withServicePath(PATH + "/items/" + item + "?dryRun=" + dryRun)
 			.withHttpMethod(POST)
 			.withHeader("X-Sent-By", "joe01doe; type=adAccount")
+			.withExpectedResponseStatus(OK)
+			.withExpectedResponse("response.json")
+			.sendRequest();
+	}
+
+	/**
+	 * Cleans up an item and compares the answer with response.json of the test.
+	 */
+	private void cleanupItem(final String item, final boolean dryRun) {
+		setupCall()
+			.withServicePath(PATH + "/items/" + item + "/cleanup?dryRun=" + dryRun)
+			.withHttpMethod(POST)
 			.withExpectedResponseStatus(OK)
 			.withExpectedResponse("response.json")
 			.sendRequest();

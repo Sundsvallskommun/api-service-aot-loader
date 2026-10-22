@@ -9,12 +9,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.Texts;
 
 /**
@@ -48,11 +48,11 @@ public final class FileArea {
 	 * @return           what was found
 	 */
 	public synchronized Lookup find(final FileReference reference) {
-		final var name = fileNameOf(reference.name());
+		final var name = FileNames.nameOf(reference.name());
 		if (name == null) {
 			return new Lookup(LookupResult.INVALID_NAME, reference.name(), null, 0);
 		}
-		if (name.toLowerCase(Locale.ROOT).endsWith(LINK_EXTENSION)) {
+		if (FileNames.normalized(name).endsWith(LINK_EXTENSION)) {
 			return new Lookup(LookupResult.LINK, name, null, 0);
 		}
 		final var index = indexes.computeIfAbsent(reference.folder(), this::buildIndex);
@@ -61,7 +61,7 @@ public final class FileArea {
 			indexes.remove(reference.folder());
 			return new Lookup(LookupResult.DIRECTORY_UNAVAILABLE, name, null, 0);
 		}
-		final var path = index.files().get(name.toLowerCase(Locale.ROOT));
+		final var path = index.files().get(FileNames.normalized(name));
 		if (path == null) {
 			return new Lookup(LookupResult.MISSING, name, null, 0);
 		}
@@ -109,18 +109,6 @@ public final class FileArea {
 		}
 	}
 
-	/**
-	 * The file name of a reference: the part after the last slash or backslash, should the database hold a path.
-	 */
-	public static String fileNameOf(final String reference) {
-		final var trimmed = Texts.trimToNull(reference);
-		if (trimmed == null) {
-			return null;
-		}
-		final var name = Texts.trimToNull(trimmed.substring(Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\')) + 1));
-		return name == null || ".".equals(name) || "..".equals(name) ? null : name;
-	}
-
 	private DirectoryIndex buildIndex(final FileFolder folder) {
 		final var directory = directories.get(folder);
 		final var problem = checkDirectory(directory);
@@ -131,7 +119,7 @@ public final class FileArea {
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(directory))) {
 			for (final var path : stream) {
 				if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-					files.putIfAbsent(path.getFileName().toString().toLowerCase(Locale.ROOT), path);
+					files.putIfAbsent(FileNames.normalized(path.getFileName().toString()), path);
 				}
 			}
 			return new DirectoryIndex(files, null);
