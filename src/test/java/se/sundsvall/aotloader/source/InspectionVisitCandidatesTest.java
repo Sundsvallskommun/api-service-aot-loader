@@ -48,6 +48,27 @@ class InspectionVisitCandidatesTest {
 
 	@ParameterizedTest
 	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
+		21:30    | 23:15    | 21:30–23:15
+		9.15     | 10:00:00 | 09:15–10:00
+		14:00    | -        | 14:00
+		-        | 10:00    | –10:00
+		kväll    | sent     | kväll–sent
+		00:00    | 01:30    | 00:00–01:30
+		23:00    | 00:00    | 23:00–00:00
+		00:00    | 00:00    | -
+		00:00:00 | 00:00:00 | -
+		0.00     | -        | -
+		-        | 00:00    | -
+		-        | -        | -
+		""")
+	void theTimeOfAVisitIsItsStartAndEndAndOnlyMidnightTellsNoTime(final String start, final String end, final String expected) {
+		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), start, end, "04", null, null, null);
+
+		assertThat(InspectionVisitCandidates.time(visit)).isEqualTo(expected);
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
 		Krogrunda | 2023-11-04 | 2023-11-05 | Krogrunda, 2023-11-04 – 2023-11-05
 		Krogrunda | 2023-11-04 | 2023-11-04 | Krogrunda, 2023-11-04
 		Krogrunda | 2023-11-04 | -          | Krogrunda, 2023-11-04
@@ -102,11 +123,10 @@ class InspectionVisitCandidatesTest {
 		// As in AlkT, which may name the police, the rescue service or the environment office as well as a handler (decisions
 		// 66 and 67)
 		assertThat(candidate.errand().description()).isEqualTo("""
-			Tillsynsbesök på okänt serveringsställe 2023-11-04, migrerat från AlkT.
+			Tillsynsbesök på okänt serveringsställe 2023-11-04.
 			Tillsynsart: Rutintillsyn
 			Kontrollant: Polisen
-			Anmärkningar:
-			Inga anmärkningar registrerade
+			Anmärkningar: Inga anmärkningar registrerade
 			Serveringspersonal: Ägaren på plats""");
 		assertThat(candidate.errand().parameters()).filteredOn(parameter -> "kontrollant".equals(parameter.key())).singleElement().satisfies(parameter -> {
 			assertThat(parameter.displayName()).isEqualTo("Kontrollant i AlkT");

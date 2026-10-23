@@ -70,7 +70,8 @@ class MigrationResource {
 		Starts a run in the background and answers at once. A run is a dry run unless the request says dryRun false: it reads, applies \
 		the review rules, looks up the permit holders in Party and checks the files, and writes nothing to the target systems. \
 		Starting a run again never migrates an item twice: an item already migrated is left as it is, and an item that stopped half \
-		way continues from where it stopped. Only one run at a time.""", responses = {
+		way continues from where it stopped. Only one run at a time. A selection of items, items, is taken in one run with one \
+		report and one result file.""", responses = {
 		@ApiResponse(responseCode = "202", description = "Accepted - the run has started", headers = @Header(name = LOCATION, description = "The run"), useReturnTypeSchema = true),
 		@ApiResponse(responseCode = "409", description = "Conflict - another run is running", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class)))
 	})
@@ -151,7 +152,8 @@ class MigrationResource {
 	@Operation(summary = "Migrate a single item, or try it in a dry run", description = """
 		Runs one item through the same flow as a full run and waits for it. The id is ObjektID in AlkT or FSID in AlkOL \
 		for a permit, FSID and product for a notification, e.g. 1234-FOLKOL, ArendeID for an inspection errand and \
-		TillsynsTillfalleNr for an inspection visit. An inspection errand waits until the permit of its place is migrated.""", responses = {
+		TillsynsTillfalleNr for an inspection visit. An inspection errand waits until the permit of its place is migrated. \
+		Its row is the answer and no result file is written; items that belong together are taken as a selection in one run.""", responses = {
 		@ApiResponse(responseCode = "200", description = "OK - the row of the report for the item", useReturnTypeSchema = true),
 		@ApiResponse(responseCode = "404", description = "Not Found - the source has no such item", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),
 		@ApiResponse(responseCode = "409", description = "Conflict - a run is running", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),

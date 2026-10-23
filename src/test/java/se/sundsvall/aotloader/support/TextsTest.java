@@ -63,8 +63,8 @@ class TextsTest {
 
 	@Test
 	void paragraphs() {
-		assertThat(Texts.paragraphs("Tillsyn, migrerat från AlkT.\nDiarienummer: IAN-1\r\n\n  \nVillkor:\n- Bordsservering & <mat>\n")).isEqualTo(
-			"<p>Tillsyn, migrerat från AlkT.</p><p>Diarienummer: IAN-1</p><p>Villkor:</p><p>- Bordsservering &amp; &lt;mat&gt;</p>");
+		assertThat(Texts.paragraphs("Tillsyn, ifrågasatt åtgärd.\nDiarienummer: IAN-1\r\n\n  \nVillkor:\n- Bordsservering & <mat>\n")).isEqualTo(
+			"<p>Tillsyn, ifrågasatt åtgärd.</p><p>Diarienummer: IAN-1</p><p>Villkor:</p><p>- Bordsservering &amp; &lt;mat&gt;</p>");
 		assertThat(Texts.paragraphs("Citat \"så\" och 'så'")).isEqualTo("<p>Citat &quot;så&quot; och &#39;så&#39;</p>");
 		assertThat(Texts.paragraphs(" \n ")).isNull();
 		assertThat(Texts.paragraphs(null)).isNull();

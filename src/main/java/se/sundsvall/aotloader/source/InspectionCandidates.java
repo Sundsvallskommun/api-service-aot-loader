@@ -136,7 +136,7 @@ public final class InspectionCandidates {
 
 	private static String description(final InspectionErrand errand, final List<String> decisions) {
 		return Texts.join("\n", Arrays.asList(
-			errand.typeText() + ", migrerat från " + errand.source().getDisplayName() + ".",
+			errand.typeText() + ".",
 			line("Diarienummer", errand.diaryNumber()),
 			"Öppnat: " + Optional.ofNullable(SourceValues.format(errand.opened())).orElse("okänt"),
 			"Avslutat: " + Optional.ofNullable(SourceValues.format(errand.closed())).orElse("inte avslutat"),

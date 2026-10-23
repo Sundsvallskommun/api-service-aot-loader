@@ -47,7 +47,9 @@ public final class InspectionVisitCandidates {
 
 	private static final Pattern SECONDS = Pattern.compile("^(\\d{1,2}[:.]\\d{2})[:.]\\d{2}$");
 	private static final String REMARK = "Anmärkning";
+	private static final String REMARKS = "Anmärkningar";
 	private static final String ROUND = "Tillsynsomgång";
+	private static final String MIDNIGHT = "00:00";
 	// The field of the visit is Kontrollant in AlkT, which names a handler, or the police, the rescue service or the
 	// environment office (decision 66)
 	private static final String INSPECTOR = "Kontrollant";
@@ -136,7 +138,7 @@ public final class InspectionVisitCandidates {
 	private String description(final String name, final VisitContent content) {
 		final var visit = content.visit();
 		final var lines = new ArrayList<String>();
-		lines.add(Texts.joinWords("Tillsynsbesök på " + name, SourceValues.format(visit.datum())) + ", migrerat från " + type.getSource().getDisplayName() + ".");
+		lines.add(Texts.joinWords("Tillsynsbesök på " + name, SourceValues.format(visit.datum())) + ".");
 		lines.add(line("Tillsynsart", content.kind()));
 		lines.add(line("Tid", content.time()));
 		lines.add(line(ROUND, roundName(content.round())));
@@ -144,11 +146,12 @@ public final class InspectionVisitCandidates {
 		lines.add(line("Anmält besök", announced(visit)));
 		lines.add(line(INSPECTOR, Texts.join(", ", content.inspectors())));
 		// Always there, as in AlkT, so that a visit without remarks says so (decision 67)
-		lines.add("Anmärkningar:");
 		if (content.remarks().isEmpty()) {
-			lines.add(NO_REMARKS);
+			lines.add(line(REMARKS, NO_REMARKS));
+		} else {
+			lines.add(REMARKS + ":");
+			content.remarks().forEach(remark -> lines.add("- " + remark));
 		}
-		content.remarks().forEach(remark -> lines.add("- " + remark));
 		lines.add(line("Serveringspersonal", Texts.join(", ", content.staff())));
 		lines.add(line("Anteckning", visit.fritext()));
 		return Texts.join("\n", lines);
@@ -167,7 +170,7 @@ public final class InspectionVisitCandidates {
 			.add("anmaltBesok", "Anmält besök", announced(visit))
 			.add(ErrandParameters.INSPECTORS, INSPECTOR + " i " + source.getDisplayName(), content.inspectors())
 			.add("serveringspersonal", "Serveringspersonal", content.staff())
-			.add("anmarkningar", "Anmärkningar", content.remarks())
+			.add("anmarkningar", REMARKS, content.remarks())
 			.add("anteckning", "Anteckning i " + source.getDisplayName(), visit.fritext())
 			.add(migrated(today, source))
 			.build();
@@ -175,15 +178,20 @@ public final class InspectionVisitCandidates {
 
 	/**
 	 * @return the time of the visit, "hh:mm–hh:mm" when the source has it in a format that can be read, otherwise as
-	 *         written; null when the source has none
+	 *         written; null when the source has none, or 00:00 alone or as both start and end, which tells no time of the
+	 *         visit
 	 */
-	private static String time(final VisitRow visit) {
+	static String time(final VisitRow visit) {
 		final var start = timeOfDay(visit.startTid());
 		final var end = timeOfDay(visit.slutTid());
-		if (start == null && end == null) {
+		if (isNoTime(start) && isNoTime(end)) {
 			return null;
 		}
 		return end == null ? start : Texts.range(start, end);
+	}
+
+	private static boolean isNoTime(final String time) {
+		return time == null || MIDNIGHT.equals(time);
 	}
 
 	/**
@@ -225,7 +233,7 @@ public final class InspectionVisitCandidates {
 	 */
 	static InvestigationData investigation(final String title, final VisitRow visit, final List<String> remarks, final RoundRow round) {
 		final var roundText = round == null ? null : Texts.join("\n", Arrays.asList(roundName(round), Texts.trimToNull(round.fritext())));
-		final var texts = InvestigationTexts.of(new Part(ROUND, roundText), new Part("Anteckning", Texts.trimToNull(visit.fritext())), new Part("Anmärkningar", Texts.join("\n", remarks)));
+		final var texts = InvestigationTexts.of(new Part(ROUND, roundText), new Part("Anteckning", Texts.trimToNull(visit.fritext())), new Part(REMARKS, Texts.join("\n", remarks)));
 		if (visit.datum() == null) {
 			return new InvestigationData(title, null, null, texts);
 		}

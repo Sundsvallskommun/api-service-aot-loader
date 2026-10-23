@@ -63,7 +63,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.description",
-					"equalTo": "<p>Anteckning på Krogen Ett 2026-10-13, migrerad från AlkT, där den inte hörde till något ärende.</p><p>ANDREAS TESTAR</p>"
+					"equalTo": "<p>Anteckning på Krogen Ett 2026-10-13, som inte hörde till något ärende.</p><p>ANDREAS TESTAR</p>"
 				}
 			},
 			{

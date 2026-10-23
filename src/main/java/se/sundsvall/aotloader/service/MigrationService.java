@@ -29,6 +29,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.ItemSelection;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -72,15 +73,18 @@ public class MigrationService {
 	}
 
 	/**
-	 * Starts a run in the background.
+	 * Starts a run in the background, of every item of the sources and kinds, or of the items the request selects.
 	 *
 	 * @return                                              the run, RUNNING
 	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 409 when another run is running, 400 when the request selects
-	 *                                                      nothing to migrate
+	 *                                                      nothing to migrate, or an item that is not written as
+	 *                                                      source/kind/id or is outside the sources and kinds
 	 */
 	public Run startRun(final String municipalityId, final RunRequest request) {
-		final var scope = scope(request.sources(), request.kinds());
+		final var selection = selection(request.items());
+		final var scope = narrow(scope(request.sources(), request.kinds()), selection);
 		final var run = newRun(municipalityId, request.dryRunOrDefault(), false, scope, null, request.limit());
+		run.setItemKeys(selection.text());
 		return startInBackground(run, runner::register, runner::forget, () -> runner.execute(run, scope, Optional.empty()));
 	}
 
@@ -100,15 +104,18 @@ public class MigrationService {
 
 	/**
 	 * Starts a cleanup in the background, which removes what the migration wrote to the target systems for the items of
-	 * the status table in the scope, and the items (section 10.3).
+	 * the status table in the scope, or for the items the request selects, and the items (section 10.3).
 	 *
 	 * @return                                              the cleanup, RUNNING
 	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 409 when another run is running, 400 when the request selects
-	 *                                                      nothing
+	 *                                                      nothing, or an item that is not written as source/kind/id or is
+	 *                                                      outside the sources and kinds
 	 */
 	public Run startCleanup(final String municipalityId, final CleanupRequest request) {
-		final var scope = scope(request.sources(), request.kinds());
+		final var selection = selection(request.items());
+		final var scope = narrow(scope(request.sources(), request.kinds()), selection);
 		final var run = newRun(municipalityId, request.dryRunOrDefault(), true, scope, null, request.limit());
+		run.setItemKeys(selection.text());
 		return startInBackground(run, cleanupRunner::register, cleanupRunner::forget, () -> cleanupRunner.execute(run, scope, Optional.empty()));
 	}
 
@@ -210,10 +217,55 @@ public class MigrationService {
 	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 400 when the source has no items of the kind
 	 */
 	private Map<Source, Set<Kind>> singleScope(final ItemKey key) {
+		requireSupported(key);
+		return Map.of(key.source(), Set.of(key.kind()));
+	}
+
+	private void requireSupported(final ItemKey key) {
 		if (!runner.supportedKinds().getOrDefault(key.source(), Set.of()).contains(key.kind())) {
 			throw Problem.valueOf(BAD_REQUEST, "%s har inga ärenden av sorten %s".formatted(key.source().getDisplayName(), key.kind()));
 		}
-		return Map.of(key.source(), Set.of(key.kind()));
+	}
+
+	/**
+	 * @return                                              the items of the request, each once, in the order given; every
+	 *                                                      item when the request has none
+	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 400 when an item is not written as source/kind/id
+	 */
+	private static ItemSelection selection(final List<String> items) {
+		if (items == null) {
+			return ItemSelection.all();
+		}
+		return ItemSelection.of(items.stream().map(MigrationService::parse).toList());
+	}
+
+	private static ItemKey parse(final String item) {
+		try {
+			return ItemKey.parse(item);
+		} catch (final IllegalArgumentException _) {
+			throw Problem.valueOf(BAD_REQUEST, "Ärendet '%s' ska skrivas som källa/sort/id, till exempel ALKT/TILLSTAND/123".formatted(item));
+		}
+	}
+
+	/**
+	 * @return                                              the scope narrowed to the sources and kinds of the selected
+	 *                                                      items, the whole scope when every item is selected
+	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 400 when the source of an item has no items of its kind, or the
+	 *                                                      item is outside the scope
+	 */
+	private Map<Source, Set<Kind>> narrow(final Map<Source, Set<Kind>> scope, final ItemSelection selection) {
+		if (selection.isAll()) {
+			return scope;
+		}
+		final var narrowed = new EnumMap<Source, Set<Kind>>(Source.class);
+		for (final var key : selection.keys()) {
+			requireSupported(key);
+			if (!scope.getOrDefault(key.source(), Set.of()).contains(key.kind())) {
+				throw Problem.valueOf(BAD_REQUEST, "Ärendet %s ligger utanför de källor och sorter som körningen gäller".formatted(key));
+			}
+			narrowed.computeIfAbsent(key.source(), _ -> EnumSet.noneOf(Kind.class)).add(key.kind());
+		}
+		return narrowed;
 	}
 
 	/**
@@ -315,7 +367,9 @@ public class MigrationService {
 	}
 
 	private static Run toRun(final MigrationRunEntity run, final Map<Outcome, Long> counts) {
-		return new Run(run.getId(), run.getMunicipalityId(), run.isDryRun(), run.isCleanup(), split(run.getSources()), split(run.getKinds()), run.getItemKey(), run.getItemLimit(), run.getStatus(), run.getMessage(),
+		final var items = run.getItemKeys() == null ? null : split(run.getItemKeys());
+		return new Run(run.getId(), run.getMunicipalityId(), run.isDryRun(), run.isCleanup(), split(run.getSources()), split(run.getKinds()), run.getItemKey(), items, run.getItemLimit(), run.getStatus(),
+			run.getMessage(),
 			run.getStarted(),
 			run.getFinished(), counts);
 	}

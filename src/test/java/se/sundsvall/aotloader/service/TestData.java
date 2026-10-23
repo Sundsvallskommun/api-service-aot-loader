@@ -239,7 +239,7 @@ public final class TestData {
 			.placeName("Restaurang 1")
 			.holder(new Holder(HOLDER_ID, "Bolaget AB", null, null, null, null, null, null))
 			.title("Anteckning – Restaurang 1")
-			.description("Anteckning på Restaurang 1 2024-03-01, migrerad från AlkT, där den inte hörde till något ärende.\nSamtal med ägaren")
+			.description("Anteckning på Restaurang 1 2024-03-01, som inte hörde till något ärende.\nSamtal med ägaren")
 			.labelPath(DOCUMENTATION)
 			.permitLink(PermitLink.filedUnder(new PlacePermit(filedUnder, null, null, true)))
 			.build();

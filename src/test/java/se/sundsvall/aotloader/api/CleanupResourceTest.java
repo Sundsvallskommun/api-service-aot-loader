@@ -43,9 +43,9 @@ class CleanupResourceTest {
 
 	@Test
 	void startCleanup() {
-		final var request = new CleanupRequest(false, List.of(Source.ALKT), List.of(Kind.TILLSTAND), 5);
+		final var request = new CleanupRequest(false, List.of(Source.ALKT), List.of(Kind.TILLSTAND), 5, List.of("ALKT/TILLSTAND/1"));
 		when(service.startCleanup(MUNICIPALITY_ID, request))
-			.thenReturn(new Run(RUN_ID, MUNICIPALITY_ID, false, true, List.of("ALKT"), List.of("TILLSTAND"), null, 5, RunStatus.RUNNING, null, OffsetDateTime.parse("2026-10-22T10:00:00+02:00"), null, Map.of()));
+			.thenReturn(new Run(RUN_ID, MUNICIPALITY_ID, false, true, List.of("ALKT"), List.of("TILLSTAND"), null, null, 5, RunStatus.RUNNING, null, OffsetDateTime.parse("2026-10-22T10:00:00+02:00"), null, Map.of()));
 
 		final var response = webTestClient.post().uri("/{municipalityId}/migrations/cleanups", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)

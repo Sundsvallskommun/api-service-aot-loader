@@ -31,8 +31,12 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import se.sundsvall.aotloader.Application;
 import se.sundsvall.aotloader.api.model.MigrationItem;
+import se.sundsvall.aotloader.api.model.ReportLine;
 import se.sundsvall.aotloader.api.model.Run;
+import se.sundsvall.aotloader.service.model.Kind;
+import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.RunStatus;
+import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.dept44.test.AbstractAppTest;
 import se.sundsvall.dept44.test.annotation.wiremock.WireMockAppTestSuite;
 
@@ -480,6 +484,36 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(restTemplate.getForEntity(PATH + "/items/ALKT/TILLSTAND/1", String.class).getStatusCode()).isEqualTo(NOT_FOUND);
 		assertThat(restTemplate.getForObject(PATH + "/items/ALKT/TILLSYN/701", MigrationItem.class).relationId()).isNull();
 		itemIs("ALKT/TILLSYN/700");
+	}
+
+	@Test
+	void test24_aSelectionOfItemsIsOneRunWithOneResultFile() {
+		final var location = setupCall()
+			.withServicePath(PATH + "/runs")
+			.withHttpMethod(POST)
+			.withRequest("request.json")
+			.withExpectedResponseStatus(ACCEPTED)
+			.withExpectedResponse("response.json")
+			.sendRequest()
+			.getResponseHeaders().getLocation();
+		final var runId = lastSegmentOf(location);
+		andVerifyThat(() -> isDone(runId));
+		verifyStubs();
+
+		// Only the kinds of the selected items are read, and only the selected items are reported, in the order of a full run
+		final var report = restTemplate.getForObject(PATH + "/runs/{runId}/report", ReportLine[].class, runId);
+		assertThat(report).extracting(ReportLine::source, ReportLine::kind, ReportLine::sourceId, ReportLine::outcome).containsExactly(
+			tuple(Source.ALKT, Kind.TILLSYNSBESOK, "900", Outcome.REDAN_MIGRERAD),
+			tuple(Source.ALKOL, Kind.TILLSYNSBESOK, "950", Outcome.REDAN_MIGRERAD));
+		assertThat(restTemplate.getForObject(PATH + "/runs/{runId}", Run.class, runId).message())
+			.startsWith("1 av ärendena i urvalet finns inte i källan, eller är inte ärenden som migreras: ALKT/TILLSYNSBESOK/999\n");
+		try (var files = Files.list(Path.of("target", "it-resultat"))) {
+			final var names = files.map(file -> file.getFileName().toString()).toList();
+			assertThat(names).filteredOn(name -> name.endsWith("-torrkorning-urval-" + runId.substring(0, 8) + ".csv")).hasSize(1);
+			assertThat(names).as("The calls of single items in the tests before wrote no files of their own").noneMatch(name -> name.matches(".*-(ALKT|ALKOL)-.*"));
+		} catch (final IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 
 	/**

@@ -40,13 +40,15 @@ class ResultFiles {
 	}
 
 	/**
-	 * Writes the report of the run, replacing a file of the same run.
+	 * Writes the report of the run, replacing a file of the same run. The run of a single item gets no file, since its row
+	 * is the answer of its call; items that belong together are taken as a selection in one run, with one file.
 	 *
 	 * @return a line for the message of the run: where the file is, or why it could not be written; empty when no result
-	 *         directory is configured, and when the report has no rows, as for a run that did not start
+	 *         directory is configured, for the run of a single item, and when the report has no rows, as for a run that
+	 *         did not start
 	 */
 	Optional<String> write(final MigrationRunEntity run) {
-		if (directory == null) {
+		if (directory == null || run.getItemKey() != null) {
 			return Optional.empty();
 		}
 		try {
@@ -73,14 +75,13 @@ class ResultFiles {
 
 	/**
 	 * @return the name of the file of the run, e.g. rapport-20261022-153000-torrkorning-1a2b3c4d.csv, by the time it
-	 *         started, what it was, and the item of a run of a single item
+	 *         started, what it was, and "urval" for the run of a selection of items
 	 */
 	String fileName(final MigrationRunEntity run) {
 		final var started = run.getStarted() == null ? "" : run.getStarted().atZoneSameInstant(clock.getZone()).format(TIME) + "-";
-		final var what = (run.isCleanup() ? "rensning-" : "") + (run.isDryRun() ? "torrkorning" : "korning");
-		final var item = Optional.ofNullable(Texts.trimToNull(run.getItemKey())).map(key -> "-" + safe(key)).orElse("");
+		final var what = (run.isCleanup() ? "rensning-" : "") + (run.isDryRun() ? "torrkorning" : "korning") + (run.getItemKeys() == null ? "" : "-urval");
 		final var id = safe(run.getId());
-		return "rapport-" + started + what + item + "-" + id.substring(0, Math.min(RUN_ID_LENGTH, id.length())) + ".csv";
+		return "rapport-" + started + what + "-" + id.substring(0, Math.min(RUN_ID_LENGTH, id.length())) + ".csv";
 	}
 
 	private static String safe(final String text) {

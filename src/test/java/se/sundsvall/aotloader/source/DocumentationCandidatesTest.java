@@ -48,7 +48,7 @@ class DocumentationCandidatesTest {
 		assertThat(candidate.holder()).isNull();
 		assertThat(candidate.errand().title()).isEqualTo("Händelse – okänt försäljningsställe");
 		assertThat(candidate.errand().description()).isEqualTo("""
-			Händelse på okänt försäljningsställe, migrerad från AlkOL, där den inte hörde till något ärende.
+			Händelse på okänt försäljningsställe, som inte hörde till något ärende.
 			Diarienummer: AOT 2020-5
 			Händelsen är markerad med sekretess i AlkOL.
 			Ringde om skylten.""");

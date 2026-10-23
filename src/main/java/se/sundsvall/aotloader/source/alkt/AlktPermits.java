@@ -447,7 +447,7 @@ final class AlktPermits {
 	private static String description(final String name, final PermitContent content) {
 		final var permit = content.permit();
 		final var lines = new ArrayList<String>();
-		lines.add("Serveringstillstånd för " + name + ", migrerat från " + ALKT.getDisplayName() + ".");
+		lines.add("Serveringstillstånd för " + name + ".");
 		lines.add(CandidateTexts.issuedLine(permit.utfardandeDatum(), permit.utfardandeDiarienr()));
 		lines.add(line("Drycker", Texts.join(", ", content.drinks())));
 		lines.add(line("Servering till", Texts.join(", ", content.servingTo())));

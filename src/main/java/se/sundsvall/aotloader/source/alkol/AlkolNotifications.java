@@ -115,7 +115,7 @@ final class AlkolNotifications {
 			.place(premises)
 			.title(Texts.title(subject, name))
 			.description(Texts.join("\n", Arrays.asList(
-				subject + " för " + name + ", migrerad från " + ALKOL.getDisplayName() + ".",
+				subject + " för " + name + ".",
 				line("Anmäld", notified.text()),
 				line("Diarienummer", diaryNumber))))
 			.labelPaths(index.properties().errandType(type).labels())

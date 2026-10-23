@@ -134,7 +134,7 @@ final class AlkolPermits {
 			.title(title)
 			.investigation(permitInvestigation(title, grant, grantErrand, notes))
 			.description(Texts.join("\n", Arrays.asList(
-				"Tobakstillstånd för " + name + ", migrerat från " + ALKOL.getDisplayName() + ".",
+				"Tobakstillstånd för " + name + ".",
 				line("Tillståndstyp", kindsText),
 				CandidateTexts.issuedLine(issued, diaryNumber),
 				line(NOTIFIED_PRODUCTS + " (gäller hela stället, inte bara detta ärende)", Texts.join("; ", products)))))

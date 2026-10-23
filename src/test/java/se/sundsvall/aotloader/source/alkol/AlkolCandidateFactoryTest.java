@@ -162,7 +162,7 @@ class AlkolCandidateFactoryTest {
 		final var permit = data.factory().permits().candidates().getFirst();
 
 		// Folköl has an errand that registered it; e-cigarettes are only a mark, dated by the place's earliest errand
-		assertThat(permit.errand().description()).contains("\nAnmälda produkter på försäljningsstället (gäller hela stället, inte bara detta ärende): "
+		assertThat(permit.errand().description()).startsWith("Tobakstillstånd för Butik 1.\n").contains("\nAnmälda produkter på försäljningsstället (gäller hela stället, inte bara detta ärende): "
 			+ "Folköl, anmäld 2017-05-01; E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)");
 		assertThat(parameters(permit)).containsEntry("anmaldaProdukter",
 			List.of("Folköl, anmäld 2017-05-01", "E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)"));
@@ -466,7 +466,7 @@ class AlkolCandidateFactoryTest {
 			tuple("305", "Anteckningar – Butik 1"));
 		final var confidential = documentation.getFirst();
 		assertThat(confidential.errand().description()).isEqualTo("""
-			Anteckningar på Butik 1 2021-01-02, migrerad från AlkOL, där den inte hörde till något ärende.
+			Anteckningar på Butik 1 2021-01-02, som inte hörde till något ärende.
 			Diarienummer: IAN-2021-1
 			Händelsen är markerad med sekretess i AlkOL.
 			Samtal med butiken""");
@@ -588,6 +588,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(latestServing.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
 		assertThat(latestServing.ruleHits()).isEmpty();
 		assertThat(latestServing.errand().title()).isEqualTo("Anmälan om servering av folköl – Butik 1");
+		assertThat(latestServing.errand().description()).startsWith("Anmälan om servering av folköl för Butik 1.\n");
 		assertThat(latestServing.errand().labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION");
 		assertThat(latestServing.errand().externalTags()).containsExactly(Map.entry("alkolAnmalan", "1-FOLKOL"), Map.entry("diarienummer", "IAN-2015-1"));
 		assertThat(parameters(latestServing)).containsEntry("anmald", List.of("2010-01-01")).containsEntry("produkt", List.of("Folköl")).doesNotContainKey("anmaldUppskattat");
@@ -793,7 +794,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(visit.permitLink().basis()).isEqualTo(Basis.NO_ISSUE_DATE);
 		assertThat(visit.errand().title()).isEqualTo("Tillsynsbesök – Butik 1");
 		assertThat(visit.errand().description()).isEqualTo("""
-			Tillsynsbesök på Butik 1 2024-05-03, migrerat från AlkOL.
+			Tillsynsbesök på Butik 1 2024-05-03.
 			Tillsynsart: Kontrollköp
 			Tid: 21:30–22:15
 			Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03

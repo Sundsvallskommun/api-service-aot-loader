@@ -33,6 +33,7 @@ import se.sundsvall.dept44.problem.ThrowableProblem;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -84,7 +85,7 @@ class MigrationServiceTest {
 
 	@Test
 	void startRunIsADryRunUnlessAskedOtherwise() {
-		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(null, null, null, null));
+		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(null, null, null, null, null));
 
 		assertThat(run.dryRun()).isTrue();
 		assertThat(run.status()).isEqualTo(RunStatus.RUNNING);
@@ -111,7 +112,7 @@ class MigrationServiceTest {
 			return null;
 		}).when(runner).execute(any(), any(), any());
 
-		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(null, null, null, null));
+		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(null, null, null, null, null));
 
 		assertThat(run.status()).isEqualTo(RunStatus.RUNNING);
 		assertThat(lock.holder()).isEmpty();
@@ -119,9 +120,9 @@ class MigrationServiceTest {
 
 	@Test
 	void onlyOneRunAtATime() {
-		service.startRun(MUNICIPALITY_ID, new RunRequest(false, List.of(Source.ALKT), List.of(TILLSTAND), 10));
+		service.startRun(MUNICIPALITY_ID, new RunRequest(false, List.of(Source.ALKT), List.of(TILLSTAND), 10, null));
 
-		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null)))
+		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null, null)))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(CONFLICT));
 		assertThatThrownBy(() -> service.migrateItem(MUNICIPALITY_ID, new ItemKey(Source.ALKT, TILLSTAND, "1"), true))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(CONFLICT));
@@ -130,7 +131,7 @@ class MigrationServiceTest {
 	@Test
 	void theLockIsReleasedWhenTheRunCannotBeStarted() {
 		doThrow(new RejectedExecutionException()).when(executor).execute(any());
-		final var request = new RunRequest(true, null, null, null);
+		final var request = new RunRequest(true, null, null, null, null);
 
 		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, request)).isInstanceOf(RejectedExecutionException.class);
 		assertThat(lock.holder()).isEmpty();
@@ -138,7 +139,7 @@ class MigrationServiceTest {
 
 	@Test
 	void aSelectionWithNothingToMigrate() {
-		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, List.of(Source.ALKT), List.of(ANMALAN), null)))
+		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, List.of(Source.ALKT), List.of(ANMALAN), null, null)))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> {
 				assertThat(problem.getStatus()).isEqualTo(BAD_REQUEST);
 				assertThat(problem.getDetail()).isEqualTo("Urvalet innehåller inga ärenden att migrera");
@@ -229,7 +230,7 @@ class MigrationServiceTest {
 
 	@Test
 	void startCleanupIsADryRunUnlessAskedOtherwise() {
-		final var run = service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(null, List.of(Source.ALKT), null, 5));
+		final var run = service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(null, List.of(Source.ALKT), null, 5, null));
 
 		assertThat(run.dryRun()).isTrue();
 		assertThat(run.cleanup()).isTrue();
@@ -246,9 +247,70 @@ class MigrationServiceTest {
 		verify(runner, never()).execute(any(), any(), any());
 		assertThat(lock.holder()).isEmpty();
 		// A cleanup holds the same lock as a run
-		service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(false, null, null, null));
-		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null)))
+		service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(false, null, null, null, null));
+		assertThatThrownBy(() -> service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null, null)))
 			.isInstanceOfSatisfying(ThrowableProblem.class, problem -> assertThat(problem.getStatus()).isEqualTo(CONFLICT));
+	}
+
+	@Test
+	void aSelectionOfItemsIsOneRunOfTheirSourcesAndKinds() {
+		final var run = service.startRun(MUNICIPALITY_ID, new RunRequest(false, null, null, null, List.of("ALKT/TILLSYN/700", " alkt/tillstand/1 ", "ALKT/TILLSYN/700")));
+
+		// Each item once, in the order given; only the kinds of the items are read
+		assertThat(run.items()).containsExactly("ALKT/TILLSYN/700", "ALKT/TILLSTAND/1");
+		assertThat(run.sources()).containsExactly("ALKT");
+		assertThat(run.kinds()).containsExactly("TILLSTAND", "TILLSYN");
+		final var task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+
+		task.getValue().run();
+
+		final var entity = ArgumentCaptor.forClass(MigrationRunEntity.class);
+		verify(runner).execute(entity.capture(), eq(Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN))), eq(Optional.empty()));
+		assertThat(entity.getValue().getItemKeys()).isEqualTo("ALKT/TILLSYN/700,ALKT/TILLSTAND/1");
+		assertThat(entity.getValue().getItemKey()).isNull();
+	}
+
+	@Test
+	void aCleanupOfASelectionOfItems() {
+		final var run = service.startCleanup(MUNICIPALITY_ID, new CleanupRequest(false, null, null, null, List.of("ALKOL/ANMALAN/1-FOLKOL")));
+
+		assertThat(run.items()).containsExactly("ALKOL/ANMALAN/1-FOLKOL");
+		final var task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+
+		task.getValue().run();
+
+		final var entity = ArgumentCaptor.forClass(MigrationRunEntity.class);
+		verify(cleanupRunner).execute(entity.capture(), eq(Map.of(Source.ALKOL, Set.of(ANMALAN))), eq(Optional.empty()));
+		assertThat(entity.getValue().getItemKeys()).isEqualTo("ALKOL/ANMALAN/1-FOLKOL");
+	}
+
+	@Test
+	void aRunWithoutASelectionHasNoItems() {
+		assertThat(service.startRun(MUNICIPALITY_ID, new RunRequest(true, null, null, null, null)).items()).isNull();
+	}
+
+	@Test
+	void aSelectionIsRefusedForAnItemItCannotTake() {
+		assertThat(refusal(new RunRequest(true, null, null, null, List.of("ALKT-TILLSTAND-1"))))
+			.isEqualTo("Ärendet 'ALKT-TILLSTAND-1' ska skrivas som källa/sort/id, till exempel ALKT/TILLSTAND/123");
+		assertThat(refusal(new RunRequest(true, null, null, null, List.of("ALKT/TILLSTAND/1,2"))))
+			.isEqualTo("Ärendet 'ALKT/TILLSTAND/1,2' ska skrivas som källa/sort/id, till exempel ALKT/TILLSTAND/123");
+		assertThat(refusal(new RunRequest(true, null, null, null, List.of("ALKT/ANMALAN/1-FOLKOL"))))
+			.isEqualTo("AlkT har inga ärenden av sorten ANMALAN");
+		assertThat(refusal(new RunRequest(true, List.of(Source.ALKOL), null, null, List.of("ALKT/TILLSTAND/1"))))
+			.isEqualTo("Ärendet ALKT/TILLSTAND/1 ligger utanför de källor och sorter som körningen gäller");
+		assertThat(refusal(new RunRequest(true, null, List.of(TILLSYN), null, List.of("ALKT/TILLSTAND/1"))))
+			.isEqualTo("Ärendet ALKT/TILLSTAND/1 ligger utanför de källor och sorter som körningen gäller");
+		assertThat(lock.holder()).isEmpty();
+		verify(runRepository, never()).save(any());
+	}
+
+	private String refusal(final RunRequest request) {
+		final var problem = catchThrowableOfType(ThrowableProblem.class, () -> service.startRun(MUNICIPALITY_ID, request));
+		assertThat(problem.getStatus()).isEqualTo(BAD_REQUEST);
+		return problem.getDetail();
 	}
 
 	@Test

@@ -16,7 +16,8 @@ import se.sundsvall.aotloader.service.model.RunStatus;
  * @param cleanup        true for a cleanup, which removes what the migration wrote to the target systems
  * @param sources        the sources read
  * @param kinds          the kinds migrated or cleaned up
- * @param itemKey        the single item of the run, null for a full run
+ * @param itemKey        the single item of the run, null for a full run or a selection
+ * @param items          the items of a selection, null for a full run or the run of a single item
  * @param limit          the largest number of items written, null for no limit
  * @param status         the status of the run
  * @param message        what the run has to say, e.g. why it failed or what the checks before it found
@@ -33,6 +34,7 @@ public record Run(
 	List<String> sources,
 	List<String> kinds,
 	String itemKey,
+	List<String> items,
 	Integer limit,
 	RunStatus status,
 	String message,

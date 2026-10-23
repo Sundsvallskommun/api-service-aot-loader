@@ -5,13 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import se.sundsvall.aotloader.service.model.RunStatus;
 
 /**
- * A run of the migration or of a cleanup, a full run or the run of a single item.
+ * A run of the migration or of a cleanup, a full run, the run of a selection of items or the run of a single item.
  */
 @Entity
 @Table(name = "migration_run")
@@ -38,6 +39,10 @@ public class MigrationRunEntity {
 
 	@Column(name = "item_key")
 	private String itemKey;
+
+	@Lob
+	@Column(name = "item_keys")
+	private String itemKeys;
 
 	@Column(name = "item_limit")
 	private Integer itemLimit;
@@ -114,6 +119,17 @@ public class MigrationRunEntity {
 		this.itemKey = itemKey;
 	}
 
+	/**
+	 * @return the items the run is narrowed to, separated by commas as ItemSelection writes them; null when it is not
+	 */
+	public String getItemKeys() {
+		return itemKeys;
+	}
+
+	public void setItemKeys(final String itemKeys) {
+		this.itemKeys = itemKeys;
+	}
+
 	public Integer getItemLimit() {
 		return itemLimit;
 	}
@@ -166,7 +182,8 @@ public class MigrationRunEntity {
 
 	@Override
 	public String toString() {
-		return "MigrationRunEntity [id=" + id + ", municipalityId=" + municipalityId + ", dryRun=" + dryRun + ", cleanup=" + cleanup + ", sources=" + sources + ", kinds=" + kinds + ", itemKey=" + itemKey + ", itemLimit=" + itemLimit + ", status=" + status
+		return "MigrationRunEntity [id=" + id + ", municipalityId=" + municipalityId + ", dryRun=" + dryRun + ", cleanup=" + cleanup + ", sources=" + sources + ", kinds=" + kinds + ", itemKey=" + itemKey + ", itemKeys=" + itemKeys + ", itemLimit="
+			+ itemLimit + ", status=" + status
 			+ ", message="
 			+ message + ", started=" + started + ", finished=" + finished + "]";
 	}

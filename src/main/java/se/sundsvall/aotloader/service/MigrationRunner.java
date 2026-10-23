@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service;
 
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,6 +17,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.ItemSelection;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.ReaderResult;
@@ -92,12 +94,12 @@ public class MigrationRunner {
 	}
 
 	/**
-	 * Runs the migration of the scope, or of the single item when one is given. Never throws, except for an
-	 * {@link Error}, after which the run is still saved as FAILED.
+	 * Runs the migration of the scope, of the items the run is narrowed to, or of the single item when one is given. Never
+	 * throws, except for an {@link Error}, after which the run is still saved as FAILED.
 	 *
-	 * @param  run    the run, saved as RUNNING
+	 * @param  run    the run, saved as RUNNING, with the items it is narrowed to, if any
 	 * @param  scope  the sources and their kinds
-	 * @param  single the one item to migrate, empty for every item of the scope
+	 * @param  single the one item to migrate, empty for every item of the scope or of the run's selection
 	 * @return        the row of the report of the single item, whatever its outcome, also when it could not be saved; empty
 	 *                for a full run, and when the item was not found or the run stopped or failed before it
 	 */
@@ -146,25 +148,35 @@ public class MigrationRunner {
 	}
 
 	private void migrate(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
+		final var selection = single.map(key -> ItemSelection.of(List.of(key))).orElseGet(() -> ItemSelection.parse(run.getItemKeys()));
 		for (final var source : Source.values()) {
-			if (!migrateSource(run, source, scope.getOrDefault(source, Set.of()), single, context, progress)) {
+			if (!migrateSource(run, source, scope.getOrDefault(source, Set.of()), selection, single.isPresent(), context, progress)) {
 				break;
 			}
 		}
 		if (progress.limitReached) {
 			progress.note("Gränsen på %d ärenden nåddes; resten tas i nästa körning".formatted(run.getItemLimit()));
 		}
-		if (single.isPresent() && progress.singleResult == null && progress.status() == RunStatus.COMPLETED) {
+		if (progress.status() != RunStatus.COMPLETED) {
+			return;
+		}
+		if (single.isPresent() && progress.singleResult == null) {
 			progress.note("Ärendet %s finns inte i källan, eller är inte ett ärende som migreras".formatted(single.get()));
+		}
+		final var missing = single.isPresent() ? List.<ItemKey>of() : selection.missing(progress.found);
+		if (!missing.isEmpty()) {
+			progress.note("%d av ärendena i urvalet finns inte i källan, eller är inte ärenden som migreras: %s".formatted(missing.size(), ItemSelection.listText(missing)));
 		}
 	}
 
 	/**
-	 * Reads the kinds of a source and migrates their items. A source that cannot be read is reported and skipped.
+	 * Reads the kinds of a source and migrates their selected items. A source that cannot be read is reported and skipped.
 	 *
-	 * @return false when the run was asked to stop
+	 * @param  single true for the run of a single item, which reports only the item
+	 * @return        false when the run was asked to stop
 	 */
-	private boolean migrateSource(final MigrationRunEntity run, final Source source, final Set<Kind> kinds, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
+	private boolean migrateSource(final MigrationRunEntity run, final Source source, final Set<Kind> kinds, final ItemSelection selection, final boolean single, final RunContext context,
+		final Progress progress) {
 		if (kinds.isEmpty()) {
 			return true;
 		}
@@ -172,19 +184,26 @@ public class MigrationRunner {
 		if (result.isEmpty()) {
 			return true;
 		}
-		if (single.isEmpty()) {
-			result.get().notices().forEach(notice -> saveLine(run, notice, progress));
+		if (!single) {
+			result.get().notices().stream()
+				.filter(notice -> selection.includes(notice.key()))
+				.forEach(notice -> {
+					saveLine(run, notice, progress);
+					progress.found.add(notice.key());
+				});
 		}
-		return migrateItems(run, result.get().candidates(), single, context, progress);
+		return migrateItems(run, result.get().candidates(), selection, single, context, progress);
 	}
 
 	/**
-	 * Migrates the items of a source, or only the single item when one is given.
+	 * Migrates the selected items of a source.
 	 *
-	 * @return false when the run was asked to stop
+	 * @param  single true for the run of a single item, whose row is kept as its result
+	 * @return        false when the run was asked to stop
 	 */
-	private boolean migrateItems(final MigrationRunEntity run, final List<Candidate> candidates, final Optional<ItemKey> single, final RunContext context, final Progress progress) {
-		final var selected = single.map(key -> candidates.stream().filter(candidate -> key.equals(candidate.key())).toList()).orElse(candidates);
+	private boolean migrateItems(final MigrationRunEntity run, final List<Candidate> candidates, final ItemSelection selection, final boolean single, final RunContext context,
+		final Progress progress) {
+		final var selected = candidates.stream().filter(candidate -> selection.includes(candidate.key())).toList();
 		for (final var candidate : selected) {
 			if (context.stopRequested()) {
 				progress.stop();
@@ -196,7 +215,8 @@ public class MigrationRunner {
 				progress.limitReached = true;
 			}
 			final var line = saveLine(run, candidate, result, progress);
-			if (single.isPresent()) {
+			progress.found.add(candidate.key());
+			if (single) {
 				progress.singleResult = line;
 			}
 		}
@@ -244,10 +264,12 @@ public class MigrationRunner {
 	}
 
 	/**
-	 * How far a run has come, and whether it reached its limit and, for a single item, the item's result.
+	 * How far a run has come, whether it reached its limit, the items it found in the sources and, for a single item, the
+	 * item's result.
 	 */
 	private static final class Progress extends RunProgress {
 
+		private final Set<ItemKey> found = new HashSet<>();
 		private boolean limitReached;
 		private RunItemEntity singleResult;
 	}

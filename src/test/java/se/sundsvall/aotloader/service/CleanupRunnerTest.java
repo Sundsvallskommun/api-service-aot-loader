@@ -108,6 +108,23 @@ class CleanupRunnerTest {
 	}
 
 	@Test
+	void aSelectionCleansUpOnlyItsItemsAndTellsThoseNotInTheStatusTable() {
+		final var permit = item(Source.ALKT, TILLSTAND, "1", "2281");
+		final var inspection = item(Source.ALKT, TILLSYN, "700", "2281");
+		final var other = item(Source.ALKT, TILLSYN, "701", "2281");
+		when(itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(permit, inspection, other));
+		final var run = run(false, null);
+		run.setItemKeys("ALKT/TILLSTAND/1,ALKT/TILLSYN/700,ALKT/TILLSYN/999");
+
+		assertThat(runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN)), Optional.empty())).isEmpty();
+
+		assertThat(lines).extracting(RunItemEntity::getSourceId).containsExactly("700", "1");
+		verify(cleaner, never()).clean(other, "2281", false);
+		assertThat(run.getStatus()).isEqualTo(RunStatus.COMPLETED);
+		assertThat(run.getMessage()).isEqualTo("1 av ärendena i urvalet finns inte i statustabellen: ALKT/TILLSYN/999");
+	}
+
+	@Test
 	void onlyTheScopeIsCleanedUpAndADryRunIsPassedOn() {
 		final var permit = item(Source.ALKT, TILLSTAND, "1", "2281");
 		final var inspection = item(Source.ALKT, TILLSYN, "700", "2281");

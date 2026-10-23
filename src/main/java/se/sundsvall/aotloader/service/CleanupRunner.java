@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
 import se.sundsvall.aotloader.integration.db.model.RunItemEntity;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.ItemSelection;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.RunStatus;
 import se.sundsvall.aotloader.service.model.Source;
@@ -75,12 +77,12 @@ public class CleanupRunner {
 	}
 
 	/**
-	 * Cleans up the items of the scope, or the single item when one is given. Never throws, except for an {@link Error},
-	 * after which the cleanup is still saved as FAILED.
+	 * Cleans up the items of the scope, the items the cleanup is narrowed to, or the single item when one is given. Never
+	 * throws, except for an {@link Error}, after which the cleanup is still saved as FAILED.
 	 *
-	 * @param  run    the cleanup, saved as RUNNING
+	 * @param  run    the cleanup, saved as RUNNING, with the items it is narrowed to, if any
 	 * @param  scope  the sources and their kinds
-	 * @param  single the one item to clean up, empty for every item of the scope
+	 * @param  single the one item to clean up, empty for every item of the scope or of the cleanup's selection
 	 * @return        the row of the report of the single item, whatever its outcome, also when it could not be saved; empty
 	 *                for a full cleanup, and when the item is not in the status table or the cleanup stopped or failed
 	 *                before
@@ -90,9 +92,10 @@ public class CleanupRunner {
 		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
 		try {
+			final var selection = single.map(key -> ItemSelection.of(List.of(key))).orElseGet(() -> ItemSelection.parse(run.getItemKeys()));
 			targetGuard.check().ifPresentOrElse(
 				wrongTarget -> progress.fail("Rensningen startade inte. " + wrongTarget),
-				() -> clean(run, items(run.getMunicipalityId(), scope, single), single.isPresent(), stop, progress));
+				() -> clean(run, items(run.getMunicipalityId(), scope, selection, single.isEmpty(), progress), single.isPresent(), stop, progress));
 			if (single.isPresent() && progress.singleResult == null && progress.status() == RunStatus.COMPLETED) {
 				progress.note("Ärendet %s finns inte i statustabellen".formatted(single.get()));
 			}
@@ -110,16 +113,27 @@ public class CleanupRunner {
 	}
 
 	/**
-	 * @return the items of the status table in the scope and the municipality, or the single item, in the order to clean
-	 *         them up; an item that never reached a target system has no municipality and is in every one
+	 * @param  noteMissing true to tell, on the progress, the selected items the status table does not have
+	 * @return             the selected items of the status table in the scope and the municipality, in the order to clean
+	 *                     them up; an item that never reached a target system has no municipality and is in every one
 	 */
-	private List<MigrationItemEntity> items(final String municipalityId, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
-		return itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc().stream()
+	private List<MigrationItemEntity> items(final String municipalityId, final Map<Source, Set<Kind>> scope, final ItemSelection selection, final boolean noteMissing,
+		final Progress progress) {
+		final var items = itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc().stream()
 			.filter(item -> scope.getOrDefault(item.getSource(), Set.of()).contains(item.getKind()))
 			.filter(item -> item.getMunicipalityId() == null || municipalityId.equals(item.getMunicipalityId()))
-			.filter(item -> single.map(key -> key.equals(new ItemKey(item.getSource(), item.getKind(), item.getSourceId()))).orElse(true))
+			.filter(item -> selection.includes(keyOf(item)))
 			.sorted(ORDER)
 			.toList();
+		final var missing = selection.missing(items.stream().map(CleanupRunner::keyOf).collect(Collectors.toSet()));
+		if (noteMissing && !missing.isEmpty()) {
+			progress.note("%d av ärendena i urvalet finns inte i statustabellen: %s".formatted(missing.size(), ItemSelection.listText(missing)));
+		}
+		return items;
+	}
+
+	private static ItemKey keyOf(final MigrationItemEntity item) {
+		return new ItemKey(item.getSource(), item.getKind(), item.getSourceId());
 	}
 
 	private void clean(final MigrationRunEntity run, final List<MigrationItemEntity> items, final boolean single, final AtomicBoolean stop, final Progress progress) {
@@ -143,7 +157,7 @@ public class CleanupRunner {
 	}
 
 	private RunItemEntity saveLine(final MigrationRunEntity run, final MigrationItemEntity item, final ItemResult result, final RunProgress progress) {
-		final var line = records.newLine(run, new ItemKey(item.getSource(), item.getKind(), item.getSourceId()));
+		final var line = records.newLine(run, keyOf(item));
 		line.setOutcome(result.outcome());
 		// A cleanup applies no review rules, so the column is empty as for an item without hits
 		line.setRules(String.join(",", result.rules()));

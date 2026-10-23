@@ -205,7 +205,8 @@ paths:
         \ rules, looks up the permit holders in Party and checks the files, and writes\
         \ nothing to the target systems. Starting a run again never migrates an item\
         \ twice: an item already migrated is left as it is, and an item that stopped\
-        \ half way continues from where it stopped. Only one run at a time."
+        \ half way continues from where it stopped. Only one run at a time. A selection\
+        \ of items, items, is taken in one run with one report and one result file."
       operationId: startRun
       parameters:
       - name: municipalityId
@@ -385,7 +386,9 @@ paths:
         \ it. The id is ObjektID in AlkT or FSID in AlkOL for a permit, FSID and product\
         \ for a notification, e.g. 1234-FOLKOL, ArendeID for an inspection errand\
         \ and TillsynsTillfalleNr for an inspection visit. An inspection errand waits\
-        \ until the permit of its place is migrated."
+        \ until the permit of its place is migrated. Its row is the answer and no\
+        \ result file is written; items that belong together are taken as a selection\
+        \ in one run."
       operationId: migrateItem
       parameters:
       - name: municipalityId
@@ -977,9 +980,9 @@ components:
         type:
           type: string
           format: uri
-        detail:
-          type: string
         title:
+          type: string
+        detail:
           type: string
         status:
           type: integer
@@ -1082,6 +1085,22 @@ components:
           description: "The largest number of items the run writes to the target systems,\
             \ no limit when left out"
           minimum: 1
+        items:
+          type: array
+          description: "The items to migrate, written as in the report: source/kind/id.\
+            \ Every item of the sources and kinds when left out. They are taken in\
+            \ one run, in the order of a full run, with one report and one result\
+            \ file. An item outside the sources and kinds is refused."
+          example:
+          - ALKT/TILLSTAND/123
+          - ALKT/TILLSYN/4567
+          items:
+            type: string
+            minLength: 1
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/\\d{1,10}(-[A-Z_]{1,30})?\\\
+              s*$"
+          maxItems: 2147483647
+          minItems: 1
     Run:
       type: object
       description: "A run of the migration, or of a cleanup"
@@ -1104,6 +1123,10 @@ components:
             type: string
         itemKey:
           type: string
+        items:
+          type: array
+          items:
+            type: string
         limit:
           type: integer
           format: int32
@@ -1208,6 +1231,22 @@ components:
           description: "The largest number of items the cleanup takes, no limit when\
             \ left out"
           minimum: 1
+        items:
+          type: array
+          description: "The items to clean up, written as in the report: source/kind/id.\
+            \ Every item of the sources and kinds when left out. They are taken in\
+            \ one cleanup, with one report and one result file. An item outside the\
+            \ sources and kinds is refused."
+          example:
+          - ALKT/TILLSTAND/123
+          - ALKT/TILLSYN/4567
+          items:
+            type: string
+            minLength: 1
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/\\d{1,10}(-[A-Z_]{1,30})?\\\
+              s*$"
+          maxItems: 2147483647
+          minItems: 1
     MigrationItem:
       type: object
       description: A row of the status table

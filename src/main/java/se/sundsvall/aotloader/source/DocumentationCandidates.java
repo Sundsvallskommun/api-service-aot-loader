@@ -95,15 +95,14 @@ public final class DocumentationCandidates {
 	}
 
 	/**
-	 * @return "Anteckning på Krogen Ett 2024-03-01, migrerad från AlkT, där den inte hörde till något ärende.", its diary
-	 *         number, whether it is confidential, and its text
+	 * @return "Anteckning på Krogen Ett 2024-03-01, som inte hörde till något ärende.", its diary number, whether it is
+	 *         confidential, and its text
 	 */
 	private static String description(final PlaceEvent event, final String typeText, final String placeName) {
-		final var source = event.source().getDisplayName();
 		return Texts.join("\n", Arrays.asList(
-			"%s, migrerad från %s, där den inte hörde till något ärende.".formatted(Texts.joinWords(typeText, "på", placeName, SourceValues.format(event.day())), source),
+			"%s, som inte hörde till något ärende.".formatted(Texts.joinWords(typeText, "på", placeName, SourceValues.format(event.day()))),
 			line("Diarienummer", event.diaryNumber()),
-			event.confidential() ? "Händelsen är markerad med sekretess i " + source + "." : null,
+			event.confidential() ? "Händelsen är markerad med sekretess i " + event.source().getDisplayName() + "." : null,
 			Texts.trimToNull(event.text())));
 	}
 

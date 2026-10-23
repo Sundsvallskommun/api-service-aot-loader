@@ -122,6 +122,28 @@ class MigrationRunnerTest {
 	}
 
 	@Test
+	void aSelectionTakesOnlyItsItemsAndTellsThoseNotFound() {
+		final var permit = TestData.permit("1");
+		final var other = TestData.permit("2");
+		final var notice = new Notice(new ItemKey(Source.ALKT, TILLSTAND, "utan-id-1"), null, Outcome.GRANSKAS, "G1", "G1 Tillståndet saknar ObjektID");
+		final var otherNotice = new Notice(new ItemKey(Source.ALKT, TILLSTAND, "utan-id-2"), null, Outcome.GRANSKAS, "G1", "G1 Tillståndet saknar ObjektID");
+		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(permit, other), List.of(notice, otherNotice)));
+		when(migrator.process(eq(other), any())).thenReturn(new ItemResult(Outcome.MIGRERAD, List.of(), null, "ALKT-2"));
+		final var run = run(false, null);
+		run.setItemKeys("ALKT/TILLSTAND/9,ALKT/TILLSTAND/2,ALKT/TILLSTAND/utan-id-1");
+
+		final var result = runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND)), Optional.empty());
+
+		assertThat(result).isEmpty();
+		assertThat(run.getStatus()).isEqualTo(RunStatus.COMPLETED);
+		assertThat(lines).extracting(RunItemEntity::getSourceId, RunItemEntity::getOutcome).containsExactly(
+			tuple("utan-id-1", Outcome.GRANSKAS),
+			tuple("2", Outcome.MIGRERAD));
+		verify(migrator, never()).process(eq(permit), any());
+		assertThat(run.getMessage()).isEqualTo("1 av ärendena i urvalet finns inte i källan, eller är inte ärenden som migreras: ALKT/TILLSTAND/9");
+	}
+
+	@Test
 	void aSourceThatCannotBeReadDoesNotStopTheOthers() {
 		when(alktReader.read(Set.of(TILLSTAND))).thenThrow(new MigrationException("Källdatabasen för AlkT är inte konfigurerad"));
 		when(alkolReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(List.of(TestData.permit("9")), List.of()));

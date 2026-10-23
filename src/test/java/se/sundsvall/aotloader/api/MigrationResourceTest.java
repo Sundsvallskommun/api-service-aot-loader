@@ -54,7 +54,7 @@ class MigrationResourceTest {
 
 	@Test
 	void startRun() {
-		final var request = new RunRequest(false, List.of(Source.ALKT), List.of(Kind.TILLSTAND), 5);
+		final var request = new RunRequest(false, List.of(Source.ALKT), List.of(Kind.TILLSTAND), 5, List.of("ALKT/TILLSTAND/1"));
 		when(service.startRun(MUNICIPALITY_ID, request)).thenReturn(run(RunStatus.RUNNING));
 
 		final var response = webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
@@ -77,7 +77,7 @@ class MigrationResourceTest {
 			.header("Origin", "https://example.com")
 			.header("Sec-Fetch-Site", "cross-site")
 			.contentType(APPLICATION_JSON)
-			.bodyValue(new RunRequest(false, null, null, null))
+			.bodyValue(new RunRequest(false, null, null, null, null))
 			.exchange()
 			.expectStatus().isForbidden();
 
@@ -101,7 +101,7 @@ class MigrationResourceTest {
 	void theCleanupIsNotThereUnlessTheEnvironmentTurnsItOn() {
 		webTestClient.post().uri("/{municipalityId}/migrations/cleanups", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
-			.bodyValue(new RunRequest(false, null, null, null))
+			.bodyValue(new RunRequest(false, null, null, null, null))
 			.exchange()
 			.expectStatus().isNotFound();
 		webTestClient.post().uri("/{municipalityId}/migrations/items/ALKT/TILLSTAND/1/cleanup?dryRun=false", MUNICIPALITY_ID)
@@ -115,22 +115,22 @@ class MigrationResourceTest {
 	void startRunWithInvalidLimitAndMunicipality() {
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
-			.bodyValue(new RunRequest(true, null, null, 0))
+			.bodyValue(new RunRequest(true, null, null, 0, null))
 			.exchange()
 			.expectStatus().isBadRequest()
 			.expectBody(ConstraintViolationProblem.class);
 
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
-			.bodyValue("{\"sources\": [null], \"kinds\": [null]}")
+			.bodyValue("{\"sources\": [null], \"kinds\": [null], \"items\": [\"ALKT/TILLSTAND/1' OR '1'='1\"]}")
 			.exchange()
 			.expectStatus().isBadRequest()
 			.expectBody(ConstraintViolationProblem.class)
-			.value(problem -> assertThat(problem.getViolations()).hasSize(2));
+			.value(problem -> assertThat(problem.getViolations()).hasSize(3));
 
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", "invalid")
 			.contentType(APPLICATION_JSON)
-			.bodyValue(new RunRequest(true, null, null, null))
+			.bodyValue(new RunRequest(true, null, null, null, null))
 			.exchange()
 			.expectStatus().isBadRequest();
 
@@ -147,11 +147,11 @@ class MigrationResourceTest {
 
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
-			.bodyValue("{\"dryRun\": false, \"sources\": [], \"kinds\": []}")
+			.bodyValue("{\"dryRun\": false, \"sources\": [], \"kinds\": [], \"items\": []}")
 			.exchange()
 			.expectStatus().isBadRequest()
 			.expectBody(ConstraintViolationProblem.class)
-			.value(problem -> assertThat(problem.getViolations()).extracting("field").containsExactlyInAnyOrder("sources", "kinds"));
+			.value(problem -> assertThat(problem.getViolations()).extracting("field").containsExactlyInAnyOrder("sources", "kinds", "items"));
 
 		verifyNoInteractions(service);
 	}
@@ -162,7 +162,7 @@ class MigrationResourceTest {
 
 		final var problem = webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)
-			.bodyValue(new RunRequest(null, null, null, null))
+			.bodyValue(new RunRequest(null, null, null, null, null))
 			.exchange()
 			.expectStatus().isEqualTo(CONFLICT)
 			.expectBody(Problem.class)
@@ -234,6 +234,6 @@ class MigrationResourceTest {
 	}
 
 	private static Run run(final RunStatus status) {
-		return new Run(RUN_ID, MUNICIPALITY_ID, true, false, List.of("ALKT"), List.of("TILLSTAND"), null, null, status, null, OffsetDateTime.parse("2026-10-12T10:00:00+02:00"), null, Map.of(Outcome.MIGRERAD, 1L));
+		return new Run(RUN_ID, MUNICIPALITY_ID, true, false, List.of("ALKT"), List.of("TILLSTAND"), null, null, null, status, null, OffsetDateTime.parse("2026-10-12T10:00:00+02:00"), null, Map.of(Outcome.MIGRERAD, 1L));
 	}
 }

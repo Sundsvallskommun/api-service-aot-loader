@@ -96,7 +96,7 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.errand().title()).isEqualTo("Serveringstillstånd – Restaurang 1");
 		assertThat(candidate.errand().labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING");
 		assertThat(candidate.errand().externalTags()).containsExactly(Map.entry("diarienummer", "IAN-2019-1"));
-		assertThat(candidate.errand().description()).contains("Serveringstillstånd för Restaurang 1, migrerat från AlkT.", "Drycker: Starköl, Vin", "Villkor:", "- Krav på bordsservering: Bord");
+		assertThat(candidate.errand().description()).contains("Serveringstillstånd för Restaurang 1.", "Drycker: Starköl, Vin", "Villkor:", "- Krav på bordsservering: Bord");
 	}
 
 	@Test
@@ -790,7 +790,7 @@ class AlktCandidateFactoryTest {
 		// A handler AlkT has no name for stands with the code
 		assertThat(parameters(closed)).containsEntry("beslut", List.of("Erinran, 2020-02-01")).containsEntry("arendetyp", List.of("Tillsyn, ifrågasatt åtgärd"))
 			.containsEntry("handlaggare", List.of("Anna Berg", "ZZ"));
-		assertThat(closed.errand().description()).contains("\nHandläggare: Anna Berg, ZZ\n");
+		assertThat(closed.errand().description()).startsWith("Tillsyn, ifrågasatt åtgärd.\n").contains("\nHandläggare: Anna Berg, ZZ\n");
 		assertThat(closed.files().references()).containsExactly(new FileReference("protokoll.pdf", ATTACHMENTS), new FileReference("33333333.rtf", DOCUMENTS));
 		// The events are in order of time, an event without a time first, also one without a text, a confidential one is
 		// marked, a picture is headed "Bild", and a decision tells who made it
@@ -872,7 +872,7 @@ class AlktCandidateFactoryTest {
 		final var withFile = documentation.get(1);
 		assertThat(withFile.type()).isEqualTo(ErrandType.ALCOHOL_DOCUMENTATION);
 		assertThat(withFile.errand().description()).isEqualTo("""
-			Anteckning på Restaurang 1 2021-06-01, migrerad från AlkT, där den inte hörde till något ärende.
+			Anteckning på Restaurang 1 2021-06-01, som inte hörde till något ärende.
 			Diarienummer: IAN-2021-1
 			Ny serveringsansvarig""");
 		assertThat(withFile.errand().labelPaths()).containsExactly(TestData.DOCUMENTATION);
@@ -980,7 +980,7 @@ class AlktCandidateFactoryTest {
 		assertThat(visit.errand().externalTags()).isEmpty();
 		assertThat(visit.asset()).isNull();
 		assertThat(visit.errand().description()).isEqualTo("""
-			Tillsynsbesök på Restaurang 1 2023-11-04, migrerat från AlkT.
+			Tillsynsbesök på Restaurang 1 2023-11-04.
 			Tillsynsart: Rutintillsyn
 			Tid: 21:30–23
 			Tillsynsomgång: Krogrunda, 2023-11-04 – 2023-11-05
@@ -1016,9 +1016,8 @@ class AlktCandidateFactoryTest {
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
 			.containsExactly("G28 Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: datum saknas");
 		assertThat(candidates.get(1).errand().description()).isEqualTo("""
-			Tillsynsbesök på Restaurang 1, migrerat från AlkT.
-			Anmärkningar:
-			Inga anmärkningar registrerade""");
+			Tillsynsbesök på Restaurang 1.
+			Anmärkningar: Inga anmärkningar registrerade""");
 		final var withoutPlace = candidates.get(2);
 		assertThat(withoutPlace.ruleHits()).extracting(RuleHit::toReportText).containsExactly("G1 Serverings- eller försäljningsstället saknas: tillsynsbesöket saknar serveringsställe");
 		assertThat(withoutPlace.errand().title()).isEqualTo("Tillsynsbesök – okänt serveringsställe");

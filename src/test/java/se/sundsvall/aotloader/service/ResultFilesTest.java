@@ -68,8 +68,19 @@ class ResultFilesTest {
 		assertThat(resultFiles.fileName(run("abcdef12-3456", false, false, null))).isEqualTo("rapport-20261022-140000-korning-abcdef12.csv");
 		assertThat(resultFiles.fileName(run("abcdef12-3456", true, true, null))).isEqualTo("rapport-20261022-140000-rensning-torrkorning-abcdef12.csv");
 		assertThat(resultFiles.fileName(run("abcdef12-3456", false, true, null))).isEqualTo("rapport-20261022-140000-rensning-korning-abcdef12.csv");
-		assertThat(resultFiles.fileName(run("ab", false, false, "ALKOL/ANMALAN/12-FOLKOL"))).isEqualTo("rapport-20261022-140000-korning-ALKOL-ANMALAN-12-FOLKOL-ab.csv");
-		assertThat(resultFiles.fileName(run("../x", false, false, "..\\..\\x"))).isEqualTo("rapport-20261022-140000-korning-x-x.csv");
+		final var selection = run("ab", false, false, null);
+		selection.setItemKeys("ALKOL/ANMALAN/12-FOLKOL,ALKT/TILLSYN/7");
+		assertThat(resultFiles.fileName(selection)).isEqualTo("rapport-20261022-140000-korning-urval-ab.csv");
+		selection.setCleanup(true);
+		assertThat(resultFiles.fileName(selection)).isEqualTo("rapport-20261022-140000-rensning-korning-urval-ab.csv");
+		assertThat(resultFiles.fileName(run("../x", false, false, null))).isEqualTo("rapport-20261022-140000-korning-x.csv");
+	}
+
+	@Test
+	void theRunOfASingleItemWritesNoFile() {
+		// Its row is the answer of its call; items that belong together are taken in one run, with one file
+		assertThat(new ResultFiles(runItemRepository, directory.toString(), CLOCK).write(run("a", false, false, "ALKT/TILLSTAND/1"))).isEmpty();
+		verifyNoInteractions(runItemRepository);
 	}
 
 	@Test
