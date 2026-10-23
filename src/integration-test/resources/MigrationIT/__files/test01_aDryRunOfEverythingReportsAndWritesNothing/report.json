@@ -1,0 +1,176 @@
+[
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "1",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G14",
+		"detail": "Till tillståndet i PartyAssets: Tillståndsbevis 1, Beslut 1; G14 1 fil saknas på filarean (saknas.pdf); G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (skylt.jpg); Lagrum: 1 ur tillståndets beslut eller bevis; Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 1 dokument"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "2",
+		"placeNumber": "12345679",
+		"placeName": "Krogen Två",
+		"outcome": "GRANSKAS",
+		"rules": "G2,G13,G29",
+		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "3",
+		"placeNumber": "12345680",
+		"placeName": "Krogen Tre",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G29",
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Till tillståndet i PartyAssets: Ritning på lokalen med serveringsytan markerad 1, Beslut 1; Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget; Beslut: Bifall, fattat 2021-01-31, 0 villkor, 1 dokument"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSTAND",
+		"sourceId": "4",
+		"placeNumber": "12345681",
+		"placeName": "Timråkrogen",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G13,G29",
+		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Inget beslut: AlkT har inget beslut med tidpunkt för tillståndet"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "700",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "701",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "702",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYN",
+		"sourceId": "703",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "MIGRERAS_INTE",
+		"rules": "G32",
+		"detail": "G32 Ärendet eller händelsen gällde en tidigare ägare av stället, och bara den nuvarande tillståndshavarens följer med (beslut 72): sökanden i ärendet är inte ställets nuvarande ägare"
+	},
+	{
+		"source": "ALKT",
+		"kind": "TILLSYNSBESOK",
+		"sourceId": "900",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-05-01; Underlag till utredningen: 2 filer"
+	},
+	{
+		"source": "ALKT",
+		"kind": "DOKUMENTATION",
+		"sourceId": "5",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "DOKUMENTATION",
+		"sourceId": "11",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKT",
+		"kind": "DOKUMENTATION",
+		"sourceId": "13",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "MIGRERAS_INTE",
+		"rules": "G32",
+		"detail": "G32 Ärendet eller händelsen gällde en tidigare ägare av stället, och bara den nuvarande tillståndshavarens följer med (beslut 72): händelsen var 2018-03-15, och stället hade en tidigare ägare till och med 2018-12-31"
+	},
+	{
+		"source": "ALKT",
+		"kind": "DOKUMENTATION",
+		"sourceId": "31020",
+		"placeNumber": "12345678",
+		"placeName": "Krogen Ett",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "TILLSTAND",
+		"sourceId": "1",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "G29",
+		"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Beslut: Bifall, fattat 2019-07-01, 0 villkor, 0 dokument"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "ANMALAN",
+		"sourceId": "1-FOLKOL",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": ""
+	},
+	{
+		"source": "ALKOL",
+		"kind": "ANMALAN",
+		"sourceId": "2-FOLKOL",
+		"placeName": "Timråkiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Stället hör till kommun 2262 (område Timrå); Till anmälan i PartyAssets: utan kategori 1"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "TILLSYNSBESOK",
+		"sourceId": "950",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKOL/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-07-02"
+	},
+	{
+		"source": "ALKOL",
+		"kind": "DOKUMENTATION",
+		"sourceId": "303",
+		"placeName": "Kiosken",
+		"outcome": "SKULLE_MIGRERAS",
+		"rules": "",
+		"detail": "Relation till tillståndsärendet ALKOL/TILLSTAND/1"
+	}
+]

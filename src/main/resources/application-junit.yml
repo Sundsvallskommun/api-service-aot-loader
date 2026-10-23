@@ -3,4 +3,43 @@
 #========================================
 logging:
   level:
-    root: DEBUG
+    root: INFO
+spring:
+  datasource:
+    url: jdbc:h2:mem:junit;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ''
+  security:
+    oauth2:
+      client:
+        provider:
+          party:
+            token-uri: http://localhost:9999/token
+          party-assets:
+            token-uri: http://localhost:9999/token
+          relation:
+            token-uri: http://localhost:9999/token
+          support-management:
+            token-uri: http://localhost:9999/token
+        registration:
+          party:
+            client-id: client-id
+            client-secret: client-secret
+          party-assets:
+            client-id: client-id
+            client-secret: client-secret
+          relation:
+            client-id: client-id
+            client-secret: client-secret
+          support-management:
+            client-id: client-id
+            client-secret: client-secret
+integration:
+  party:
+    url: http://localhost:9999/party
+  party-assets:
+    url: http://localhost:9999/party-assets
+  relation:
+    url: http://localhost:9999/relation
+  support-management:
+    url: http://localhost:9999/support-management

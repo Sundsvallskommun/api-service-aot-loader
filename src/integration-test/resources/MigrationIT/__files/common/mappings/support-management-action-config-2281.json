@@ -1,0 +1,43 @@
+{
+	"name": "support-management-action-config-2281",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/namespace-config/action-config",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "action-2281",
+				"name": "SEND_EMAIL",
+				"active": false
+			}
+		]
+	}
+}

@@ -1,0 +1,32 @@
+{
+	"name": "support-management-statuses-2281",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/metadata/statuses",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "status-new",
+				"name": "NEW"
+			},
+			{
+				"id": "status-closed",
+				"name": "CLOSED"
+			}
+		]
+	}
+}

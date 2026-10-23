@@ -1,0 +1,74 @@
+{
+	"name": "support-management-get-attachments",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "a1",
+				"fileName": "44444444.rtf",
+				"hash": "92d8c82839191e59a85f8c04e57d1e84ef10aa03fbb9d7dbf6ca65d86484cbdf",
+				"fileSize": 28,
+				"received": "2021-01-30T23:00:00Z"
+			},
+			{
+				"id": "a2",
+				"fileName": "ansökan räkenskaper.pdf",
+				"hash": "0bad4322a28ea92d508c1bb94d9d028d3bd570d28ad7724489f30cf742b26665",
+				"fileSize": 21
+			},
+			{
+				"id": "a3",
+				"fileName": "ritning våning 2.pdf",
+				"hash": "7cabe8856505f572864aab340dc3efeebb3f3a54303fc9e1ce80f97dd4b9ae45",
+				"fileSize": 16,
+				"purpose": {
+					"id": "purpose-SERVING_AREA_DRAWING",
+					"name": "SERVING_AREA_DRAWING"
+				}
+			},
+			{
+				"id": "a4",
+				"fileName": "fasad.jpg",
+				"hash": "7616588084ea3aa464b7e586ba92479a9dbc29020d5abffbabd4a2651b50ccec",
+				"fileSize": 5,
+				"received": "2019-06-10T08:00:00Z"
+			},
+			{
+				"id": "a5",
+				"fileName": "Översiktskarta.pdf",
+				"hash": "9ffb68cf4c6892d78f8d6ea62f29ecd4160a205e0bf18f2a9f74db2e56aa02b2",
+				"fileSize": 14
+			}
+		]
+	}
+}

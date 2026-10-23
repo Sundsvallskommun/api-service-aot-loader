@@ -1,0 +1,94 @@
+{
+	"name": "relation-find-from-the-permit",
+	"request": {
+		"method": "GET",
+		"urlPath": "/relation/2281/relations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"filter": {
+				"equalTo": "source.resourceId:'11111111-aaaa-bbbb-cccc-000000000001'"
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"relations": [
+				{
+					"id": "relation-1",
+					"type": "LINK",
+					"source": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000001",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					},
+					"target": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000002",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					}
+				},
+				{
+					"id": "relation-existing",
+					"type": "LINK",
+					"source": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000001",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					},
+					"target": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000007",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					}
+				},
+				{
+					"id": "relation-to-the-permit-in-party-assets",
+					"type": "LINK",
+					"source": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000001",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					},
+					"target": {
+						"resourceId": "asset-internal-1",
+						"type": "asset",
+						"service": "party-assets"
+					}
+				},
+				{
+					"id": "relation-a-case-handler-wrote",
+					"type": "REFERENCE",
+					"source": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000001",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					},
+					"target": {
+						"resourceId": "99999999-aaaa-bbbb-cccc-000000000099",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					}
+				}
+			]
+		}
+	}
+}

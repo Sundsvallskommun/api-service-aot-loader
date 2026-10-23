@@ -1,0 +1,49 @@
+{
+	"name": "support-management-update-draft",
+	"request": {
+		"method": "PATCH",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000009",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": "$.title"
+			},
+			{
+				"doesNotMatch": "(?s).*\"(reporterUserId|lifecycle)\".*"
+			}
+		]
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"id": "11111111-aaaa-bbbb-cccc-000000000009",
+			"errandNumber": "ALKT-2026-9",
+			"lifecycle": "DRAFT"
+		}
+	}
+}

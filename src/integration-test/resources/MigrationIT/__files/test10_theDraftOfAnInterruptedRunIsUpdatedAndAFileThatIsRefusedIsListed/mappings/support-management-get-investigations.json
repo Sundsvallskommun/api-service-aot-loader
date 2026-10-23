@@ -1,0 +1,23 @@
+{
+	"name": "support-management-get-investigations",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/investigations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": []
+	}
+}

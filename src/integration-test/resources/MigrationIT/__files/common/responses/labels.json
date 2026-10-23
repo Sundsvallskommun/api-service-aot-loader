@@ -1,0 +1,94 @@
+{
+	"labelStructure": [
+		{
+			"id": "label-tagroot",
+			"resourcePath": "/TAGROOT",
+			"labels": [
+				{
+					"id": "label-migrated",
+					"resourcePath": "/TAGROOT/MIGRATED_ERRAND",
+					"attributes": [
+						{
+							"key": "processBlocked",
+							"value": "true"
+						}
+					]
+				},
+				{
+					"id": "label-alcohol-inspection",
+					"resourcePath": "/TAGROOT/ALCOHOL_INSPECTION"
+				},
+				{
+					"id": "label-tobacco-inspection",
+					"resourcePath": "/TAGROOT/TOBACCO_INSPECTION"
+				}
+			]
+		},
+		{
+			"id": "label-categoryroot",
+			"resourcePath": "/CATEGORYROOT",
+			"labels": [
+				{
+					"id": "label-serving-permit",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION"
+				},
+				{
+					"id": "label-documentation",
+					"resourcePath": "/CATEGORYROOT/DOCUMENTATION/DOCUMENTATION"
+				},
+				{
+					"id": "label-temporary-public",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PUBLIC"
+				},
+				{
+					"id": "label-temporary-private",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PRIVATE"
+				},
+				{
+					"id": "label-permanent-serving",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING"
+				},
+				{
+					"id": "label-permanent-catering",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_CATERING"
+				},
+				{
+					"id": "label-farm-sales",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/FARM_SALES"
+				},
+				{
+					"id": "label-tasting",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING"
+				},
+				{
+					"id": "label-folkol-sales",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION"
+				},
+				{
+					"id": "label-folkol-serving",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION"
+				},
+				{
+					"id": "label-tobacco-permit",
+					"resourcePath": "/CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION"
+				},
+				{
+					"id": "label-ecigarette",
+					"resourcePath": "/CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION"
+				},
+				{
+					"id": "label-tobacco-free-nicotine",
+					"resourcePath": "/CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION"
+				},
+				{
+					"id": "label-internal-inspection",
+					"resourcePath": "/CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION"
+				},
+				{
+					"id": "label-external-inspection",
+					"resourcePath": "/CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"
+				}
+			]
+		}
+	]
+}

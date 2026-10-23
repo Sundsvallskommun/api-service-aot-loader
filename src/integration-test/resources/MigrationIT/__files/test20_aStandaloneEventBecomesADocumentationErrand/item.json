@@ -1,0 +1,15 @@
+{
+	"source": "ALKT",
+	"kind": "DOKUMENTATION",
+	"sourceId": "31020",
+	"errandType": "ALCOHOL_DOCUMENTATION",
+	"status": "KLAR",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000012",
+	"errandNumber": "ALKT-2026-12",
+	"relationId": "relation-12",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

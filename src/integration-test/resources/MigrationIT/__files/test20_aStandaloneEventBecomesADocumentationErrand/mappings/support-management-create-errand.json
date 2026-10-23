@@ -1,0 +1,92 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "DOCUMENTATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "DOCUMENTATION"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKT-DOKUMENTATION-31020')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-documentation')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Anteckning – Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "<p>Anteckning på Krogen Ett 2026-10-13, som inte hörde till något ärende.</p><p>ANDREAS TESTAR</p>"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'alktHandelseId' && @.values[0] == '31020')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'handelsetyp' && @.values[0] == 'Anteckning')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'handelsedatum' && @.values[0] == '2026-10-13')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001')]"
+			},
+			{
+				"doesNotMatch": "(?s).*referredFrom.*"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000012"
+		}
+	}
+}

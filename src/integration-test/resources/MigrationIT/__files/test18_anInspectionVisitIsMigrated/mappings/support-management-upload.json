@@ -1,0 +1,39 @@
+{
+	"name": "support-management-upload",
+	"priority": 5,
+	"scenarioName": "attachments",
+	"newScenarioState": "Uploaded",
+	"request": {
+		"method": "POST",
+		"urlPath": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/attachments/x"
+		}
+	}
+}

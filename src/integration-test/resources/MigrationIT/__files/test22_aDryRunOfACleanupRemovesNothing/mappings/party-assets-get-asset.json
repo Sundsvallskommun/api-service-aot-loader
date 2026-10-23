@@ -1,0 +1,29 @@
+{
+	"name": "party-assets-get-asset",
+	"request": {
+		"method": "GET",
+		"url": "/party-assets/2281/assets/asset-internal-1",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"id": "asset-internal-1",
+			"assetId": "11111111-aaaa-bbbb-cccc-000000000001",
+			"partyId": "22222222-aaaa-bbbb-cccc-000000000001",
+			"type": "AlcoholServingPermit",
+			"status": "ACTIVE"
+		}
+	}
+}

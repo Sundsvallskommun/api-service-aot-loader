@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "3",
+	"placeNumber": "12345680",
+	"placeName": "Krogen Tre",
+	"outcome": "FEL",
+	"rules": "G29",
+	"detail": "${json-unit.regex}Steg Aktivera ärendet: RetryableException: Connection reset executing PATCH http://localhost:\\d+/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget; Tillståndet i PartyAssets har 2 av 2 filer: Ritning på lokalen med serveringsytan markerad 1, Beslut 1; Beslut: Bifall, fattat 2021-01-31, 0 villkor, 1 dokument",
+	"errandNumber": "ALKT-2026-6"
+}
