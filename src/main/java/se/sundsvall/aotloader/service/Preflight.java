@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
+import generated.se.sundsvall.supportmanagement.DecisionOutcome;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import generated.se.sundsvall.supportmanagement.MeasureType;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
@@ -35,9 +37,12 @@ import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.stream.Collectors.toCollection;
+import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL;
+import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS;
 import static se.sundsvall.aotloader.Constants.LABEL_ATTRIBUTE_PROCESS_BLOCKED;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
+import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
@@ -47,13 +52,17 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
  * databases are configured, that the account of each source database may only read, and in the namespace of the
  * municipality of the run that the labels exist, with the label for migrated errands blocking processes, that the
  * roles, the closed status and the classification the errands get exist, that the attachment purposes and measure
- * types exist, and that no action is active (R6). A real run does not start when a check fails; a dry run lists the
- * problems and goes on.
+ * types exist, that the decisions of the permits can be written (decision 70), and that no action is active (R6). A
+ * real run does not start when a check fails; a dry run lists the problems and goes on.
  */
 @Component
 public class Preflight {
 
 	private static final Pattern MUNICIPALITY_ID = Pattern.compile("\\d{4}");
+	private static final String CATEGORY_ROOT = "CATEGORYROOT/";
+	// dept44 removes every blank of X-Sent-By and splits it at its semicolons, and takes no identity unless there are two
+	// parts, the value and the type
+	private static final Pattern AD_ACCOUNT = Pattern.compile("[^\\s;]+");
 
 	private final AotLoaderProperties properties;
 	private final SupportManagementIntegration supportManagement;
@@ -80,14 +89,18 @@ public class Preflight {
 		scope.keySet().forEach(source -> checkSource(source, problems));
 		checkAreaMunicipalities(problems);
 		final var labels = readLabels(municipalityId, problems);
-		labels.ifPresent(found -> checkLabels(found, types, problems));
+		labels.ifPresent(found -> {
+			checkLabels(found, types, problems);
+			checkClassifications(found, types, problems);
+		});
 		checkActions(municipalityId, problems);
 		checkRoles(municipalityId, types, problems);
 		checkStatus(municipalityId, problems);
-		checkClassifications(municipalityId, types, problems);
 		checkMeasures(municipalityId, types, problems);
 		final var purposes = readPurposes(municipalityId, problems);
-		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())), Map.of(municipalityId, purposes));
+		final var decisionOutcomes = checkDecisions(municipalityId, types, problems);
+		return new Result(problems, Map.of(municipalityId, labels.map(Preflight::labelIds).orElse(Map.of())), Map.of(municipalityId, purposes),
+			Map.of(municipalityId, decisionOutcomes));
 	}
 
 	/**
@@ -149,8 +162,8 @@ public class Preflight {
 	}
 
 	private void checkInspections(final Map<Source, Set<Kind>> scope, final List<String> problems) {
-		if (scope.values().stream().anyMatch(kinds -> kinds.contains(TILLSYN)) && Texts.isBlank(properties.roles().inspectionHolder())) {
-			problems.add("Rollen för tillståndshavaren på tillsynsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7)");
+		if (scope.values().stream().anyMatch(kinds -> kinds.contains(TILLSYN) || kinds.contains(DOKUMENTATION)) && Texts.isBlank(properties.roles().inspectionHolder())) {
+			problems.add("Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)");
 		}
 	}
 
@@ -221,7 +234,8 @@ public class Preflight {
 
 	/**
 	 * The roles the errands of the run give their stakeholders and measures must exist in the namespace: the holder's and
-	 * the contacts' on a permit, a notification and an inspection errand, and the role measures are added by on a visit.
+	 * the contacts' on a permit, a notification, an inspection errand and a documentation errand, and the role measures are
+	 * added by on a visit.
 	 */
 	private void checkRoles(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
 		final var roles = properties.roles();
@@ -230,7 +244,7 @@ public class Preflight {
 			wanted.add(roles.permitHolder());
 			wanted.add(roles.contact());
 		}
-		if (types.stream().anyMatch(type -> type.getKind() == TILLSYN)) {
+		if (types.stream().anyMatch(type -> type.getKind() == TILLSYN || type.getKind() == DOKUMENTATION)) {
 			Optional.ofNullable(Texts.trimToNull(roles.inspectionHolder())).ifPresent(wanted::add);
 			wanted.add(roles.contact());
 		}
@@ -273,30 +287,57 @@ public class Preflight {
 	}
 
 	/**
-	 * The category and type of each errand type of the run must exist in the namespace, the type under its category
-	 * (decision 5).
+	 * The category and type of each errand type of the run must be a category and a type of the label tree, the type under
+	 * its category, which they are taken from (decision 5). AOT does not validate the classification, and its list of
+	 * categories holds only its own.
 	 */
-	private void checkClassifications(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
+	private void checkClassifications(final Map<String, Label> labels, final Set<ErrandType> types, final List<String> problems) {
 		// A blank classification is reported with the settings of the errand type
-		final var wanted = types.stream()
+		types.stream()
 			.map(properties::errandType)
 			.filter(settings -> !Texts.isBlank(settings.category()) && !Texts.isBlank(settings.type()))
 			.map(settings -> settings.category() + "/" + settings.type())
-			.collect(toCollection(TreeSet::new));
-		if (wanted.isEmpty()) {
-			return;
+			.collect(toCollection(TreeSet::new))
+			.stream()
+			.filter(classification -> !labels.containsKey(LabelPaths.normalize(CATEGORY_ROOT + classification)))
+			.forEach(classification -> problems.add("Klassificeringen %s finns inte som kategori och typ i etikettträdet, %s%s (aot-loader.errand-types, beslut 5)"
+				.formatted(classification, CATEGORY_ROOT, classification)));
+	}
+
+	/**
+	 * The permits of the run get the decision they were granted by (decision 70), which needs the AD account the decisions
+	 * are written with, a heading for each type, and the outcomes they get in the namespace.
+	 *
+	 * @return the display names of the decision outcomes of the namespace by name, empty when the run has no permits that
+	 *         get decisions, or when they could not be read
+	 */
+	private Map<String, String> checkDecisions(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
+		final var decisionTypes = types.stream().filter(type -> properties.errandType(type).withDecision()).toList();
+		if (decisionTypes.isEmpty()) {
+			return Map.of();
 		}
+		final var account = Texts.trimToNull(properties.decisionAdAccount());
+		if (account == null) {
+			problems.add("AD-kontot som tillståndens beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70)");
+		} else if (!AD_ACCOUNT.matcher(account).matches()) {
+			problems.add("AD-kontot som tillståndens beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70)");
+		}
+		decisionTypes.stream()
+			.filter(type -> Texts.isBlank(properties.errandType(type).decisionTitle()))
+			.forEach(type -> problems.add("Rubrik för beslutet saknas för %s (aot-loader.errand-types, beslut 70)".formatted(type)));
+		final Map<String, String> outcomes;
 		try {
-			final var found = supportManagement.getCategories(municipalityId).stream()
-				.filter(category -> category.getName() != null)
-				.flatMap(category -> Optional.ofNullable(category.getTypes()).orElse(Set.of()).stream().map(type -> category.getName() + "/" + type.getName()))
-				.collect(Collectors.toSet());
-			wanted.stream()
-				.filter(classification -> !found.contains(classification))
-				.forEach(classification -> problems.add("Klassificeringen %s finns inte i namnrymden (aot-loader.errand-types, beslut 5)".formatted(classification)));
+			outcomes = supportManagement.getDecisionOutcomes(municipalityId).stream()
+				.filter(outcome -> outcome.getName() != null)
+				.collect(Collectors.toMap(DecisionOutcome::getName, outcome -> Optional.ofNullable(Texts.trimToNull(outcome.getDisplayName())).orElse(outcome.getName()), (first, _) -> first));
 		} catch (final RuntimeException e) {
-			problems.add("Kategorierna i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+			problems.add("Beslutsutfallen i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
+			return Map.of();
 		}
+		Stream.of(DECISION_OUTCOME_APPROVAL, DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS)
+			.filter(outcome -> !outcomes.containsKey(outcome))
+			.forEach(outcome -> problems.add("Beslutsutfallet %s finns inte i namnrymden, så tillståndens beslut kan inte få det (beslut 70)".formatted(outcome)));
+		return outcomes;
 	}
 
 	private void checkMeasureTypes(final String municipalityId, final Set<String> measureTypes, final List<String> problems) {
@@ -402,16 +443,32 @@ public class Preflight {
 	/**
 	 * What the checks found.
 	 *
-	 * @param problems what stops a real run
-	 * @param labelIds the ids of the labels of the namespace by normalized resource path, per municipality
-	 * @param purposes the attachment purposes of the namespace that a file can get, by name, per municipality
+	 * @param problems         what stops a real run
+	 * @param labelIds         the ids of the labels of the namespace by normalized resource path, per municipality
+	 * @param purposes         the attachment purposes of the namespace that a file can get, by name, per municipality
+	 * @param decisionOutcomes the display names of the decision outcomes of the namespace by name, per municipality;
+	 *                         read only for a run with permits that get decisions
 	 */
-	public record Result(List<String> problems, Map<String, Map<String, String>> labelIds, Map<String, Map<String, FilePurpose>> purposes) {
+	public record Result(List<String> problems, Map<String, Map<String, String>> labelIds, Map<String, Map<String, FilePurpose>> purposes,
+		Map<String, Map<String, String>> decisionOutcomes) {
 
 		public Result {
 			problems = List.copyOf(problems);
-			labelIds = labelIds.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
-			purposes = purposes.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
+			labelIds = copyOf(labelIds);
+			purposes = copyOf(purposes);
+			decisionOutcomes = copyOf(decisionOutcomes);
+		}
+
+		/**
+		 * What the checks of a run without decisions found.
+		 */
+		public Result(final List<String> problems, final Map<String, Map<String, String>> labelIds, final Map<String, Map<String, FilePurpose>> purposes) {
+			this(problems, labelIds, purposes, Map.of());
+		}
+
+		private static <V> Map<String, Map<String, V>> copyOf(final Map<String, Map<String, V>> perMunicipality) {
+			return Optional.ofNullable(perMunicipality).orElse(Map.of()).entrySet().stream()
+				.collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
 		}
 	}
 }

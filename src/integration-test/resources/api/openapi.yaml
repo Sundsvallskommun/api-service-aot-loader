@@ -58,6 +58,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -126,6 +127,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -339,6 +341,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -412,6 +415,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -503,6 +507,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: sourceId
         in: path
         description: The id of the item in the source
@@ -837,6 +842,7 @@ paths:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
       - name: status
         in: query
         description: Only items with the status
@@ -851,6 +857,7 @@ paths:
           - ARENDE_SKAPAT
           - BILAGOR_KLARA
           - TILLSTAND_SKAPAT
+          - BESLUT_KLART
           - RELATION_KLAR
           - KLAR
           - FEL
@@ -1021,6 +1028,7 @@ components:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
         sourceId:
           type: string
         outcome:
@@ -1065,6 +1073,7 @@ components:
             - ANMALAN
             - TILLSYN
             - TILLSYNSBESOK
+            - DOKUMENTATION
           maxItems: 2147483647
           minItems: 1
         limit:
@@ -1135,6 +1144,7 @@ components:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
         sourceId:
           type: string
         placeNumber:
@@ -1189,6 +1199,7 @@ components:
             - ANMALAN
             - TILLSYN
             - TILLSYNSBESOK
+            - DOKUMENTATION
           maxItems: 2147483647
           minItems: 1
         limit:
@@ -1213,6 +1224,7 @@ components:
           - ANMALAN
           - TILLSYN
           - TILLSYNSBESOK
+          - DOKUMENTATION
         sourceId:
           type: string
         errandType:
@@ -1228,6 +1240,8 @@ components:
           - TOBACCO_INSPECTION
           - ALCOHOL_INSPECTION_VISIT
           - TOBACCO_INSPECTION_VISIT
+          - ALCOHOL_DOCUMENTATION
+          - TOBACCO_DOCUMENTATION
         status:
           type: string
           enum:
@@ -1238,6 +1252,7 @@ components:
           - ARENDE_SKAPAT
           - BILAGOR_KLARA
           - TILLSTAND_SKAPAT
+          - BESLUT_KLART
           - RELATION_KLAR
           - KLAR
           - FEL
@@ -1249,6 +1264,7 @@ components:
           - ARENDE
           - BILAGOR
           - TILLSTAND
+          - BESLUT
           - RELATION
           - AKTIVERA
         reason:

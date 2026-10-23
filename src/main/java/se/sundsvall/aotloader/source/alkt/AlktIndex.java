@@ -25,6 +25,7 @@ import se.sundsvall.aotloader.source.DiaryNumberCounts;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.OwnerNumbers;
 import se.sundsvall.aotloader.source.ParameterList;
@@ -69,6 +70,7 @@ final class AlktIndex {
 	private final DiaryNumberCounts diaryNumbers = new DiaryNumberCounts();
 	private final Map<Integer, List<PermitRow>> permitRowsByPlace = new HashMap<>();
 	private final Map<Integer, List<DecisionRow>> decisionsByErrand = new HashMap<>();
+	private final Map<Integer, List<ErrandRow>> errandsByPlace = new HashMap<>();
 	private final Map<Integer, List<PlaceDocument>> documentsByPlace = new HashMap<>();
 	private final SharedFileNames sharedFileNames;
 
@@ -87,6 +89,9 @@ final class AlktIndex {
 		snapshot.decisions().values().stream()
 			.filter(decision -> decision.arendeId() != null)
 			.forEach(decision -> decisionsByErrand.computeIfAbsent(decision.arendeId(), _ -> new ArrayList<>()).add(decision));
+		snapshot.errands().values().stream()
+			.filter(errand -> errand.objektId() != null)
+			.forEach(errand -> errandsByPlace.computeIfAbsent(errand.objektId(), _ -> new ArrayList<>()).add(errand));
 		indexDocuments();
 	}
 
@@ -118,6 +123,13 @@ final class AlktIndex {
 
 	PlaceRow placeOf(final Integer objektId) {
 		return objektId == null ? null : snapshot.places().get(objektId);
+	}
+
+	/**
+	 * @return what of the errands and the days of the place was a former holder's, told by all its errands (decision 72)
+	 */
+	FormerHolders formerHolders(final Integer objektId) {
+		return FormerHolders.of(errandsByPlace.getOrDefault(objektId, List.of()), snapshot.applicants(), ownerOf(placeOf(objektId)).orElse(null), today);
 	}
 
 	Optional<ContactRow> ownerOf(final PlaceRow place) {
@@ -310,7 +322,8 @@ final class AlktIndex {
 		snapshot.places().forEach((objektId, place) -> names
 			.add(placeKey(objektId), place.bifogadfil(), ATTACHMENTS)
 			.add(placeKey(objektId), place.bifogadfil2(), ATTACHMENTS));
-		snapshot.placeFiles().forEach((objektId, files) -> files
+		snapshot.placeEvents().forEach((objektId, events) -> events.stream()
+			.flatMap(event -> event.files().stream())
 			.forEach(file -> names.add(placeKey(objektId), file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));
 		snapshot.unplacedFiles().forEach((handelseId, files) -> files
 			.forEach(file -> names.add("handelse:" + handelseId, file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS)));

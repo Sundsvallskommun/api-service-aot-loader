@@ -3,6 +3,8 @@ package se.sundsvall.aotloader.service.mapper;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.relation.ResourceIdentifier;
 import generated.se.sundsvall.supportmanagement.Classification;
+import generated.se.sundsvall.supportmanagement.Decision;
+import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
@@ -13,16 +15,20 @@ import generated.se.sundsvall.supportmanagement.Priority;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.Kind;
@@ -31,8 +37,17 @@ import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_CONDITIONS;
+import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
+import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL;
+import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS;
+import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_DECISION_DATE;
+import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_TEXT;
+import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_VALID_FROM;
+import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_EMAIL;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_NAME;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_PHONE;
@@ -61,6 +76,10 @@ public class TargetMapper {
 	private static final String MEASURE_COMPLETED = "COMPLETED";
 	private static final int MEASURE_TITLE_MAX_LENGTH = 255;
 	private static final int MEASURE_DESCRIPTION_MAX_LENGTH = 3000;
+	private static final String DECISION_DRAFT = "DRAFT";
+	private static final String DECISION_COMPLETED = "COMPLETED";
+	private static final String DECISION_MANUAL = "MANUAL";
+	private static final int DECISION_TEXT_MAX_LENGTH = 255;
 
 	private final AotLoaderProperties properties;
 	private final Clock clock;
@@ -175,6 +194,87 @@ public class TargetMapper {
 			.conclusion(conclusion(investigation.texts()))
 			.startedAt(inSwedishTime(investigation.startedAt()))
 			.completedAt(completedAt);
+	}
+
+	/**
+	 * Maps the decision a permit was granted by to the decision of its errand, as Draken writes a manual decision on a
+	 * permit (decision 70): of the type and with the heading of the errand type, an approval, with conditions when it has
+	 * terms, made by the decision maker of the source, and with the parameters of the permit and of the decision under the
+	 * keys Draken gives them. The terms and the documents are not part of it, since SupportManagement takes them through
+	 * their own resources.
+	 *
+	 * @param  candidate       the permit, with its decision
+	 * @param  legalBasis      the legal basis read from the documents of the permit, null when none was found
+	 * @param  investigationId the investigation of the errand that the decision rests on, null when it has none
+	 * @param  outcomeText     the display name of the outcome in the namespace, null when unknown
+	 * @return                 the decision, as a draft
+	 */
+	public Decision toDecisionDraft(final Candidate candidate, final String legalBasis, final String investigationId, final String outcomeText) {
+		final var decision = candidate.decision();
+		final var settings = properties.errandType(candidate.type());
+		return new Decision()
+			.type(settings.decisionType())
+			.status(DECISION_DRAFT)
+			.title(Texts.truncate(settings.decisionTitle(), DECISION_TEXT_MAX_LENGTH, null))
+			.description(decision.description())
+			.outcome(decisionOutcome(decision))
+			.method(DECISION_MANUAL)
+			.decidedBy(Texts.truncate(decision.decidedBy(), DECISION_TEXT_MAX_LENGTH, null))
+			.decidedAt(inSwedishTime(decision.decidedAt()))
+			.legalBasis(AssetMapper.legalBasisWithin(Texts.trimToNull(legalBasis)))
+			.justification(decision.justification())
+			.validFrom(decision.validFrom())
+			.validTo(decision.validTo())
+			.investigationId(investigationId)
+			.parameters(decisionParameters(candidate, outcomeText));
+	}
+
+	/**
+	 * @return the change that completes the decision, at the time it was made
+	 */
+	public Decision toDecisionCompletion(final DecisionData decision) {
+		return new Decision()
+			.status(DECISION_COMPLETED)
+			.completedAt(inSwedishTime(decision.decidedAt()));
+	}
+
+	/**
+	 * @return the terms of the decision, numbered from 1 in their order, as Draken writes them
+	 */
+	public static List<DecisionTerm> toDecisionTerms(final DecisionData decision) {
+		return IntStream.range(0, decision.terms().size())
+			.mapToObj(index -> new DecisionTerm().sortOrder(index + 1).text(decision.terms().get(index)))
+			.toList();
+	}
+
+	/**
+	 * @return an approval, with conditions when the decision has terms, as Draken gives it the outcome
+	 */
+	public static String decisionOutcome(final DecisionData decision) {
+		return decision.terms().isEmpty() ? DECISION_OUTCOME_APPROVAL : DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS;
+	}
+
+	/**
+	 * The parameters Draken gives a decision on a permit for its certificate: those of the permit, but its legal basis and
+	 * conditions, which the decision has as fields and terms, followed by the text of the outcome, the day of the decision
+	 * and its first day. A parameter without a value is left out, as Draken leaves it out.
+	 */
+	private static List<generated.se.sundsvall.supportmanagement.Parameter> decisionParameters(final Candidate candidate, final String outcomeText) {
+		final var decision = candidate.decision();
+		final var values = new LinkedHashMap<String, String>();
+		Optional.ofNullable(candidate.asset()).map(AssetData::parameters).orElse(Map.of()).forEach((key, value) -> {
+			if (!ASSET_PARAMETER_LEGAL_BASIS.equals(key) && !ASSET_PARAMETER_CONDITIONS.equals(key)) {
+				values.put(key, value);
+			}
+		});
+		values.put(DECISION_PARAMETER_TEXT, outcomeText);
+		values.put(DECISION_PARAMETER_DECISION_DATE, SourceValues.format(decision.decidedAt().toLocalDate()));
+		values.put(DECISION_PARAMETER_VALID_FROM, SourceValues.format(decision.validFrom()));
+		return values.entrySet().stream()
+			.filter(entry -> !Texts.isBlank(entry.getValue()))
+			.map(entry -> new generated.se.sundsvall.supportmanagement.Parameter().key(entry.getKey())
+				.values(List.of(Texts.truncate(entry.getValue().strip(), ERRAND_PARAMETER_MAX_LENGTH, null))))
+			.toList();
 	}
 
 	/**

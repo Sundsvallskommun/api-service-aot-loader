@@ -48,6 +48,10 @@ public final class InspectionVisitCandidates {
 	private static final Pattern SECONDS = Pattern.compile("^(\\d{1,2}[:.]\\d{2})[:.]\\d{2}$");
 	private static final String REMARK = "Anmärkning";
 	private static final String ROUND = "Tillsynsomgång";
+	// The field of the visit is Kontrollant in AlkT, which names a handler, or the police, the rescue service or the
+	// environment office (decision 66)
+	private static final String INSPECTOR = "Kontrollant";
+	private static final String NO_REMARKS = "Inga anmärkningar registrerade";
 
 	private final ErrandType type;
 	private final ErrandTypeSettings settings;
@@ -138,12 +142,14 @@ public final class InspectionVisitCandidates {
 		lines.add(line(ROUND, roundName(content.round())));
 		lines.add(line("Tillsynen gällde", Texts.join(", ", visit.covered())));
 		lines.add(line("Anmält besök", announced(visit)));
-		lines.add(line("Handläggare", Texts.join(", ", content.handlers())));
-		lines.add(line("Serveringspersonal", Texts.join(", ", content.staff())));
-		if (!content.remarks().isEmpty()) {
-			lines.add("Anmärkningar:");
-			content.remarks().forEach(remark -> lines.add("- " + remark));
+		lines.add(line(INSPECTOR, Texts.join(", ", content.inspectors())));
+		// Always there, as in AlkT, so that a visit without remarks says so (decision 67)
+		lines.add("Anmärkningar:");
+		if (content.remarks().isEmpty()) {
+			lines.add(NO_REMARKS);
 		}
+		content.remarks().forEach(remark -> lines.add("- " + remark));
+		lines.add(line("Serveringspersonal", Texts.join(", ", content.staff())));
 		lines.add(line("Anteckning", visit.fritext()));
 		return Texts.join("\n", lines);
 	}
@@ -159,7 +165,7 @@ public final class InspectionVisitCandidates {
 			.add("tillsynsomgang", ROUND, roundName(content.round()))
 			.add("tillsynenGallde", "Tillsynen gällde", visit.covered())
 			.add("anmaltBesok", "Anmält besök", announced(visit))
-			.add(ErrandParameters.HANDLERS, "Handläggare i " + source.getDisplayName(), content.handlers())
+			.add(ErrandParameters.INSPECTORS, INSPECTOR + " i " + source.getDisplayName(), content.inspectors())
 			.add("serveringspersonal", "Serveringspersonal", content.staff())
 			.add("anmarkningar", "Anmärkningar", content.remarks())
 			.add("anteckning", "Anteckning i " + source.getDisplayName(), visit.fritext())
@@ -268,15 +274,16 @@ public final class InspectionVisitCandidates {
 	/**
 	 * What a visit holds, interpreted once for the description and the parameters.
 	 *
-	 * @param visit    the row of the visit
-	 * @param kind     the text of the kind of inspection
-	 * @param time     the time of the visit
-	 * @param remarks  the remarks as texts
-	 * @param handlers the names of the handlers, or their codes when no name is found (decision 48)
-	 * @param staff    the marks about the serving staff as texts (decision 48)
-	 * @param round    the round of inspection the visit was made in, null when none (decision 50)
+	 * @param visit      the row of the visit
+	 * @param kind       the text of the kind of inspection
+	 * @param time       the time of the visit
+	 * @param remarks    the remarks as texts
+	 * @param inspectors who made the inspection, the Kontrollant of AlkT: the names of the handlers, or their codes when
+	 *                   no name is found (decisions 48 and 66)
+	 * @param staff      the marks about the serving staff as texts (decision 48)
+	 * @param round      the round of inspection the visit was made in, null when none (decision 50)
 	 */
-	record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> handlers, List<String> staff, RoundRow round) {
+	record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> inspectors, List<String> staff, RoundRow round) {
 
 		@Override
 		public String toString() {

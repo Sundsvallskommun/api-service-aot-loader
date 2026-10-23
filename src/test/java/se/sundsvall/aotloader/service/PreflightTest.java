@@ -1,19 +1,19 @@
 package se.sundsvall.aotloader.service;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
-import generated.se.sundsvall.supportmanagement.Category;
 import generated.se.sundsvall.supportmanagement.Config;
+import generated.se.sundsvall.supportmanagement.DecisionOutcome;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.LabelAttribute;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.Role;
 import generated.se.sundsvall.supportmanagement.Status;
-import generated.se.sundsvall.supportmanagement.Type;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,12 +48,14 @@ import se.sundsvall.aotloader.source.SourceDatabases;
 import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
+import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
@@ -82,30 +84,28 @@ class PreflightTest {
 		lenient().when(supportManagement.getRoles(MUNICIPALITY_ID))
 			.thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("CONTACT"), new Role().name("INSPECTED"), new Role().name("MEASURER")));
 		lenient().when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenReturn(List.of(new Status().name("NEW"), new Status().name("SOLVED")));
-		lenient().when(supportManagement.getCategories(MUNICIPALITY_ID)).thenReturn(Arrays.stream(ErrandType.values())
-			.map(type -> new Category().name("CATEGORY_" + type).types(Set.of(new Type().name("TYPE_" + type))))
-			.toList());
 	}
 
 	@Test
 	void theRolesTheStatusAndTheClassificationsOfTheErrandsMustExist() {
-		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		// The label tree without the categories and types the classifications are taken from
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true).stream()
+			.map(root -> root.labels(root.getLabels().stream().filter(label -> !label.getResourcePath().contains("/CATEGORY_")).toList()))
+			.toList());
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY")));
 		when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenReturn(List.of(new Status().name("SOLVED").deprecated(true)));
-		when(supportManagement.getCategories(MUNICIPALITY_ID)).thenReturn(List.of(new Category().name("CATEGORY_SERVING_PERMIT").types(Set.of(new Type().name("OTHER")))));
 
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN))).problems()).containsExactly(
+			"Klassificeringen CATEGORY_ALCOHOL_INSPECTION/TYPE_ALCOHOL_INSPECTION finns inte som kategori och typ i etikettträdet, CATEGORYROOT/CATEGORY_ALCOHOL_INSPECTION/TYPE_ALCOHOL_INSPECTION (aot-loader.errand-types, beslut 5)",
+			"Klassificeringen CATEGORY_SERVING_PERMIT/TYPE_SERVING_PERMIT finns inte som kategori och typ i etikettträdet, CATEGORYROOT/CATEGORY_SERVING_PERMIT/TYPE_SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Rollen CONTACT finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)",
 			"Rollen INSPECTED finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)",
-			"Statusen SOLVED finns inte i namnrymden, eller är inaktuell (aot-loader.errand-status, beslut 5)",
-			"Klassificeringen CATEGORY_ALCOHOL_INSPECTION/TYPE_ALCOHOL_INSPECTION finns inte i namnrymden (aot-loader.errand-types, beslut 5)",
-			"Klassificeringen CATEGORY_SERVING_PERMIT/TYPE_SERVING_PERMIT finns inte i namnrymden (aot-loader.errand-types, beslut 5)");
+			"Statusen SOLVED finns inte i namnrymden, eller är inaktuell (aot-loader.errand-status, beslut 5)");
 
 		when(supportManagement.getStatuses(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
-		when(supportManagement.getCategories(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).contains(
-			"Statusarna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel", "Kategorierna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
+			"Statusarna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
 	}
 
 	@Test
@@ -207,6 +207,50 @@ class PreflightTest {
 	}
 
 	@Test
+	void thePermitsGetTheirDecisionsWithTheOutcomesOfTheNamespace() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		when(supportManagement.getDecisionOutcomes(MUNICIPALITY_ID)).thenReturn(List.of(new DecisionOutcome().name("APPROVAL").displayName("Bifall"),
+			new DecisionOutcome().name("APPROVAL_WITH_CONDITIONS").displayName(" "), new DecisionOutcome().displayName("Utan namn")));
+		final var preflight = new Preflight(TestData.propertiesWithDecisions(directory.toString(), directory.toString(), " ab12cde "), supportManagement, sourceDatabases);
+
+		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND)));
+
+		assertThat(result.problems()).isEmpty();
+		// An outcome without a display name stands by its name
+		assertThat(result.decisionOutcomes()).containsExactly(entry(MUNICIPALITY_ID, Map.of("APPROVAL", "Bifall", "APPROVAL_WITH_CONDITIONS", "APPROVAL_WITH_CONDITIONS")));
+		// A run without permits that get decisions does not read the outcomes
+		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSYN))).decisionOutcomes()).containsExactly(entry(MUNICIPALITY_ID, Map.of()));
+		verify(supportManagement).getDecisionOutcomes(MUNICIPALITY_ID);
+	}
+
+	@Test
+	void theDecisionsNeedTheirAdAccountHeadingAndOutcomes() {
+		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(true));
+		when(supportManagement.getDecisionOutcomes(MUNICIPALITY_ID)).thenReturn(List.of(new DecisionOutcome().name("APPROVAL")));
+		final var withoutAccount = TestData.propertiesWithDecisions(directory.toString(), directory.toString(), null);
+		final var types = new HashMap<>(withoutAccount.errandTypes());
+		final var serving = types.get(ErrandType.SERVING_PERMIT);
+		types.put(ErrandType.SERVING_PERMIT, new ErrandTypeSettings(serving.category(), serving.type(), serving.measureType(), serving.assetType(), serving.assetTitle(), serving.labels(),
+			serving.subtypeLabels(), serving.sourceErrandTypes(), serving.onlyPlacesWithPermit(), serving.decisionType(), " "));
+		final var properties = new AotLoaderProperties(withoutAccount.namespace(), withoutAccount.sentBy(), withoutAccount.reporterUserId(), withoutAccount.channel(),
+			withoutAccount.errandStatus(), withoutAccount.errandResolution(), withoutAccount.roles(), types, withoutAccount.databases(), withoutAccount.fileArea(), withoutAccount.maxFileSize(),
+			withoutAccount.municipalities(), null);
+
+		assertThat(new Preflight(properties, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).containsExactly(
+			"AD-kontot som tillståndens beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70)",
+			"Rubrik för beslutet saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 70)",
+			"Beslutsutfallet APPROVAL_WITH_CONDITIONS finns inte i namnrymden, så tillståndens beslut kan inte få det (beslut 70)");
+
+		// The value of the header is the account alone
+		final var withHeader = TestData.propertiesWithDecisions(directory.toString(), directory.toString(), "ab12cde; type=adAccount");
+		when(supportManagement.getDecisionOutcomes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		final var problems = new Preflight(withHeader, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems();
+		assertThat(problems).containsExactly(
+			"AD-kontot som tillståndens beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70)",
+			"Beslutsutfallen i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
+	}
+
+	@Test
 	void onlyTheMunicipalityOfTheRunIsChecked() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(labelTree(false)).thenReturn(List.of());
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
@@ -240,12 +284,12 @@ class PreflightTest {
 	void whatIsMissing() {
 		when(supportManagement.getLabelTree(MUNICIPALITY_ID)).thenReturn(List.of(new Label().id("x").resourcePath("/TAGROOT/MIGRATED_ERRAND")
 			.attributes(List.of(new LabelAttribute().key("processBlocked").value("false")))));
-		final var inspection = new ErrandTypeSettings(null, null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true);
+		final var inspection = new ErrandTypeSettings(null, null, null, null, null, List.of("TAGROOT/ALCOHOL_INSPECTION"), null, Map.of("09", ""), true, null, null);
 		final var properties = new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATION", " ", "CLOSED", new Roles("PRIMARY", "CONTACT", null, null),
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection, ErrandType.ALCOHOL_INSPECTION_VISIT,
-				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true)),
+				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true, null, null)),
 			Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
-			Map.of("Timrå", "22620"));
+			Map.of("Timrå", "22620"), null);
 		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, TILLSYN)));
@@ -259,7 +303,7 @@ class PreflightTest {
 			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Etikett saknas för TOBACCO_PERMIT (aot-loader.errand-types, avsnitt 7.3.4)",
-			"Rollen för tillståndshavaren på tillsynsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7)",
+			"Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)",
 			"Etiketten för ärendetyp '09' i AlkT är inte bestämd (aot-loader.errand-types, avsnitt 7.7)",
 			"Inga ärendetyper i AlkOL är angivna som tillsynsärenden (aot-loader.errand-types, avsnitt 7.7)",
 			"Källdatabasen för AlkT är inte konfigurerad",
@@ -270,6 +314,9 @@ class PreflightTest {
 			"Etiketten TAGROOT/MIGRATED_ERRAND saknar attributet processBlocked=true, som spärrar processer (beslut 17)",
 			"Kommunkoden '22620' för området 'timrå' är inte fyra siffror (aot-loader.municipalities, beslut 19)");
 		assertThat(result.problems()).filteredOn(problem -> problem.startsWith("Etiketten för undertypen")).hasSize(ServingPermitSubtype.values().length);
+		// The holder of a documentation errand gets the same role as that of an inspection errand
+		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(DOKUMENTATION))).problems())
+			.contains("Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)");
 	}
 
 	@Test
@@ -319,10 +366,13 @@ class PreflightTest {
 	static List<Label> labelTree(final boolean processBlocked) {
 		final var paths = new ArrayList<String>(List.of(
 			"TAGROOT/MIGRATED_ERRAND", "TAGROOT/ALCOHOL_INSPECTION", "TAGROOT/TOBACCO_INSPECTION",
-			"CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION",
+			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION", "CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION",
 			"CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION", "CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION",
 			"CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION", "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"));
 		Arrays.stream(ServingPermitSubtype.values()).forEach(subtype -> paths.add("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/" + subtype.name()));
+		// The categories and types of the classifications of the settings
+		Arrays.stream(ErrandType.values()).forEach(type -> paths.add("CATEGORYROOT/CATEGORY_" + type + "/TYPE_" + type));
+		paths.add(TestData.DOCUMENTATION);
 		final var children = paths.stream()
 			.map(path -> new Label().id("id-" + path).resourcePath("/" + path)
 				.attributes("TAGROOT/MIGRATED_ERRAND".equals(path) ? List.of(new LabelAttribute().key(" ProcessBlocked ").value(processBlocked ? "TRUE" : "false")) : null))

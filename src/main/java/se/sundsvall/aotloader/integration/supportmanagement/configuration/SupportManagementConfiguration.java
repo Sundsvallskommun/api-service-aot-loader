@@ -33,8 +33,9 @@ public class SupportManagementConfiguration {
 			.withErrorDecoder(new ProblemErrorDecoder(CLIENT_ID, Fallbacks.BYPASSED_STATUSES))
 			.withRequestTimeoutsInSeconds(properties.connectTimeout(), properties.readTimeout())
 			.withRetryableOAuth2InterceptorForClientRegistration(clientRepository.findByRegistrationId(CLIENT_ID))
-			// Every call carries the headers, so that the migration's own calls start no process and write no notice. They hold
-			// for the client of the gateway, not for an AD account, and activating an errand still runs the active actions (R6)
+			// Every call carries the headers, so that the migration's own calls start no process and write no notice.
+			// X-Trigger-Process holds only for a caller that is no AD account, and activating an errand still runs the active
+			// actions (R6)
 			.withRequestInterceptor(template -> template.header(TRIGGER_PROCESS_HEADER, "false"))
 			.withRequestInterceptor(template -> template.header(NOTIFY_HEADER, "false"))
 			.withRequestInterceptor(new SentByInterceptor(aotLoaderProperties.sentBy()))

@@ -32,21 +32,24 @@ import static java.util.function.UnaryOperator.identity;
  * The settings of the migration. Settings that depend on decisions not yet taken may be left blank: a dry run then
  * reports what is missing, and a real run refuses to start until it is set.
  *
- * @param namespace        the namespace in SupportManagement
- * @param sentBy           the value of the X-Sent-By header, which makes the migration the actor in the history of the
- *                         target systems
- * @param reporterUserId   the reporter of the migrated errands
- * @param channel          the channel of the migrated errands
- * @param errandStatus     the closed status the migrated errands get (decision 5)
- * @param errandResolution the resolution the migrated errands get, the one Draken closes an errand of AOT with
- * @param roles            the stakeholder roles
- * @param errandTypes      the settings per type of errand
- * @param databases        the source databases
- * @param fileArea         the directories of the file area per source
- * @param maxFileSize      the largest file uploaded (decision 24)
- * @param municipalities   the municipality of the places in an area, by the name of the area, for the areas that do not
- *                         belong to the municipality a run is started for. The errands are still created in that
- *                         municipality, with the municipality of the place as a parameter (decision 19).
+ * @param namespace         the namespace in SupportManagement
+ * @param sentBy            the value of the X-Sent-By header, which makes the migration the actor in the history of the
+ *                          target systems
+ * @param reporterUserId    the reporter of the migrated errands
+ * @param channel           the channel of the migrated errands
+ * @param errandStatus      the closed status the migrated errands get (decision 5)
+ * @param errandResolution  the resolution the migrated errands get, the one Draken closes an errand of AOT with
+ * @param roles             the stakeholder roles
+ * @param errandTypes       the settings per type of errand
+ * @param databases         the source databases
+ * @param fileArea          the directories of the file area per source
+ * @param maxFileSize       the largest file uploaded (decision 24)
+ * @param municipalities    the municipality of the places in an area, by the name of the area, for the areas that do
+ *                          not belong to the municipality a run is started for. The errands are still created in that
+ *                          municipality, with the municipality of the place as a parameter (decision 19).
+ * @param decisionAdAccount the AD account the decisions of the permits are written with, since SupportManagement takes
+ *                          a manual decision only from an AD account (decision 70); without one a real run with permits
+ *                          does not start
  */
 @Validated
 @ConfigurationProperties("aot-loader")
@@ -62,7 +65,8 @@ public record AotLoaderProperties(
 	Map<Source, Database> databases,
 	Map<Source, FileAreaDirectories> fileArea,
 	@NotNull DataSize maxFileSize,
-	Map<String, String> municipalities) {
+	Map<String, String> municipalities,
+	String decisionAdAccount) {
 
 	public AotLoaderProperties {
 		errandTypes = errandTypes == null ? emptyMap() : Map.copyOf(errandTypes);
@@ -95,10 +99,18 @@ public record AotLoaderProperties(
 	}
 
 	/**
+	 * @return the value of the X-Sent-By header of the calls that write the decisions, "account; type=adAccount"; empty
+	 *         when no AD account is set
+	 */
+	public Optional<String> decisionSentBy() {
+		return Optional.ofNullable(decisionAdAccount).map(String::strip).filter(not(String::isEmpty)).map(account -> account + "; type=adAccount");
+	}
+
+	/**
 	 * @return the settings of the errand type, with every setting blank when none are configured
 	 */
 	public ErrandTypeSettings errandType(final ErrandType type) {
-		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null, null, null, null, null, false));
+		return Optional.ofNullable(errandTypes.get(type)).orElse(new ErrandTypeSettings(null, null, null, null, null, null, null, null, false, null, null));
 	}
 
 	/**
@@ -151,6 +163,9 @@ public record AotLoaderProperties(
 	 * @param onlyPlacesWithPermit for inspection errands and visits, true to migrate only those of places with a current
 	 *                             permit
 	 *                             (section 7.7)
+	 * @param decisionType         for permits, the type of the decision their errands get, the one Draken gives a decision
+	 *                             on a permit of the kind; blank gives the errands no decision (decision 70)
+	 * @param decisionTitle        for permits, the heading of that decision, as Draken heads it (decision 70)
 	 */
 	public record ErrandTypeSettings(
 		String category,
@@ -161,12 +176,21 @@ public record AotLoaderProperties(
 		List<String> labels,
 		Map<ServingPermitSubtype, String> subtypeLabels,
 		Map<String, String> sourceErrandTypes,
-		boolean onlyPlacesWithPermit) {
+		boolean onlyPlacesWithPermit,
+		String decisionType,
+		String decisionTitle) {
 
 		public ErrandTypeSettings {
 			labels = labels == null ? List.of() : labels.stream().filter(Objects::nonNull).map(String::strip).filter(not(String::isEmpty)).toList();
 			subtypeLabels = strippedValues(subtypeLabels, identity());
 			sourceErrandTypes = strippedValues(sourceErrandTypes, key -> key.strip().toLowerCase(Locale.ROOT));
+		}
+
+		/**
+		 * @return true when the errands of the type get the decision their permit was granted by (decision 70)
+		 */
+		public boolean withDecision() {
+			return decisionType != null && !decisionType.isBlank();
 		}
 
 		/**

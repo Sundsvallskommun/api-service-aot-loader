@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -30,9 +31,9 @@ import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
-import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
+import se.sundsvall.aotloader.source.PermitDecisions;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.SourceRules;
@@ -78,13 +79,20 @@ final class AlkolPermits {
 	 * 34).
 	 */
 	private static final Set<String> CERTIFICATE_TEMPLATES = Set.of("TILLSTT", "TILLTT");
+	// The products are notified on the sales place, not on the permit (decision 68)
+	private static final String NOTIFIED_PRODUCTS = "Anmälda produkter på försäljningsstället";
 
 	private final AlkolIndex index;
+	private final AlkolNotifications notifications;
 	private final AlkolSnapshot snapshot;
 	private final LocalDate today;
 
-	AlkolPermits(final AlkolIndex index) {
+	/**
+	 * @param notifications the notifications of the sales places, whose dates the permit shows
+	 */
+	AlkolPermits(final AlkolIndex index, final AlkolNotifications notifications) {
 		this.index = index;
+		this.notifications = notifications;
 		this.snapshot = index.snapshot();
 		this.today = index.today();
 	}
@@ -109,17 +117,13 @@ final class AlkolPermits {
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SALES_PLACE);
 		final var notes = place == null ? null : place.notering();
 		final var diaryNumber = grantErrand == null ? null : grantErrand.diarieNr();
-		final var products = place == null ? List.<String>of() : Product.notifiedOn(place).stream().map(Product::parameterText).toList();
+		final var products = place == null ? List.<String>of() : Product.notifiedOn(place).stream().map(product -> notifiedProduct(place, product)).toList();
 		final var kinds = permitKinds(view, grant);
 		final var kindsText = Texts.join(", ", kinds.stream().map(PermitKind::text).toList());
 		final var holder = PartyRows.holder(owner, today);
 		final var premises = place == null ? null : index.place(place);
-		final var files = permitFiles(place, fsId, grant, grantErrand, hits);
+		final var files = permitFiles(fsId, grant, grantErrand, hits);
 		final var title = Texts.title("Tobakstillstånd", name);
-		final var log = index.eventsWithoutErrand(fsId)
-			.filter(event -> event.text() != null && !Product.registersNotification(place, event))
-			.map(event -> index.journalEntry(event, null))
-			.toList();
 
 		return Candidate.builder(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), ErrandType.TOBACCO_PERMIT)
 			.placeName(placeName)
@@ -133,7 +137,7 @@ final class AlkolPermits {
 				"Tobakstillstånd för " + name + ", migrerat från " + ALKOL.getDisplayName() + ".",
 				line("Tillståndstyp", kindsText),
 				CandidateTexts.issuedLine(issued, diaryNumber),
-				line("Anmälda produkter", Texts.join(", ", products)))))
+				line(NOTIFIED_PRODUCTS + " (gäller hela stället, inte bara detta ärende)", Texts.join("; ", products)))))
 			.labelPaths(index.properties().errandType(ErrandType.TOBACCO_PERMIT).labels())
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
 			.parameters(new ParameterList()
@@ -144,15 +148,25 @@ final class AlkolPermits {
 				.add(ErrandParameters.HANDLERS, "Handläggare i AlkOL", grantErrand == null ? List.of() : snapshot.visits().handlerNames(grantErrand.handlaggare()))
 				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
-				.add("anmaldaProdukter", "Anmälda produkter", products)
+				.add("anmaldaProdukter", NOTIFIED_PRODUCTS, products)
 				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", notes)
-				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.lines(log))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
 				assetParameters(holder, premises, kinds, diaryNumber), legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
+			.decision(grantDecision(grant, issued, files))
 			.build();
+	}
+
+	/**
+	 * @return the latest granting decision, which the errand of the permit gets (decision 70); null when there is none
+	 */
+	private DecisionData grantDecision(final DecisionRow grant, final LocalDate issued, final FileList files) {
+		if (grant == null) {
+			return null;
+		}
+		return PermitDecisions.of(grant, snapshot.codes().decisionType(grant.beslutsTyp()), snapshot.codes().userName(grant.beslutsfattare()), issued, null, List.of(), files, ALKOL);
 	}
 
 	/**
@@ -198,6 +212,15 @@ final class AlkolPermits {
 		}
 	}
 
+	/**
+	 * @return the product with the date its notification has, "Folköl, anmäld 2015-01-20", or "(uppskattat)" after an
+	 *         estimated date; the product alone when the notification has no date
+	 */
+	private String notifiedProduct(final SalesPlaceRow place, final Product product) {
+		final var notified = notifications.notifiedDate(place, product).text();
+		return notified == null ? product.parameterText() : product.parameterText() + ", anmäld " + notified;
+	}
+
 	private List<Person> persons(final ContactRow owner) {
 		return owner == null ? List.of() : PartyRows.persons(snapshot.persons().getOrDefault(owner.id(), List.of()), snapshot.codes()::position, today);
 	}
@@ -214,18 +237,16 @@ final class AlkolPermits {
 	}
 
 	/**
-	 * The files of the tobacco permit: those of the errand of the latest granting decision (decision 7), and those of the
-	 * place's events without an errand that register no notification (decision 37). The certificate, and the drawings and
+	 * The files of the tobacco permit: those of the errand of the latest granting decision (decision 7). The files of the
+	 * place's events without an errand go to their notification or their documentation errand (decisions 37 and 71). The
+	 * certificate, and the drawings and
 	 * the permit decisions of that errand, also go on the post in PartyAssets, in that order of precedence (decisions 34,
 	 * 35 and 39). A certificate of an earlier grant than the latest may be a former holder's: it goes on the errand only
 	 * and hits G29, as does a permit without a certificate.
 	 */
-	private FileList permitFiles(final SalesPlaceRow place, final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final List<RuleHit> hits) {
+	private FileList permitFiles(final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final List<RuleHit> hits) {
 		final var arendeIds = grantErrand == null ? List.<Integer>of() : List.of(grantErrand.arendeId());
 		final var files = index.addErrandFiles(arendeIds, index.newFileList());
-		index.eventsWithoutErrand(fsId)
-			.filter(event -> !Product.registersNotification(place, event))
-			.forEach(event -> AlkolIndex.addEventFiles(files, event));
 
 		certificate(fsId).ifPresentOrElse(certificate -> {
 			files.add(certificate.name(), certificate.folder(), certificate.details());

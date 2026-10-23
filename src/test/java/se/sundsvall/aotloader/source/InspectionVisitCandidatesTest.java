@@ -7,10 +7,13 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import se.sundsvall.aotloader.service.TestData;
+import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.MeasureData;
+import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
@@ -85,6 +88,31 @@ class InspectionVisitCandidatesTest {
 		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of(), new RoundRow(41, null, null, null, " ")).texts())
 			.isEqualTo(InvestigationTexts.of(new Part("Anteckning", "Lugnt i baren.")));
 		assertThat(InspectionVisitCandidates.roundName(null)).isNull();
+	}
+
+	@Test
+	void whoMadeTheInspectionIsTheKontrollantAndAVisitWithoutRemarksSaysSo() {
+		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", null, null, null, List.of("POL"), new StaffMarks(true, false, false));
+		final var rows = VisitTestRows.visits(List.of(visit), Map.of(), Map.of(), Map.of("04", "Rutintillsyn"), Map.of(), Map.of("POL", "Polisen"));
+		final var visits = new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, TestData.properties(), "okänt serveringsställe", "tillsynsbesöket saknar serveringsställe",
+			LocalDate.of(2026, 10, 23));
+
+		final var candidate = visits.builder(visit, rows, null, null).build();
+
+		// As in AlkT, which may name the police, the rescue service or the environment office as well as a handler (decisions
+		// 66 and 67)
+		assertThat(candidate.errand().description()).isEqualTo("""
+			Tillsynsbesök på okänt serveringsställe 2023-11-04, migrerat från AlkT.
+			Tillsynsart: Rutintillsyn
+			Kontrollant: Polisen
+			Anmärkningar:
+			Inga anmärkningar registrerade
+			Serveringspersonal: Ägaren på plats""");
+		assertThat(candidate.errand().parameters()).filteredOn(parameter -> "kontrollant".equals(parameter.key())).singleElement().satisfies(parameter -> {
+			assertThat(parameter.displayName()).isEqualTo("Kontrollant i AlkT");
+			assertThat(parameter.values()).containsExactly("Polisen");
+		});
+		assertThat(candidate.errand().parameters()).extracting(Parameter::key).doesNotContain("handlaggare", "anmarkningar");
 	}
 
 	@Test

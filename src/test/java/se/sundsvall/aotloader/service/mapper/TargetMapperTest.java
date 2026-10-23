@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service.mapper;
 
 import generated.se.sundsvall.supportmanagement.ContactChannel;
+import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
@@ -10,6 +11,7 @@ import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -18,6 +20,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
@@ -404,10 +407,69 @@ class TargetMapperTest {
 	}
 
 	@Test
+	void theDecisionOfAPermitIsADraftAsDrakenWritesAManualDecision() {
+		final var permit = TestData.permitWithDecision("1");
+		final var candidate = permit.withAsset(permit.asset().withParameter("legalBasis", "8 kap. 2 § alkohollagen").withParameter("conditions", "Mat ska serveras"));
+		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
+
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor");
+
+		assertThat(draft.getType()).isEqualTo("SERVERINGSTILLSTAND");
+		assertThat(draft.getStatus()).isEqualTo("DRAFT");
+		assertThat(draft.getTitle()).isEqualTo("Beslut om serveringstillstånd för alkoholdrycker");
+		assertThat(draft.getDescription()).isEqualTo("Stadigvarande serveringstillstånd");
+		// A term makes the approval one with conditions, as Draken gives it
+		assertThat(draft.getOutcome()).isEqualTo("APPROVAL_WITH_CONDITIONS");
+		assertThat(draft.getMethod()).isEqualTo("MANUAL");
+		assertThat(draft.getDecidedBy()).isEqualTo("Anna Berg");
+		assertThat(draft.getDecidedAt()).isEqualTo(OffsetDateTime.parse("2019-04-30T09:00+02:00"));
+		assertThat(draft.getCompletedAt()).isNull();
+		assertThat(draft.getLegalBasis()).isEqualTo("8 kap. 2 § alkohollagen");
+		assertThat(draft.getJustification()).isEqualTo("Tillstånd beviljas.");
+		assertThat(draft.getValidFrom()).isEqualTo(LocalDate.of(2019, 5, 1));
+		assertThat(draft.getValidTo()).isNull();
+		assertThat(draft.getInvestigationId()).isEqualTo("investigation-1");
+		// The parameters of the permit but its legal basis and conditions, which are a field and terms, and those of the
+		// decision
+		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey, generated.se.sundsvall.supportmanagement.Parameter::getValues)
+			.containsExactly(tuple("migreradFran", List.of("AlkT")), tuple("decisionText", List.of("Bifall med villkor")), tuple("decisionDate", List.of("2019-04-30")),
+				tuple("validFrom", List.of("2019-05-01")));
+		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).extracting(DecisionTerm::getSortOrder, DecisionTerm::getText).containsExactly(tuple(1, "Mat ska serveras"));
+		final var completion = decisionMapper.toDecisionCompletion(candidate.decision());
+		assertThat(completion.getStatus()).isEqualTo("COMPLETED");
+		assertThat(completion.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2019-04-30T09:00+02:00"));
+		assertThat(completion.getOutcome()).isNull();
+	}
+
+	@Test
+	void aDecisionWithoutTermsIsAnApprovalAndItsTextsAreCutToWhatSupportManagementTakes() {
+		final var permit = TestData.permitWithDecision("1");
+		final var decision = permit.decision();
+		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset())
+			.decision(new DecisionData("N".repeat(300), decision.decidedAt(), null, null, null, LocalDate.of(2024, 12, 31), List.of(), List.of()))
+			.build();
+		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
+
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen; " + "x".repeat(300), null, null);
+
+		assertThat(draft.getOutcome()).isEqualTo("APPROVAL");
+		assertThat(draft.getDecidedBy()).hasSize(255);
+		// The references of the legal basis that fit whole
+		assertThat(draft.getLegalBasis()).isEqualTo("8 kap. 2 § alkohollagen");
+		assertThat(draft.getValidTo()).isEqualTo(LocalDate.of(2024, 12, 31));
+		assertThat(draft.getInvestigationId()).isNull();
+		// Without the text of the outcome and a first day, those parameters are left out
+		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).containsExactly("migreradFran", "decisionDate");
+		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).isEmpty();
+		assertThat(decisionMapper.toDecisionDraft(candidate, " ", null, null).getLegalBasis()).isNull();
+	}
+
+	@Test
 	void roles() {
 		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.SERVING_PERMIT)).isEqualTo("PRIMARY");
 		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.TOBACCO_INSPECTION)).isEqualTo("INSPECTED");
 		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.ALCOHOL_INSPECTION_VISIT)).isEqualTo("INSPECTED");
+		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.TOBACCO_DOCUMENTATION)).isEqualTo("INSPECTED");
 	}
 
 	@Test

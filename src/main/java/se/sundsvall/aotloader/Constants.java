@@ -79,6 +79,17 @@ public final class Constants {
 	 */
 	public static final String ASSET_CATEGORY_DECISION = "Beslut";
 
+	/** The outcome of the decision of a permit errand without terms, as Draken gives an approval (decision 70). */
+	public static final String DECISION_OUTCOME_APPROVAL = "APPROVAL";
+	/** The outcome of the decision of a permit errand with terms, as Draken gives an approval with them (decision 70). */
+	public static final String DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS = "APPROVAL_WITH_CONDITIONS";
+	/** The parameter of a decision with the display name of its outcome, as Draken writes it for the certificate. */
+	public static final String DECISION_PARAMETER_TEXT = "decisionText";
+	/** The parameter of a decision with the day it was made, as Draken writes it for the certificate. */
+	public static final String DECISION_PARAMETER_DECISION_DATE = "decisionDate";
+	/** The parameter of a decision with its first day, as Draken writes it for the certificate. */
+	public static final String DECISION_PARAMETER_VALID_FROM = "validFrom";
+
 	/** The longest value of an errand parameter in SupportManagement. */
 	public static final int ERRAND_PARAMETER_MAX_LENGTH = 3000;
 	/** The longest value of an additional parameter, the title or the description of a permit in PartyAssets. */

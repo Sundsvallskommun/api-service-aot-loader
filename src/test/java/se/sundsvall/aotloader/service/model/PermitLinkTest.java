@@ -30,6 +30,17 @@ class PermitLinkTest {
 		assertThat(new PermitLink(permit, null, null, null).permitKey()).isEqualTo(PERMIT);
 	}
 
+	@Test
+	void aDocumentationErrandIsFiledUnderThePermitWhateverItsHolderAndDay() {
+		final var permit = new PlacePermit(PERMIT, LocalDate.of(2019, 5, 1), LocalDate.of(2020, 1, 1), false);
+
+		// Neither the holder nor the day decides, nor that the permit may have been issued to another (decision 71)
+		assertThat(PermitLink.filedUnder(permit).basis()).isEqualTo(Basis.FILED);
+		assertThat(PermitLink.filedUnder(permit).filed()).isTrue();
+		assertThat(PermitLink.filedUnder(null).basis()).isEqualTo(Basis.NO_PERMIT);
+		assertThat(new PermitLink(permit, HOLDER, HOLDER, null).filed()).isFalse();
+	}
+
 	@ParameterizedTest
 	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
 		2023-11-04 | 2019-05-01 | -          | true  | AFTER_ISSUE

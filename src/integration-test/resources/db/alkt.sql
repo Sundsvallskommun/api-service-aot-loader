@@ -189,3 +189,20 @@ GO
 UPDATE dbo.[Tillsyn_Tillfälle] SET SlutDatum = '2023-11-04' WHERE TillsynsTillfalleNr = 900
 UPDATE dbo.[Ärende] SET UpplagdDatum = '2020-12-28' WHERE ArendeID = 700
 GO
+-- The first day a decision is valid, which the decision of the permit errand gets (decision 70)
+ALTER TABLE dbo.[Ärende_Beslut] ADD GiltigtFROM_Datum datetime NULL
+GO
+UPDATE dbo.[Ärende_Beslut] SET GiltigtFROM_Datum = '2019-05-01' WHERE BeslutsID = 100
+GO
+-- An event of place 1 without an errand, with a text, a document and an attachment, which becomes a documentation errand filed
+-- under the permit of the place (decision 71)
+INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid, HandelseText, Worddokument, Bifogadfil, Dokument)
+    VALUES (31020, NULL, 1, 'ANT', '2026-10-13T10:00:00', 'ANDREAS TESTAR', '31020000.rtf', 'testbilaga.pdf', NULL)
+GO
+-- Only the current holder follows (decision 72): the issuing errand of permit 1 was applied for by the owner, and an
+-- inspection errand of a former owner and an event of its time are not migrated (G32)
+UPDATE dbo.[Ärende] SET SokandeID = 70 WHERE ArendeID = 500
+INSERT INTO dbo.[Sökande] VALUES (71, '556677-0001', 'Förra ägaren AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT INTO dbo.[Ärende] (ArendeID, ObjektID, ArendeTyp, DiarieNr, OppnandeDatum, AvslutsDatum, SokandeID) VALUES (703, 1, '07', 'TIL-2018-7', '2018-03-01', '2018-04-01', 71)
+INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid, HandelseText) VALUES (13, NULL, 1, 'ANT', '2018-03-15T09:00:00', 'Samtal med förra ägaren')
+GO

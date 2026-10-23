@@ -20,6 +20,16 @@ public interface SourceDecision {
 	LocalDateTime beslutad();
 
 	/**
+	 * @return the first day the decision is valid, GiltigtFROM_Datum, null when the source does not say
+	 */
+	LocalDate giltigtFrom();
+
+	/**
+	 * @return the last day the decision is valid, GiltigtTOM_Datum, null when the source does not say
+	 */
+	LocalDate giltigtTom();
+
+	/**
 	 * @return the code of the document template the decision document was made from, null when none
 	 */
 	String mall();

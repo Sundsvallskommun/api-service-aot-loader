@@ -2,6 +2,9 @@ package se.sundsvall.aotloader.integration.supportmanagement;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Config;
+import generated.se.sundsvall.supportmanagement.Decision;
+import generated.se.sundsvall.supportmanagement.DecisionOutcome;
+import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
@@ -60,11 +63,14 @@ class SupportManagementIntegrationTest {
 	@Mock
 	private SupportManagementClient client;
 
+	@Mock
+	private SupportManagementDecisionClient decisionClient;
+
 	private SupportManagementIntegration integration;
 
 	@BeforeEach
 	void setUp() {
-		integration = new SupportManagementIntegration(client, TestData.properties());
+		integration = new SupportManagementIntegration(client, decisionClient, TestData.properties());
 	}
 
 	@Test
@@ -184,6 +190,40 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isTrue();
 		assertThat(integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isFalse();
 		assertThatThrownBy(() -> integration.linkInvestigationAttachment(MUNICIPALITY_ID, "a", "i", "att-1")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Saknas");
+	}
+
+	@Test
+	void decisionsAreWrittenThroughTheClientOfTheDecisions() {
+		final var decision = new Decision().status("DRAFT");
+		final var term = new DecisionTerm().sortOrder(1).text("Villkor");
+		when(decisionClient.getDecisions(MUNICIPALITY_ID, NAMESPACE, "a")).thenReturn(List.of(new Decision().id("d")), null);
+		when(decisionClient.createDecision(MUNICIPALITY_ID, NAMESPACE, "a", decision)).thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/a/decisions/d-1")).build());
+		when(client.getDecisionOutcomes(MUNICIPALITY_ID, NAMESPACE)).thenReturn(List.of(new DecisionOutcome().name("APPROVAL")), null);
+
+		assertThat(integration.getDecisions(MUNICIPALITY_ID, "a")).extracting(Decision::getId).containsExactly("d");
+		assertThat(integration.getDecisions(MUNICIPALITY_ID, "a")).isEmpty();
+		assertThat(integration.createDecision(MUNICIPALITY_ID, "a", decision)).isEqualTo("d-1");
+		integration.updateDecision(MUNICIPALITY_ID, "a", "d-1", decision);
+		integration.createDecisionTerm(MUNICIPALITY_ID, "a", "d-1", term);
+		integration.deleteDecisionTerm(MUNICIPALITY_ID, "a", "d-1", "t-1");
+		assertThat(integration.getDecisionOutcomes(MUNICIPALITY_ID)).extracting(DecisionOutcome::getName).containsExactly("APPROVAL");
+		assertThat(integration.getDecisionOutcomes(MUNICIPALITY_ID)).isEmpty();
+
+		verify(decisionClient).updateDecision(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", decision);
+		verify(decisionClient).createDecisionTerm(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", term);
+		verify(decisionClient).deleteDecisionTerm(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", "t-1");
+	}
+
+	@Test
+	void anAttachmentLinkedToTheDecisionAlreadyIsNoError() {
+		when(decisionClient.linkDecisionAttachment(MUNICIPALITY_ID, NAMESPACE, "a", "d", "att-1"))
+			.thenReturn(ResponseEntity.status(201).build())
+			.thenThrow(Problem.valueOf(CONFLICT, "Redan länkad"))
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"));
+
+		assertThat(integration.linkDecisionAttachment(MUNICIPALITY_ID, "a", "d", "att-1")).isTrue();
+		assertThat(integration.linkDecisionAttachment(MUNICIPALITY_ID, "a", "d", "att-1")).isFalse();
+		assertThatThrownBy(() -> integration.linkDecisionAttachment(MUNICIPALITY_ID, "a", "d", "att-1")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Saknas");
 	}
 
 	@Test

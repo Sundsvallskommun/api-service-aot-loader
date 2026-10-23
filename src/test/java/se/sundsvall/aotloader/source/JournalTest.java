@@ -29,6 +29,13 @@ class JournalTest {
 			"2020-03-01 Anteckning: Andra raden\nfortsätter",
 			"2020-03-01: Samma tid, efter den första");
 		assertThat(Journal.text(List.of())).isNull();
+		// The same entries as rows of a table: date, heading and text, in the same order and without what they lack
+		assertThat(Journal.rows(entries)).containsExactly(
+			java.util.Arrays.asList(null, "Utan tid", null),
+			java.util.Arrays.asList(null, null, "Bara text"),
+			java.util.Arrays.asList("2020-01-01", "Beslut", null),
+			java.util.Arrays.asList("2020-03-01", "Anteckning", "Andra raden\nfortsätter"),
+			java.util.Arrays.asList("2020-03-01", null, "Samma tid, efter den första"));
 	}
 
 	@Test

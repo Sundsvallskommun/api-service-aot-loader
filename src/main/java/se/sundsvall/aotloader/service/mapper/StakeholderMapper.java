@@ -70,10 +70,12 @@ final class StakeholderMapper {
 	}
 
 	/**
-	 * @return the role of the holder: the permit holder, or for an inspection errand or visit the holder it concerned
+	 * @return the role of the holder: the permit holder, or for an inspection errand, visit or documentation errand the
+	 *         holder
+	 *         it concerned
 	 */
 	String holderRole(final ErrandType type) {
-		return type.getKind().isInspection() ? properties.roles().inspectionHolder() : properties.roles().permitHolder();
+		return type.getKind().hasConcernedHolder() ? properties.roles().inspectionHolder() : properties.roles().permitHolder();
 	}
 
 	/**

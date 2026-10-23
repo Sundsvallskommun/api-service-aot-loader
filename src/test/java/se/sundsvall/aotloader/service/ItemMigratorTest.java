@@ -7,9 +7,12 @@ import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.relation.ResourceIdentifier;
+import generated.se.sundsvall.supportmanagement.Decision;
+import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
+import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -77,6 +80,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
+import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
@@ -119,6 +123,9 @@ class ItemMigratorTest {
 
 	@Captor
 	private ArgumentCaptor<AssetCreateRequest> assetCaptor;
+
+	@Captor
+	private ArgumentCaptor<Decision> decisionCaptor;
 
 	@Captor
 	private ArgumentCaptor<AssetUpdateRequest> updateCaptor;
@@ -1212,6 +1219,262 @@ class ItemMigratorTest {
 		assertThat(deviation.detail()).startsWith("Avvikelse: 2 relationer finns redan");
 		verify(relations, never()).createRelation(anyString(), any());
 		verify(itemRepository, never()).save(any());
+	}
+
+	@Test
+	void aPermitGetsTheDecisionItWasGrantedByBeforeItsErrandIsActivated() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1")));
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), decisionCaptor.capture())).thenReturn("decision-1");
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 1 dokument");
+		assertThat(savedStatuses).containsExactly(ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.TILLSTAND_SKAPAT,
+			ItemStatus.BESLUT_KLART, ItemStatus.KLAR);
+		final var draft = decisionCaptor.getValue();
+		assertThat(draft.getStatus()).isEqualTo("DRAFT");
+		assertThat(draft.getType()).isEqualTo("SERVERINGSTILLSTAND");
+		assertThat(draft.getOutcome()).isEqualTo("APPROVAL_WITH_CONDITIONS");
+		assertThat(draft.getDecidedBy()).isEqualTo("Anna Berg");
+		assertThat(draft.getInvestigationId()).isEqualTo("investigation-1");
+		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).contains("decisionText");
+		// As Draken writes a decision: the draft, its terms and its document, and the completion, all before the errand is
+		// activated, while no process or notice hears of it
+		final var order = inOrder(supportManagement, partyAssets);
+		order.verify(partyAssets).createAsset(eq(MUNICIPALITY_ID), anyString(), any());
+		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
+		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
+		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-beslut");
+		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
+			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
+		order.verify(supportManagement).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq(new Errand().lifecycle(LifecycleEnum.ACTIVE)));
+		// The application is no document of the decision
+		verify(supportManagement, never()).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-id");
+	}
+
+	@Test
+	void aDecisionAnEarlierRunCompletedIsLeftAsItIs() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("COMPLETED")));
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Beslutet från en tidigare körning är redan fattat i SupportManagement och ändras inte");
+		assertThat(savedStatuses).contains(ItemStatus.BESLUT_KLART);
+		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
+		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void aDraftAnEarlierRunLeftGetsWhatTheSourceSaysNowAndIsCompleted() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT")
+			.terms(List.of(new DecisionTerm().id("term-2").sortOrder(2).text("Mat ska serveras"), new DecisionTerm().id("term-1").sortOrder(1).text("Gammalt villkor")))
+			.attachments(List.of(new ErrandAttachment().id("attachment-beslut")))));
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).updateDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("decision-1"), decisionCaptor.capture());
+		// The terms are not those it is to have, so they are written again
+		order.verify(supportManagement).deleteDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "term-1");
+		order.verify(supportManagement).deleteDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "term-2");
+		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
+		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
+			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
+		assertThat(decisionCaptor.getValue().getStatus()).isEqualTo("DRAFT");
+		assertThat(decisionCaptor.getValue().getInvestigationId()).isNull();
+		// The document is linked already
+		verify(supportManagement, never()).linkDecisionAttachment(anyString(), anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void theTermsOfADraftThatAreThoseItIsToHaveAreKept() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT")
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))));
+
+		migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		verify(supportManagement, never()).deleteDecisionTerm(anyString(), anyString(), anyString(), anyString());
+		verify(supportManagement, never()).createDecisionTerm(anyString(), anyString(), anyString(), any());
+		verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-beslut");
+	}
+
+	@Test
+	void aDecisionWithAStatusTheMigrationNeverGivesStopsTheItemBeforeItsErrandIsActivated() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("CANCELLED")));
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Steg Beslut: Ärendet har redan ett beslut med status CANCELLED, som migreringen aldrig ger, och det ändras inte");
+		verify(supportManagement, never()).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq(new Errand().lifecycle(LifecycleEnum.ACTIVE)));
+		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void aDryRunTellsWhichDecisionTheErrandGetsOrThatItGetsNone() throws IOException {
+		withDecisions();
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
+
+		assertThat(migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(true)).detail()).isEqualTo("Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 1 dokument");
+		// Without the outcomes of the namespace the outcome stands by its name
+		assertThat(migrator.process(TestData.permitWithDecision("1"), context(true)).detail()).isEqualTo("Beslut: APPROVAL_WITH_CONDITIONS, fattat 2019-04-30, 1 villkor, 1 dokument");
+		assertThat(migrator.process(TestData.permitWithoutFiles("2"), context(true)).detail()).isEqualTo("Inget beslut: AlkT har inget beslut med tidpunkt för tillståndet");
+		// A type without decisions says nothing of them
+		assertThat(migrator(TestData.properties(documents.toString(), attachments.toString())).process(TestData.permitWithDecision("1"), context(true)).detail()).isNull();
+		verifyNoInteractions(supportManagement);
+	}
+
+	@Test
+	void aPermitWithoutADecisionIsMigratedWithoutOne() throws IOException {
+		withDecisions();
+		stubNewPermit();
+
+		final var result = migrator.process(TestData.permit("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Inget beslut: AlkT har inget beslut med tidpunkt för tillståndet");
+		assertThat(savedStatuses).doesNotContain(ItemStatus.BESLUT_KLART);
+		verify(supportManagement, never()).getDecisions(anyString(), anyString());
+	}
+
+	@Test
+	void aDryRunCountsOnlyTheDocumentsOfTheDecisionThatWouldBeUploaded() throws IOException {
+		withDecisions();
+		// beslut.rtf, the document of the decision, is missing on the file area
+		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(true));
+
+		assertThat(result.detail()).isEqualTo("G14 1 fil saknas på filarean (beslut.rtf); Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 0 dokument");
+	}
+
+	@Test
+	void aDocumentationErrandIsRelatedFromThePermitErrandItIsFiledUnder() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-DOKUMENTATION-31020")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), errandCaptor.capture())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of());
+		when(relations.createRelation(eq(MUNICIPALITY_ID), any())).thenReturn("relation-id");
+
+		final var result = migrator.process(TestData.documentation("31020", permitKey), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Relation till tillståndsärendet ALKT/TILLSTAND/1");
+		assertThat(savedStatuses).containsExactly(ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.RELATION_KLAR, ItemStatus.KLAR);
+		final var relation = ArgumentCaptor.forClass(Relation.class);
+		verify(relations).createRelation(eq(MUNICIPALITY_ID), relation.capture());
+		assertThat(relation.getValue().getSource().getResourceId()).isEqualTo(PERMIT_ERRAND_ID);
+		assertThat(relation.getValue().getTarget().getResourceId()).isEqualTo(ERRAND_ID);
+		// The holder it concerned, in the role of the inspections, so that it does not show on Mina sidor
+		assertThat(errandCaptor.getValue().getStakeholders()).extracting("role").containsExactly("INSPECTED");
+		assertThat(errandCaptor.getValue().getLabels()).extracting(ErrandLabel::getId).containsExactly("label-migrated", "label-documentation");
+		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
+		verifyNoInteractions(partyAssets);
+	}
+
+	@Test
+	void aDocumentationErrandWaitsForWhatItIsFiledUnder() {
+		final var notificationKey = new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL");
+		lenient().when(itemRepository.findByKey(notificationKey)).thenReturn(Optional.empty());
+
+		final var result = migrator.process(TestData.documentation("31021", notificationKey), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.VANTAR);
+		assertThat(result.detail()).isEqualTo("Väntar på anmälan ALKOL/ANMALAN/1-FOLKOL, som är inte migrerat");
+		assertThat(savedStatuses).containsExactly(ItemStatus.VANTAR);
+	}
+
+	@Test
+	void aDocumentationErrandIsNotMigratedWithoutWhatItIsFiledUnder() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
+
+		final var result = migrator.process(TestData.documentation("31022", permitKey), context(false));
+
+		// An inspection errand would be migrated without a relation, but the documentation belongs to the permit (decision 71)
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);
+		assertThat(result.detail()).isEqualTo("Händelsen migreras inte, eftersom tillståndet ALKT/TILLSTAND/1 som den hör till inte migreras (beslut 71)");
+		assertThat(savedStatuses).containsExactly(ItemStatus.MIGRERAS_INTE);
+		verify(supportManagement, never()).createErrand(anyString(), any());
+	}
+
+	@Test
+	void whatTheRunDidWithThePermitDecidesOverWhatAnEarlierRunSaved() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
+		final var context = context(true);
+		context.recordOutcome(permitKey, Outcome.GRANSKAS);
+
+		final var result = migrator.process(TestData.documentation("31022", permitKey), context);
+
+		// The permit was stopped in an earlier run but is to be reviewed now, so the documentation may yet follow it
+		assertThat(result.outcome()).isEqualTo(Outcome.VANTAR);
+		assertThat(result.detail()).isEqualTo("Väntar på tillståndet ALKT/TILLSTAND/1, som är GRANSKAS");
+		verify(itemRepository, never()).save(any());
+	}
+
+	@Test
+	void aMigratedDocumentationErrandGetsItsRelationWhenItsNotificationIsMigratedAfterIt() {
+		final var notificationKey = new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL");
+		final var candidate = TestData.documentation("31021", notificationKey);
+		when(itemRepository.findByKey(candidate.key())).thenReturn(Optional.of(item(ItemStatus.KLAR, ERRAND_ID)));
+		when(itemRepository.findByKey(notificationKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of());
+		when(relations.createRelation(eq(MUNICIPALITY_ID), any())).thenReturn("relation-id");
+
+		final var result = migrator.process(candidate, context(false));
+
+		assertThat(result).isEqualTo(new ItemResult(Outcome.REDAN_MIGRERAD, List.of(), "Relation till anmälningsärendet ALKOL/ANMALAN/1-FOLKOL, tillagd i efterhand", "ALKT-2026-1"));
+	}
+
+	/**
+	 * Lets the serving permits get their decisions (decision 70).
+	 */
+	private void withDecisions() {
+		properties = TestData.propertiesWithDecisions(documents.toString(), attachments.toString(), "ab12cde");
+		migrator = migrator(properties);
+	}
+
+	/**
+	 * Lets permit 1 be migrated as a new draft: the certificate beslut.rtf is on the errand from an earlier run, and the
+	 * application ansokan.pdf is uploaded.
+	 */
+	private void stubNewPermit() throws IOException {
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new ErrandAttachment().id("attachment-beslut").fileName("beslut.rtf")
+			.hash(FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8)))));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any(), any())).thenReturn(Optional.of("attachment-id"));
+	}
+
+	private RunContext contextWithOutcomes(final boolean dryRun) {
+		final var check = new Preflight.Result(List.of(), Map.of(MUNICIPALITY_ID, TestData.labelIds()), Map.of(MUNICIPALITY_ID, TestData.purposes()),
+			Map.of(MUNICIPALITY_ID, Map.of("APPROVAL", "Bifall", "APPROVAL_WITH_CONDITIONS", "Bifall med villkor")));
+		return new RunContext("run-id", MUNICIPALITY_ID, dryRun, check, null, new AtomicBoolean(), this::fileArea);
 	}
 
 	private ItemMigrator migrator(final AotLoaderProperties settings) {

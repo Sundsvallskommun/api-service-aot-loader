@@ -15,19 +15,26 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
+import se.sundsvall.aotloader.source.DocumentationCandidates;
+import se.sundsvall.aotloader.source.DocumentationCandidates.PlaceEvent;
+import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SERVING_PLACE;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_ERRAND;
+import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_EVENT;
 
 /**
  * Turns what was read from AlkT into candidates: the current serving permits (sections 7.2–7.6), the inspection
@@ -90,6 +97,38 @@ public final class AlktCandidateFactory {
 			.map(visit -> visit(visit, visits))
 			.toList();
 		return new ReaderResult(candidates, List.of());
+	}
+
+	/**
+	 * @return the documentation errands: the events without an errand of the places with a current permit, those with a
+	 *         text or a file, each filed under the permit of its place (decision 71), in the order of their ids
+	 */
+	public ReaderResult documentation() {
+		final var documentation = new DocumentationCandidates(ErrandType.ALCOHOL_DOCUMENTATION, index.properties(), UNKNOWN_SERVING_PLACE, index.today());
+		final var candidates = index.snapshot().placeEvents().entrySet().stream()
+			.filter(place -> index.hasPermit(place.getKey()))
+			.flatMap(place -> {
+				final var former = index.formerHolders(place.getKey());
+				return place.getValue().stream()
+					.filter(event -> DocumentationCandidates.documents(event.text().text(), !event.files().isEmpty()))
+					.map(event -> documentationErrand(place.getKey(), event, former, documentation));
+			})
+			.sorted(Comparator.comparing(candidate -> Integer.valueOf(candidate.key().sourceId())))
+			.toList();
+		return new ReaderResult(candidates, List.of());
+	}
+
+	private Candidate documentationErrand(final Integer objektId, final PlaceEventRow event, final FormerHolders former, final DocumentationCandidates documentation) {
+		final var place = index.placeOf(objektId);
+		final var row = event.text();
+		final var source = new PlaceEvent(ALKT, event.handelseId(), index.snapshot().codeText(CODE_TYPE_EVENT, row.handelseTyp()), row.tidpunkt(), row.text(), row.confidential(),
+			row.diarieNr());
+		final var files = index.newFileList();
+		event.files().forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
+		return documentation.builder(source, place == null ? null : index.place(place), index.ownerOf(place).orElse(null), former, index.placePermit(objektId))
+			.placeNumber(place == null ? null : place.restaurangBeteckning())
+			.files(files.build(), files.assetFiles(), files.details())
+			.build();
 	}
 
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {

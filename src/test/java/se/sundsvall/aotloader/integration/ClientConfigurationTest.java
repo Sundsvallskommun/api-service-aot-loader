@@ -67,6 +67,25 @@ class ClientConfigurationTest {
 	}
 
 	@Test
+	void theDecisionsAreSentByTheirAdAccountWithTheOtherHeaders() {
+		final var template = customize("support-management",
+			repository -> SupportManagementConfigurationAccess.decisionCustomizer(repository, 10, 180, TestData.propertiesWithDecisions("documents", "attachments", " ab12cde "), noResend), 3, true);
+
+		assertThat(template.headers()).containsEntry("X-Trigger-Process", List.of("false"))
+			.containsEntry("X-notify", List.of("false"))
+			.containsEntry("X-Sent-By", List.of("ab12cde; type=adAccount"));
+	}
+
+	@Test
+	void withoutAnAdAccountTheDecisionsAreSentByTheMigration() {
+		final var template = customize("support-management",
+			repository -> SupportManagementConfigurationAccess.decisionCustomizer(repository, 10, 180, TestData.propertiesWithDecisions("documents", "attachments", null), noResend), 3, true);
+
+		// Which SupportManagement refuses a manual decision, and the preflight stops a real run before that
+		assertThat(template.headers()).containsEntry("X-Sent-By", List.of("alkt-migration; type=migration"));
+	}
+
+	@Test
 	void partyAssetsSendsWhoTheActorIs() {
 		final var template = customize("party-assets", repository -> PartyAssetsConfigurationAccess.customizer(repository, 10, 60, TestData.properties(), noResend), 1, true);
 

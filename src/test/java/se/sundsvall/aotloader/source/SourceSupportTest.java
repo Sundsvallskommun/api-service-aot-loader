@@ -60,6 +60,30 @@ class SourceSupportTest {
 	}
 
 	@Test
+	void aTableHasARowPerValueAndARowTooLongForAValueGoesOnInRowsOfItsOwn() {
+		final var longText = "ord ".repeat(1600).strip();
+		final var rows = List.of(
+			java.util.Arrays.asList("2020-01-01", "Anteckning", "Rad ett | med streck\r\noch radbrytning"),
+			java.util.Arrays.asList("2020-01-02", "Remiss", null),
+			java.util.Arrays.asList(null, " ", " "),
+			java.util.Arrays.asList("2020-01-03", "Brev", longText));
+
+		final var table = new ParameterList().table("handelselogg", "Händelselogg i AlkT", List.of("Datum", "Händelse", "Text"), rows).build();
+
+		assertThat(table).singleElement().satisfies(parameter -> {
+			assertThat(parameter.displayName()).isEqualTo("Datum|Händelse|Text");
+			assertThat(parameter.group()).isEqualTo("Händelselogg i AlkT");
+			// A row without anything is left out; the long row goes on with its first cells blank, and no value is too long
+			assertThat(parameter.values()).hasSize(5).allSatisfy(value -> assertThat(value).hasSizeLessThanOrEqualTo(3000));
+			assertThat(parameter.values().subList(0, 2)).containsExactly("2020-01-01|Anteckning|Rad ett med streck och radbrytning", "2020-01-02|Remiss|");
+			assertThat(parameter.values().get(2)).startsWith("2020-01-03|Brev|ord ord");
+			assertThat(parameter.values().subList(3, 5)).allSatisfy(value -> assertThat(value).startsWith("||ord"));
+			assertThat(String.join(" ", parameter.values().subList(2, 5).stream().map(value -> value.substring(value.lastIndexOf('|') + 1)).toList())).isEqualTo(longText);
+		});
+		assertThat(new ParameterList().table("tom", "Tom", List.of("A", "B"), List.of(java.util.Arrays.asList(null, null))).build()).isEmpty();
+	}
+
+	@Test
 	void parameterAndFileLists() {
 		assertThat(new ParameterList().add("a", "A", (String) null).add("b", "B", " x ").add("c", "C", java.util.Arrays.asList(" ", null, "y")).build())
 			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]", "c=[y]");
@@ -259,7 +283,7 @@ class SourceSupportTest {
 	@Test
 	void sourceDatabasesOpenOnFirstUseAndOnlyWhenConfigured() {
 		final var properties = new AotLoaderProperties("AOT", "s", "u", "c", null, "r", new Roles("PRIMARY", "CONTACT", null, null), Map.of(),
-			Map.of(Source.ALKT, new Database("jdbc:h2:mem:source;DB_CLOSE_DELAY=-1", "sa", "", Duration.ofSeconds(5)), Source.ALKOL, new Database(" ", null, null, null)), Map.of(), DataSize.ofMegabytes(1), null);
+			Map.of(Source.ALKT, new Database("jdbc:h2:mem:source;DB_CLOSE_DELAY=-1", "sa", "", Duration.ofSeconds(5)), Source.ALKOL, new Database(" ", null, null, null)), Map.of(), DataSize.ofMegabytes(1), null, null);
 		final var databases = new SourceDatabases(properties);
 
 		final var jdbc = databases.jdbcTemplate(Source.ALKT);
@@ -286,7 +310,7 @@ class SourceSupportTest {
 		assertThat(properties.database(Source.ALKT).orElseThrow()).hasToString("Database[configured=true]");
 		assertThat(properties.errandType(ErrandType.TOBACCO_INSPECTION).sourceErrandTypes()).containsOnlyKeys("it");
 
-		final var empty = new AotLoaderProperties("AOT", "s", "u", "c", null, "r", new Roles("PRIMARY", "CONTACT", null, null), null, null, null, DataSize.ofMegabytes(1), null);
+		final var empty = new AotLoaderProperties("AOT", "s", "u", "c", null, "r", new Roles("PRIMARY", "CONTACT", null, null), null, null, null, DataSize.ofMegabytes(1), null, null);
 		final var none = empty.errandType(ErrandType.SERVING_PERMIT);
 		assertThat(none.category()).isNull();
 		assertThat(none.labels()).isEmpty();
@@ -294,6 +318,8 @@ class SourceSupportTest {
 		assertThat(none.sourceErrandTypes()).isEmpty();
 		assertThat(none.onlyPlacesWithPermit()).isFalse();
 		assertThat(none.allLabels()).isEmpty();
+		assertThat(none.withDecision()).isFalse();
+		assertThat(empty.decisionSentBy()).isEmpty();
 		assertThat(empty.database(Source.ALKT)).isEmpty();
 		assertThat(empty.fileArea(Source.ALKT).documents()).isNull();
 		assertThat(new Database("x", null, null, null).queryTimeout()).isEqualTo(Duration.ofMinutes(2));
@@ -304,7 +330,7 @@ class SourceSupportTest {
 		final var subtypeLabels = new EnumMap<ServingPermitSubtype, String>(ServingPermitSubtype.class);
 		subtypeLabels.put(ServingPermitSubtype.PERMANENT_SERVING, " B ");
 		subtypeLabels.put(ServingPermitSubtype.TASTING, null);
-		final var settings = new ErrandTypeSettings(null, null, null, null, null, Arrays.asList(" A ", null, " "), subtypeLabels, Map.of(" Tills ", " C ", "IT", " "), true);
+		final var settings = new ErrandTypeSettings(null, null, null, null, null, Arrays.asList(" A ", null, " "), subtypeLabels, Map.of(" Tills ", " C ", "IT", " "), true, null, null);
 
 		assertThat(settings.labels()).containsExactly("A");
 		assertThat(settings.subtypeLabel(ServingPermitSubtype.PERMANENT_SERVING)).contains("B");

@@ -67,7 +67,7 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[0] == 'Påträngande reklam i butik')]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 3 && @.values[0] == 'Per Eriksson' && @.values[1] == '7' && @.values[2] == 'PE')]"
+				"matchesJsonPath": "$.parameters[?(@.key == 'kontrollant' && @.displayName == 'Kontrollant i AlkOL' && @.values.length() == 3 && @.values[0] == 'Per Eriksson' && @.values[1] == '7' && @.values[2] == 'PE')]"
 			},
 			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'anteckning' && @.values[0] == 'Köpet nekades.')]"

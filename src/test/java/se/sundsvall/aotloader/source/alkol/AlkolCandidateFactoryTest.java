@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
+import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
@@ -55,6 +56,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
@@ -115,7 +117,8 @@ class AlkolCandidateFactoryTest {
 			"diarienummer", List.of("IAN-2019-100"),
 			"tidigareBeviljanden", List.of("2015-02-01, IAN-2015-1"),
 			"senasteBeslut", List.of("Godkänd anmälan ändring i bolag, 2021-02-01"),
-			"anmaldaProdukter", List.of("Folköl", "Tobaksfria nikotinprodukter"),
+			// Only marks on the place, so their notifications have the place's earliest date, estimated (decision 68)
+			"anmaldaProdukter", List.of("Folköl, anmäld 2015-01-01 (uppskattat)", "Tobaksfria nikotinprodukter, anmäld 2015-01-01 (uppskattat)"),
 			"noteringar", List.of("Notering 1"),
 			"migrerad", List.of("2026-10-12 från AlkOL")));
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("detaljhandel");
@@ -144,6 +147,27 @@ class AlkolCandidateFactoryTest {
 		assertThat(candidate.files().onPost()).containsExactly(new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Tillståndsbevis"));
 		// The certificate is also the document of the grant (decision 58)
 		assertThat(candidate.asset().legalBasisDocuments()).containsExactly(new FileReference("11111111.rtf", DOCUMENTS));
+	}
+
+	@Test
+	void theNotifiedProductsOfATobaccoPermitAreThoseOfTheWholePlaceWithTheDatesOfTheirNotifications() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, true, true, false))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.errand(AlkolTestRows.errand(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.errand(AlkolTestRows.errand(110, 1, "Fföl", "IAN-2017-1", LocalDate.of(2017, 5, 1), LocalDate.of(2017, 6, 1), null))
+			.decision(AlkolTestRows.decision(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null));
+
+		final var permit = data.factory().permits().candidates().getFirst();
+
+		// Folköl has an errand that registered it; e-cigarettes are only a mark, dated by the place's earliest errand
+		assertThat(permit.errand().description()).contains("\nAnmälda produkter på försäljningsstället (gäller hela stället, inte bara detta ärende): "
+			+ "Folköl, anmäld 2017-05-01; E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)");
+		assertThat(parameters(permit)).containsEntry("anmaldaProdukter",
+			List.of("Folköl, anmäld 2017-05-01", "E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)"));
+		assertThat(permit.errand().parameters()).filteredOn(parameter -> "anmaldaProdukter".equals(parameter.key())).extracting(Parameter::displayName)
+			.containsExactly("Anmälda produkter på försäljningsstället");
 	}
 
 	@Test
@@ -200,7 +224,33 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
-	void theFilesOfEventsWithoutAnErrandGoToTheirNotificationOrElseToThePermit() {
+	void theEventsOfAFormerHolderAreNotMigratedAndAPermitWithoutItsSalesPlaceKeepsItsEvents() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.view(new PermitViewRow(3, true, false, false, false))
+			.errand(AlkolTestRows.errand(100, 1, "WADE", null, LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), 50))
+			.errand(AlkolTestRows.errand(101, 1, "WADE", null, LocalDate.of(2019, 1, 1), LocalDate.of(2019, 3, 1), 51))
+			.applicant(new ContactRow(50, "5599887766", "Förra ägaren", null, null, null, null, null, null, null))
+			.applicant(new ContactRow(51, "556677-8899", "Bolaget", null, null, null, null, null, null, null))
+			.event(AlkolTestRows.event(310, 1, null, "016", LocalDateTime.of(2018, 6, 1, 9, 0), null, null, null, "gammal.pdf"))
+			.event(AlkolTestRows.event(311, 1, null, "016", LocalDateTime.of(2019, 2, 1, 9, 0), null, null, null, "ny.pdf"))
+			.event(AlkolTestRows.event(312, 3, null, "016", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "utan-stalle.pdf"));
+
+		final var documentation = data.factory().documentation().candidates();
+
+		assertThat(documentation).extracting(Candidate::key, candidate -> candidate.permitLink().permitKey(), Candidate::placeName, Candidate::ruleHits).containsExactly(
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "310"), new ItemKey(ALKOL, TILLSTAND, "1"), "Butik 1",
+				List.of(RuleHit.of(FORMER_HOLDER, "händelsen var 2018-06-01, och stället hade en tidigare ägare till och med 2018-12-31"))),
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "311"), new ItemKey(ALKOL, TILLSTAND, "1"), "Butik 1", List.of()),
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "312"), new ItemKey(ALKOL, TILLSTAND, "3"), null, List.of()));
+		assertThat(documentation.getLast().errand().title()).endsWith(" – okänt försäljningsställe");
+		assertThat(documentation.getLast().holder()).isNull();
+	}
+
+	@Test
+	void theEventsWithoutAnErrandGoToTheirNotificationOrBecomeDocumentationErrands() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, false))
 			.place(place(2, 10).withFlags(true, false, true, false))
@@ -215,26 +265,36 @@ class AlkolCandidateFactoryTest {
 			.event(AlkolTestRows.event(303, 2, null, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, "folkol-2.pdf"))
 			.event(AlkolTestRows.event(304, 2, null, "105", LocalDateTime.of(2020, 1, 2, 9, 0), null, null, null, "ecig-2.pdf"))
 			.event(AlkolTestRows.event(305, 2, null, "035", LocalDateTime.of(2020, 1, 3, 9, 0), null, null, null, "egentillsyn-2.pdf"))
-			// A drawing among the place's other events follows its notifications' errands, not their posts
 			.event(AlkolTestRows.event(306, 2, null, "016", LocalDateTime.of(2020, 1, 4, 9, 0), null, null, null, "Planritning butik.pdf"))
 			// A letter that confirms e-cigarettes, by its template, goes to that notification and its post only
-			.event(AlkolTestRows.event(307, 2, null, "023", LocalDateTime.of(2020, 1, 5, 9, 0), null, "BekEci", "77777777.rtf", null));
+			.event(AlkolTestRows.event(307, 2, null, "023", LocalDateTime.of(2020, 1, 5, 9, 0), null, "BekEci", "77777777.rtf", null))
+			// An event with neither a text nor a file tells nothing, and becomes no errand
+			.event(AlkolTestRows.event(308, 2, null, "024", LocalDateTime.of(2020, 1, 6, 9, 0), null, null, null, null));
 
 		final var permit = data.factory().permits().candidates().getFirst();
 		final var notifications = data.factory().notifications().candidates();
+		final var documentation = data.factory().documentation().candidates();
 
-		assertThat(permit.files().references()).containsExactly(
-			new FileReference("11111111.rtf", DOCUMENTS),
-			new FileReference("22222222.rtf", DOCUMENTS),
-			new FileReference("handling-1.pdf", ATTACHMENTS),
-			new FileReference("ecig-1.pdf", ATTACHMENTS));
+		assertThat(permit.files().references()).containsExactly(new FileReference("11111111.rtf", DOCUMENTS));
 		assertThat(permit.files().onPost()).extracting(AssetFile::category).containsExactly("Tillståndsbevis");
 		assertThat(notifications).extracting(Candidate::key, candidate -> candidate.files().references()).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new FileReference("folkol-1.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
-				new FileReference("Planritning butik.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("egentillsyn-2.pdf", ATTACHMENTS),
-				new FileReference("Planritning butik.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))));
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))));
+		// The place's other events become documentation errands, filed under its current tobacco permit, or else under the
+		// notification of the first product it is marked for (decision 71)
+		assertThat(documentation).extracting(Candidate::key, candidate -> candidate.permitLink().permitKey(), candidate -> candidate.files().references()).containsExactly(
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "301"), new ItemKey(ALKOL, TILLSTAND, "1"),
+				List.of(new FileReference("22222222.rtf", DOCUMENTS), new FileReference("handling-1.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "302"), new ItemKey(ALKOL, TILLSTAND, "1"), List.of(new FileReference("ecig-1.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "305"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
+			tuple(new ItemKey(ALKOL, DOKUMENTATION, "306"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("Planritning butik.pdf", ATTACHMENTS))));
+		assertThat(documentation).allSatisfy(candidate -> {
+			assertThat(candidate.type()).isEqualTo(ErrandType.TOBACCO_DOCUMENTATION);
+			assertThat(candidate.permitLink().basis()).isEqualTo(Basis.FILED);
+			assertThat(candidate.files().onPost()).isEmpty();
+			assertThat(candidate.asset()).isNull();
+		});
 		// The notifications get the attachments of the events that register their product on their post too
 		assertThat(notifications).extracting(Candidate::key, candidate -> candidate.files().onPost()).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-1.pdf", ATTACHMENTS), null))),
@@ -350,6 +410,8 @@ class AlkolCandidateFactoryTest {
 		assertThat(candidates.get(1).errand().title()).isEqualTo("Tobakstillstånd – okänt försäljningsställe");
 		// A permit without a grant gets an investigation all the same, without dates and texts
 		assertThat(candidates.get(1).investigation()).isEqualTo(new InvestigationData("Tobakstillstånd – okänt försäljningsställe", null, null, InvestigationTexts.NONE));
+		// but no decision
+		assertThat(candidates).extracting(Candidate::decision).containsOnlyNulls();
 	}
 
 	@Test
@@ -365,7 +427,7 @@ class AlkolCandidateFactoryTest {
 			.errand(AlkolTestRows.errand(101, 2, "WADE", "IAN-2019-2", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Notering 2"))
 			.decision(AlkolTestRows.decision(1001, 101, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
 			// The permit is valid from a later day, but the trial was completed when the grant was decided
-			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 8, 1), null, null, null, "Tillstånd beviljas.", "ka"))
+			.decision(new DecisionRow(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), LocalDate.of(2019, 8, 1), null, null, null, null, "Tillstånd beviljas.", "ka"))
 			.event(AlkolTestRows.event(299, 1, 100, "024", LocalDateTime.of(2019, 6, 1, 9, 0), null, null, null, null, "Platsbesök gjort"))
 			.event(AlkolTestRows.event(298, 1, 100, "017", LocalDateTime.of(2019, 5, 10, 9, 0), null, null, null, null))
 			// The event registers the folköl the place has notified, so it belongs to the notification
@@ -385,11 +447,43 @@ class AlkolCandidateFactoryTest {
 		assertThat(permit.investigation()).isEqualTo(new InvestigationData("Tobakstillstånd – Butik 1", LocalDateTime.of(2019, 5, 2, 0, 0), LocalDateTime.of(2019, 7, 1, 0, 0),
 			InvestigationTexts.of(new Part("Noteringar", "Komplett ansökan"), new Part("Händelser", "2019-05-10 017\n2019-06-01 Anteckningar: Platsbesök gjort"),
 				new Part("Beslut", "2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Karin Andersson: Tillstånd beviljas."))));
-		// The log of the place takes only events with a text, and marks a confidential one
-		assertThat(parameters(permit)).containsEntry("handelselogg",
-			List.of("2020-03-01 Tillsyn - Tillsynsbesök enl plan: Besök enligt plan", "2020-06-01 Anteckningar: Ärendet är borttaget",
-				"2021-01-02 Anteckningar (sekretess): Samtal med butiken"));
-		assertThat(permit.files().references()).contains(new FileReference("borttaget.pdf", ATTACHMENTS));
+		// The errand gets the latest grant as its decision, valid from its own first day and until further notice, without
+		// terms (decision 70)
+		final var decision = permit.decision();
+		assertThat(decision.decidedBy()).isEqualTo("Karin Andersson");
+		assertThat(decision.decidedAt()).isEqualTo(LocalDateTime.of(2019, 7, 1, 10, 0));
+		assertThat(decision.description()).isEqualTo("Tillstånd tobaksförsäljning – detaljhandel");
+		assertThat(decision.justification()).isEqualTo("Tillstånd beviljas.");
+		assertThat(decision.validFrom()).isEqualTo(LocalDate.of(2019, 8, 1));
+		assertThat(decision.validTo()).isNull();
+		assertThat(decision.terms()).isEmpty();
+		assertThat(decision.documents()).isEmpty();
+		// The place's events without an errand, also the one whose errand is missing, become documentation errands, those
+		// with a text or a file, but the one that registers the folköl of the place (decision 71)
+		final var documentation = data.factory().documentation().candidates();
+		assertThat(documentation).extracting(candidate -> candidate.key().sourceId(), candidate -> candidate.errand().title()).containsExactly(
+			tuple("301", "Anteckningar – Butik 1"), tuple("302", "Tillsyn - Tillsynsbesök enl plan – Butik 1"), tuple("304", "Anteckningar – Butik 1"),
+			tuple("305", "Anteckningar – Butik 1"));
+		final var confidential = documentation.getFirst();
+		assertThat(confidential.errand().description()).isEqualTo("""
+			Anteckningar på Butik 1 2021-01-02, migrerad från AlkOL, där den inte hörde till något ärende.
+			Diarienummer: IAN-2021-1
+			Händelsen är markerad med sekretess i AlkOL.
+			Samtal med butiken""");
+		assertThat(parameters(confidential)).containsEntry("alkolHandelseId", List.of("301")).containsEntry("handelsetyp", List.of("Anteckningar"))
+			.containsEntry("handelsedatum", List.of("2021-01-02")).containsEntry("diarienummer", List.of("IAN-2021-1")).containsEntry("sekretess", List.of("Ja"))
+			.containsEntry("migrerad", List.of("2026-10-12 från AlkOL"));
+		assertThat(confidential.errand().externalTags()).containsEntry("diarienummer", "IAN-2021-1");
+		assertThat(confidential.holder().legalId().number()).isEqualTo("5566778899");
+		assertThat(confidential.permitLink().permitKey()).isEqualTo(new ItemKey(ALKOL, TILLSTAND, "1"));
+		// The file of an event came in when the event was
+		final var withFile = documentation.get(2);
+		assertThat(withFile.files().references()).containsExactly(new FileReference("borttaget.pdf", ATTACHMENTS));
+		assertThat(withFile.files().detailsOf(new FileReference("borttaget.pdf", ATTACHMENTS)).received()).isEqualTo(LocalDateTime.of(2020, 6, 1, 9, 0));
+		assertThat(parameters(documentation.get(1))).doesNotContainKeys("diarienummer", "sekretess");
+		// The permit has neither their texts nor their files
+		assertThat(parameters(permit)).doesNotContainKey("handelselogg");
+		assertThat(permit.files().references()).doesNotContain(new FileReference("borttaget.pdf", ATTACHMENTS));
 		// A handler AlkOL has no user for stands with the number
 		assertThat(parameters(permit)).containsEntry("handlaggare", List.of("Karin Andersson", "9"));
 		final var other = data.factory().permits().candidates().get(1);
@@ -576,7 +670,7 @@ class AlkolCandidateFactoryTest {
 			.errand(AlkolTestRows.errand(400, 1, "Tills", "TIL-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), 50, "Klagomål", List.of("2")))
 			.errand(AlkolTestRows.errand(401, 1, "IT", null, LocalDate.of(2020, 1, 1), null, null))
 			.errand(AlkolTestRows.errand(402, 2, "IT", null, LocalDate.of(2020, 1, 1), null, null))
-			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, null, "varning.pdf", null, "Varning meddelas.", "XY"))
+			.decision(new DecisionRow(500, 400, "VT", LocalDateTime.of(2020, 1, 20, 9, 0), null, null, null, "varning.pdf", null, "Varning meddelas.", "XY"))
 			.event(new EventRow(600, 1, 400, "024", LocalDateTime.of(2020, 1, 10, 9, 0), "til-1", null, null, null, "Kontrollköp gjort", true))
 			.event(AlkolTestRows.event(601, 1, 400, "017", LocalDateTime.of(2020, 1, 15, 9, 0), "TIL-0", null, null, null))
 			.applicant(new ContactRow(50, "5566778899", "Bolaget", null, null, null, null, null, null, null));
@@ -705,7 +799,7 @@ class AlkolCandidateFactoryTest {
 			Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03
 			Tillsynen gällde: Tobak, E-cigaretter
 			Anmält besök: Ja
-			Handläggare: Per Eriksson
+			Kontrollant: Per Eriksson
 			Anmärkningar:
 			- Påträngande reklam i butik
 			Anteckning: Köpet nekades.""");
@@ -717,7 +811,7 @@ class AlkolCandidateFactoryTest {
 			.containsEntry("tillsynsomgang", List.of("Kontrollköp vecka 18, 2024-05-03"))
 			.containsEntry("tillsynenGallde", List.of("Tobak", "E-cigaretter"))
 			.containsEntry("anmaltBesok", List.of("Ja"))
-			.containsEntry("handlaggare", List.of("Per Eriksson"))
+			.containsEntry("kontrollant", List.of("Per Eriksson"))
 			.doesNotContainKey("serveringspersonal")
 			.containsEntry("anmarkningar", List.of("Påträngande reklam i butik"))
 			.containsEntry("anteckning", List.of("Köpet nekades."))
@@ -805,13 +899,17 @@ class AlkolCandidateFactoryTest {
 			.errand(AlkolTestRows.errand(100, 1, "Fföl", "IAN-2020-1", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null, "Anteckning om anmälan"))
 			.event(AlkolTestRows.event(300, 1, 100, "014", LocalDateTime.of(2020, 1, 1, 9, 0), null, null, null, null, "Anmälan om folköl"))
 			.event(AlkolTestRows.event(301, 1, null, "BeaFol", LocalDateTime.of(2020, 1, 5, 9, 0), null, null, null, null, "Bekräftelse skickad"))
-			// The place has no permit, so its other events without an errand go to the notification too
+			// The place has no permit, so its other events without an errand are filed under the notification (decision 71)
 			.event(AlkolTestRows.event(302, 1, null, "024", LocalDateTime.of(2020, 3, 1, 9, 0), null, null, null, null, "Samtal med butiken"));
 
 		final var notification = data.factory().notifications().candidates().getFirst();
 
 		assertThat(parameters(notification)).containsEntry("noteringar", List.of("Anteckning om anmälan"))
-			.containsEntry("handelselogg", List.of("2020-01-01 014: Anmälan om folköl", "2020-01-05 BeaFol: Bekräftelse skickad", "2020-03-01 Anteckningar: Samtal med butiken"));
+			.containsEntry("handelselogg", List.of("2020-01-01|014|Anmälan om folköl", "2020-01-05|BeaFol|Bekräftelse skickad"));
+		assertThat(data.factory().documentation().candidates()).singleElement()
+			.satisfies(documentation -> assertThat(documentation.key()).isEqualTo(new ItemKey(ALKOL, DOKUMENTATION, "302")))
+			.satisfies(documentation -> assertThat(documentation.permitLink().permitKey()).isEqualTo(notification.key()))
+			.satisfies(documentation -> assertThat(documentation.errand().description()).endsWith("Samtal med butiken"));
 	}
 
 	@Test

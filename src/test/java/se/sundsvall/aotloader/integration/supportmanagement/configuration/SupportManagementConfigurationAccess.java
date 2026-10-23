@@ -16,4 +16,9 @@ public final class SupportManagementConfigurationAccess {
 		final NoResend noResend) {
 		return new SupportManagementConfiguration().feignBuilderCustomizer(repository, new SupportManagementProperties(connectTimeout, readTimeout), properties, noResend);
 	}
+
+	public static FeignBuilderCustomizer decisionCustomizer(final ClientRegistrationRepository repository, final int connectTimeout, final int readTimeout,
+		final AotLoaderProperties properties, final NoResend noResend) {
+		return new SupportManagementDecisionConfiguration().feignBuilderCustomizer(repository, new SupportManagementProperties(connectTimeout, readTimeout), properties, noResend);
+	}
 }

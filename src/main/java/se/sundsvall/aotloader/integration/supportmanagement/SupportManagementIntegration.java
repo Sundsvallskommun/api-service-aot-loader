@@ -1,8 +1,10 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
-import generated.se.sundsvall.supportmanagement.Category;
 import generated.se.sundsvall.supportmanagement.Config;
+import generated.se.sundsvall.supportmanagement.Decision;
+import generated.se.sundsvall.supportmanagement.DecisionOutcome;
+import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
@@ -42,10 +44,12 @@ public class SupportManagementIntegration {
 	private static final String EXTERNAL_TAG = "Den externa taggen";
 
 	private final SupportManagementClient client;
+	private final SupportManagementDecisionClient decisionClient;
 	private final String namespace;
 
-	SupportManagementIntegration(final SupportManagementClient client, final AotLoaderProperties properties) {
+	SupportManagementIntegration(final SupportManagementClient client, final SupportManagementDecisionClient decisionClient, final AotLoaderProperties properties) {
 		this.client = client;
+		this.decisionClient = decisionClient;
 		this.namespace = properties.namespace();
 	}
 
@@ -190,6 +194,55 @@ public class SupportManagementIntegration {
 	}
 
 	/**
+	 * @return the decisions of the errand, with their terms and the attachments they link
+	 */
+	public List<Decision> getDecisions(final String municipalityId, final String errandId) {
+		return Optional.ofNullable(decisionClient.getDecisions(municipalityId, namespace, errandId)).orElse(emptyList());
+	}
+
+	/**
+	 * @return                    the id of the decision created on the errand
+	 * @throws MigrationException when the response has no id
+	 */
+	public String createDecision(final String municipalityId, final String errandId, final Decision decision) {
+		return Locations.idOf(decisionClient.createDecision(municipalityId, namespace, errandId, decision), "beslutet");
+	}
+
+	/**
+	 * Changes the fields the decision carries, and leaves those it does not carry as they are.
+	 */
+	public void updateDecision(final String municipalityId, final String errandId, final String decisionId, final Decision decision) {
+		decisionClient.updateDecision(municipalityId, namespace, errandId, decisionId, decision);
+	}
+
+	public void createDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final DecisionTerm term) {
+		decisionClient.createDecisionTerm(municipalityId, namespace, errandId, decisionId, term);
+	}
+
+	public void deleteDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final String termId) {
+		decisionClient.deleteDecisionTerm(municipalityId, namespace, errandId, decisionId, termId);
+	}
+
+	/**
+	 * Links an attachment of the errand to its decision (decision 70).
+	 *
+	 * @return true when the attachment was linked now, false when it already was
+	 */
+	public boolean linkDecisionAttachment(final String municipalityId, final String errandId, final String decisionId, final String attachmentId) {
+		return Fallbacks.unless(CONFLICT, false, () -> {
+			decisionClient.linkDecisionAttachment(municipalityId, namespace, errandId, decisionId, attachmentId);
+			return true;
+		});
+	}
+
+	/**
+	 * @return the decision outcomes of the namespace
+	 */
+	public List<DecisionOutcome> getDecisionOutcomes(final String municipalityId) {
+		return Optional.ofNullable(client.getDecisionOutcomes(municipalityId, namespace)).orElse(emptyList());
+	}
+
+	/**
 	 * @return the attachment purposes of the namespace
 	 */
 	public List<AttachmentPurpose> getAttachmentPurposes(final String municipalityId) {
@@ -215,13 +268,6 @@ public class SupportManagementIntegration {
 	 */
 	public List<Status> getStatuses(final String municipalityId) {
 		return Optional.ofNullable(client.getStatuses(municipalityId, namespace)).orElse(emptyList());
-	}
-
-	/**
-	 * @return the categories of the namespace, with their types
-	 */
-	public List<Category> getCategories(final String municipalityId) {
-		return Optional.ofNullable(client.getCategories(municipalityId, namespace)).orElse(emptyList());
 	}
 
 	private static boolean hasTag(final Errand errand, final String key, final String value) {

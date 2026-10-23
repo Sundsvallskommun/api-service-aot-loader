@@ -11,7 +11,8 @@
 		"TILLSTAND",
 		"ANMALAN",
 		"TILLSYN",
-		"TILLSYNSBESOK"
+		"TILLSYNSBESOK",
+		"DOKUMENTATION"
 	],
 	"status": "RUNNING",
 	"started": "${json-unit.any-string}",

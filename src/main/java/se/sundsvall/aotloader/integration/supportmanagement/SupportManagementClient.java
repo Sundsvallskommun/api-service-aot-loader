@@ -1,8 +1,8 @@
 package se.sundsvall.aotloader.integration.supportmanagement;
 
 import generated.se.sundsvall.supportmanagement.AttachmentPurpose;
-import generated.se.sundsvall.supportmanagement.Category;
 import generated.se.sundsvall.supportmanagement.Config;
+import generated.se.sundsvall.supportmanagement.DecisionOutcome;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Investigation;
@@ -32,7 +32,9 @@ import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static se.sundsvall.aotloader.integration.supportmanagement.configuration.SupportManagementConfiguration.CLIENT_ID;
 
 /**
- * The calls the migration makes to SupportManagement. It never calls communication, conversations or decisions (R4).
+ * The calls the migration makes to SupportManagement, but for the decisions, which
+ * {@link SupportManagementDecisionClient}
+ * makes. It never calls communication or conversations (R4).
  */
 @FeignClient(name = CLIENT_ID, url = "${integration.support-management.url}", configuration = SupportManagementConfiguration.class)
 public interface SupportManagementClient {
@@ -149,8 +151,8 @@ public interface SupportManagementClient {
 		@PathVariable String municipalityId,
 		@PathVariable String namespace);
 
-	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/categories", produces = APPLICATION_JSON_VALUE)
-	List<Category> getCategories(
+	@GetMapping(path = "/{municipalityId}/{namespace}/metadata/decisionoutcomes", produces = APPLICATION_JSON_VALUE)
+	List<DecisionOutcome> getDecisionOutcomes(
 		@PathVariable String municipalityId,
 		@PathVariable String namespace);
 }

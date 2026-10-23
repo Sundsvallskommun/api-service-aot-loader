@@ -94,6 +94,10 @@ aot-loader:
   namespace: AOT
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
+  # The AD account the decisions of the permits are written with (decision 70). SupportManagement takes a manual decision
+  # only from an AD account, so these calls alone are sent by it, with the decision maker of the source in decidedBy.
+  # The account migration-job, decided 23 October 2026. Blank stops a real run that migrates permits.
+  decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
   # The channel Draken shows as "Migrerat ärende"
   channel: MIGRATION
   # The closed status of the migrated errands, the one AOT has (decision 5)
@@ -141,6 +145,9 @@ aot-loader:
         tasting: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING
       asset-type: AlcoholServingPermit
       asset-title: Beslut om serveringstillstånd
+      # The type and heading of the decision the errand gets, as Draken gives a decision on the label of the type (decision 70)
+      decision-type: SERVERINGSTILLSTAND
+      decision-title: Beslut om serveringstillstånd för alkoholdrycker
     tobacco-permit:
       category: TOBACCO
       type: SALES_PERMIT_APPLICATION
@@ -149,6 +156,8 @@ aot-loader:
       asset-type: TobaccoSalesPermit
       # Followed by the kind of permit, e.g. " – detaljhandel"
       asset-title: Tillstånd för tobaksförsäljning
+      decision-type: TOBAKSFORSALJNING
+      decision-title: Beslut om ansökan om försäljning av tobaksvaror
     folkol-sales-notification:
       category: ALCOHOL
       type: FOLKOL_SALES_NOTIFICATION
@@ -219,6 +228,19 @@ aot-loader:
         - CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION
         - TAGROOT/TOBACCO_INSPECTION
       only-places-with-permit: true
+    # Every event of a place that belongs to no errand, with a text or a file, becomes a documentation errand of its own,
+    # filed under the permit or notification of its place (decision 71), unless it is from a former holder's time
+    # (decision 72)
+    alcohol-documentation:
+      category: DOCUMENTATION
+      type: DOCUMENTATION
+      labels:
+        - CATEGORYROOT/DOCUMENTATION/DOCUMENTATION
+    tobacco-documentation:
+      category: DOCUMENTATION
+      type: DOCUMENTATION
+      labels:
+        - CATEGORYROOT/DOCUMENTATION/DOCUMENTATION
   # Windows authentication: the URL has integratedSecurity=true and no user, see README
   databases:
     alkt:

@@ -31,7 +31,7 @@
 				"matchesJsonPath": "$.title"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handelselogg' && @.values.length() == 1 && @.values[0] == '2021-04-01 Anteckningar (sekretess): Samtal med kiosken')]"
+				"doesNotMatch": "(?s).*handelselogg.*"
 			},
 			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Karin Andersson')]"

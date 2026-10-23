@@ -26,15 +26,13 @@ import static java.util.Collections.emptyMap;
  * @param decisions     the decisions by BeslutsID
  * @param errands       the errands by ArendeID
  * @param errandFiles   the files of the errands' events and pictures, by ArendeID
- * @param placeFiles    the files of the events without an errand, by the ObjektID of the event; an event whose errand
- *                      is missing counts as one without an errand
+ * @param placeEvents   the events without an errand, each with its files, by the ObjektID of the event, in the order of
+ *                      their ids; an event whose errand is missing counts as one without an errand (decision 71)
  * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
  *                      tell which file names are shared
  * @param documents     the documents AlkT generated at events, with the template each was made from
  * @param errandTexts   the events of the errands, also those without a text, and the texts of their pictures, by
  *                      ArendeID
- * @param placeTexts    the events with a text that have no errand, by the ObjektID of the event, split the same way as
- *                      the files
  * @param persons       the active persons with significant influence, by AgarID
  * @param applicants    the applicants of the inspection errands, by SokandeID
  * @param codeTexts     the texts of the code lists, by code type and code
@@ -48,11 +46,10 @@ public record AlktSnapshot(
 	Map<Integer, DecisionRow> decisions,
 	Map<Integer, ErrandRow> errands,
 	Map<Integer, List<FileRow>> errandFiles,
-	Map<Integer, List<FileRow>> placeFiles,
+	Map<Integer, List<PlaceEventRow>> placeEvents,
 	Map<Integer, List<FileRow>> unplacedFiles,
 	List<DocumentRow> documents,
 	Map<Integer, List<TextRow>> errandTexts,
-	Map<Integer, List<TextRow>> placeTexts,
 	Map<Integer, List<PersonRow>> persons,
 	Map<Integer, ContactRow> applicants,
 	Map<String, Map<String, String>> codeTexts,
@@ -88,22 +85,15 @@ public record AlktSnapshot(
 		return errandFiles.getOrDefault(arendeId, emptyList());
 	}
 
-	/**
-	 * @return the files of the events of the place that have no errand
-	 */
-	public List<FileRow> placeFilesOf(final Integer objektId) {
-		return placeFiles.getOrDefault(objektId, emptyList());
-	}
-
 	public List<TextRow> textsOf(final Integer arendeId) {
 		return errandTexts.getOrDefault(arendeId, emptyList());
 	}
 
 	/**
-	 * @return the texts of the events of the place that have no errand
+	 * @return the events of the place that have no errand, in the order of their ids
 	 */
-	public List<TextRow> placeTextsOf(final Integer objektId) {
-		return placeTexts.getOrDefault(objektId, emptyList());
+	public List<PlaceEventRow> placeEventsOf(final Integer objektId) {
+		return placeEvents.getOrDefault(objektId, emptyList());
 	}
 
 	public List<PersonRow> personsOf(final Integer agarId) {
@@ -238,6 +228,7 @@ public record AlktSnapshot(
 		Integer arendeId,
 		String beslutsTyp,
 		LocalDateTime beslutad,
+		LocalDate giltigtFrom,
 		LocalDate giltigtTom,
 		String mall,
 		String worddokument,
@@ -286,8 +277,9 @@ public record AlktSnapshot(
 	}
 
 	/**
-	 * An event or the text of a picture, which goes in the journal of the investigation or of the permit errand
-	 * (decisions 44, 46, 47 and 52).
+	 * An event or the text of a picture, which goes in the journal of the investigation (decisions 44, 46 and 52), or for
+	 * an
+	 * event without an errand in its documentation errand (decision 71).
 	 *
 	 * @param tidpunkt     when the event was or the picture was taken, null when unknown
 	 * @param handelseTyp  the code of the event type, null for a picture
@@ -318,6 +310,21 @@ public record AlktSnapshot(
 			details = details == null ? FileDetails.NONE : details;
 		}
 
+	}
+
+	/**
+	 * An event of a place that belongs to no errand, which becomes a documentation errand of its own (decision 71).
+	 *
+	 * @param handelseId the event, HandelseID
+	 * @param text       its time, type, text, confidentiality and diary number
+	 * @param files      its document, its attachment and its files in Ärende_Händelser_Filer, each with its purpose and the
+	 *                   time of the event
+	 */
+	public record PlaceEventRow(Integer handelseId, TextRow text, List<FileRow> files) {
+
+		public PlaceEventRow {
+			files = files == null ? List.of() : List.copyOf(files);
+		}
 	}
 
 	/**

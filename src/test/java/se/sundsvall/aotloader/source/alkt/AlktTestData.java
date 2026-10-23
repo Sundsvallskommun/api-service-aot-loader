@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
@@ -75,17 +76,17 @@ final class AlktTestData {
 		private final Map<Integer, DecisionRow> decisions = new HashMap<>();
 		private final Map<Integer, ErrandRow> errands = new HashMap<>();
 		private final Map<Integer, List<FileRow>> files = new HashMap<>();
-		private final Map<Integer, List<FileRow>> placeFiles = new HashMap<>();
+		private final Map<Integer, List<PlaceEventRow>> placeEvents = new HashMap<>();
 		private final Map<Integer, List<FileRow>> unplacedFiles = new HashMap<>();
 		private final List<DocumentRow> documents = new ArrayList<>();
 		private final Map<Integer, List<TextRow>> errandTexts = new HashMap<>();
-		private final Map<Integer, List<TextRow>> placeTexts = new HashMap<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
 		private final List<VisitRow> visits = new ArrayList<>();
 		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
 		private final Map<Integer, List<String>> visitFiles = new HashMap<>();
 		private final Map<Integer, RoundRow> rounds = new HashMap<>();
+		private int nextHandelseId = 10_000;
 
 		SnapshotBuilder permit(final PermitRow row) {
 			permits.add(row);
@@ -122,9 +123,17 @@ final class AlktTestData {
 			return this;
 		}
 
-		SnapshotBuilder placeFile(final int objektId, final FileRow row) {
-			placeFiles.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(row);
+		SnapshotBuilder placeEvent(final int objektId, final PlaceEventRow row) {
+			placeEvents.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(row);
 			return this;
+		}
+
+		/**
+		 * Adds an event of the place without an errand that has the file but no text, with an id after those of the events
+		 * added before.
+		 */
+		SnapshotBuilder placeFile(final int objektId, final FileRow row) {
+			return placeEvent(objektId, new PlaceEventRow(nextHandelseId++, AlktTestRows.text(null, null, false, null), List.of(row)));
 		}
 
 		SnapshotBuilder unplacedFile(final int handelseId, final FileRow row) {
@@ -142,9 +151,12 @@ final class AlktTestData {
 			return this;
 		}
 
+		/**
+		 * Adds an event of the place without an errand that has the text but no file, with an id after those of the events
+		 * added before.
+		 */
 		SnapshotBuilder placeText(final int objektId, final TextRow row) {
-			placeTexts.computeIfAbsent(objektId, _ -> new ArrayList<>()).add(row);
-			return this;
+			return placeEvent(objektId, new PlaceEventRow(nextHandelseId++, row, List.of()));
 		}
 
 		SnapshotBuilder person(final PersonRow row) {
@@ -179,7 +191,7 @@ final class AlktTestData {
 
 		AlktSnapshot build() {
 			final var texts = codeTexts();
-			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeFiles, unplacedFiles, documents, errandTexts, placeTexts, persons,
+			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeEvents, unplacedFiles, documents, errandTexts, persons,
 				applicants, texts,
 				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V"), Map.of("ABE", "Anna Berg"), rounds));
 		}

@@ -45,6 +45,7 @@ import se.sundsvall.aotloader.support.MigrationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -116,9 +117,13 @@ class FileUploaderTest {
 		when(supportManagement.createAttachment(MUNICIPALITY_ID, ERRAND_ID, "rapport.pdf", "yy".getBytes(StandardCharsets.UTF_8), null)).thenReturn(Optional.of("a2"));
 		when(supportManagement.createAttachment(MUNICIPALITY_ID, ERRAND_ID, "rapport.pdf", "x".getBytes(StandardCharsets.UTF_8), null)).thenReturn(Optional.of("a3"));
 
-		final var material = uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+		final var uploaded = uploader.upload(candidate, context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
 
-		assertThat(material).containsExactlyInAnyOrder("a1", "a2");
+		assertThat(uploaded.material()).containsExactlyInAnyOrder("a1", "a2");
+		// Every file on the errand has its attachment, material or not, which the decision links its documents by
+		assertThat(uploaded.attachmentIds()).containsOnly(entry(new FileReference("beslut.rtf", DOCUMENTS), "a1"), entry(new FileReference("rapport.pdf", ATTACHMENTS), "a2"),
+			entry(new FileReference("rapport.pdf", DOCUMENTS), "a3"));
+		assertThat(uploaded.idsOf(List.of(new FileReference("rapport.pdf", DOCUMENTS), new FileReference("saknas.pdf", DOCUMENTS), new FileReference("beslut.rtf", DOCUMENTS)))).containsExactly("a3", "a1");
 	}
 
 	@Test

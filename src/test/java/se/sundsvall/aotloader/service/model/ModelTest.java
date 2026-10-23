@@ -30,6 +30,7 @@ class ModelTest {
 	@Test
 	void theStepsOfTheFlowAreProgress() {
 		assertThat(Arrays.stream(ItemStatus.values()).filter(ItemStatus::isProgress).toList()).isEqualTo(List.of(
-			ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.TILLSTAND_SKAPAT, ItemStatus.RELATION_KLAR, ItemStatus.KLAR));
+			ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.TILLSTAND_SKAPAT, ItemStatus.BESLUT_KLART, ItemStatus.RELATION_KLAR,
+			ItemStatus.KLAR));
 	}
 }

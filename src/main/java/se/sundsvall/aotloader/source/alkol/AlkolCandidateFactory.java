@@ -3,6 +3,7 @@ package se.sundsvall.aotloader.source.alkol;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -12,8 +13,12 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Outcome;
+import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReaderResult.Notice;
+import se.sundsvall.aotloader.source.DocumentationCandidates;
+import se.sundsvall.aotloader.source.DocumentationCandidates.PlaceEvent;
+import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.InspectionCandidates;
 import se.sundsvall.aotloader.source.InspectionCandidates.InspectionErrand;
 import se.sundsvall.aotloader.source.InspectionVisitCandidates;
@@ -21,6 +26,7 @@ import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.EventRow;
+import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
 
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
@@ -50,8 +56,8 @@ public final class AlkolCandidateFactory {
 
 	public AlkolCandidateFactory(final AlkolSnapshot snapshot, final LocalDate today, final AotLoaderProperties properties) {
 		this.index = new AlkolIndex(snapshot, today, properties);
-		this.permits = new AlkolPermits(index);
 		this.notifications = new AlkolNotifications(index);
+		this.permits = new AlkolPermits(index, notifications);
 	}
 
 	/**
@@ -120,6 +126,54 @@ public final class AlkolCandidateFactory {
 			.filter(visit -> visits.selects(index.hasCurrentPermit(visit.objektId())))
 			.map(visit -> visit(visit, visits))
 			.toList(), List.of());
+	}
+
+	/**
+	 * @return the documentation errands: the events without an errand of the sales places, those with a text or a file,
+	 *         each filed under the tobacco permit or notification of its place (decision 71), in the order of their ids. An
+	 *         event that registers or confirms a notification is the notification's and stays with it (decision 37), and a
+	 *         place with neither a permit nor a notification gets none. A permit in the view whose sales place is missing
+	 *         gets the events of its place all the same.
+	 */
+	public ReaderResult documentation() {
+		final var documentation = new DocumentationCandidates(ErrandType.TOBACCO_DOCUMENTATION, index.properties(), UNKNOWN_SALES_PLACE, index.today());
+		final var ofPlaces = index.places().stream()
+			.flatMap(place -> documentationErrands(place.fsId(), place, index.filedUnder(place), documentation));
+		final var ofPermitsWithoutPlace = index.snapshot().permitView().keySet().stream()
+			.filter(fsId -> index.salesPlace(fsId) == null)
+			.flatMap(fsId -> documentationErrands(fsId, null, index.placePermit(fsId), documentation));
+		final var candidates = Stream.concat(ofPlaces, ofPermitsWithoutPlace)
+			.sorted(Comparator.comparing(candidate -> Integer.valueOf(candidate.key().sourceId())))
+			.toList();
+		return new ReaderResult(candidates, List.of());
+	}
+
+	/**
+	 * @param  fsId          the id of the sales place
+	 * @param  place         the sales place, null when it is missing
+	 * @param  filedUnder    what the documentation errands of the place are filed under, null when there is nothing
+	 * @param  documentation the builder of the documentation errands
+	 * @return               the documentation errands of the events of the place without an errand, as above
+	 */
+	private Stream<Candidate> documentationErrands(final Integer fsId, final SalesPlaceRow place, final PlacePermit filedUnder, final DocumentationCandidates documentation) {
+		if (filedUnder == null) {
+			return Stream.empty();
+		}
+		final var former = index.formerHolders(place, index.errandsOfPlace(fsId));
+		return index.eventsWithoutErrand(fsId)
+			.filter(event -> place == null || !Product.registersNotification(place, event))
+			.filter(event -> DocumentationCandidates.documents(event.text(), event.worddokument() != null || event.bifogadfil() != null))
+			.map(event -> documentationErrand(place, event, former, filedUnder, documentation));
+	}
+
+	private Candidate documentationErrand(final SalesPlaceRow place, final EventRow event, final FormerHolders former, final PlacePermit filedUnder,
+		final DocumentationCandidates documentation) {
+		final var source = new PlaceEvent(ALKOL, event.handelseId(), index.snapshot().codes().eventType(event.handelseTyp()), event.tidpunkt(), event.text(), event.confidential(),
+			event.diarieNr());
+		final var files = AlkolIndex.addEventFiles(index.newFileList(), event);
+		return documentation.builder(source, place == null ? null : index.place(place), index.ownerOf(place), former, filedUnder)
+			.files(files.build(), files.assetFiles(), files.details())
+			.build();
 	}
 
 	private Candidate inspectionErrand(final ErrandRow errand, final InspectionCandidates inspections) {

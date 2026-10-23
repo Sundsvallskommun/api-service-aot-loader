@@ -53,7 +53,7 @@ public final class AlktTestRows {
 	 */
 	public static DecisionRow decision(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtTom, final String mall,
 		final String worddokument, final String bifogadfil, final String beslutsText) {
-		return new DecisionRow(beslutsId, arendeId, beslutsTyp, beslutad, giltigtTom, mall, worddokument, bifogadfil, beslutsText, null);
+		return new DecisionRow(beslutsId, arendeId, beslutsTyp, beslutad, null, giltigtTom, mall, worddokument, bifogadfil, beslutsText, null);
 	}
 
 	/**

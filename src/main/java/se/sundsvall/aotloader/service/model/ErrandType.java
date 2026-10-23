@@ -15,7 +15,9 @@ public enum ErrandType {
 	ALCOHOL_INSPECTION(Source.ALKT, Kind.TILLSYN, false),
 	TOBACCO_INSPECTION(Source.ALKOL, Kind.TILLSYN, false),
 	ALCOHOL_INSPECTION_VISIT(Source.ALKT, Kind.TILLSYNSBESOK, false),
-	TOBACCO_INSPECTION_VISIT(Source.ALKOL, Kind.TILLSYNSBESOK, false);
+	TOBACCO_INSPECTION_VISIT(Source.ALKOL, Kind.TILLSYNSBESOK, false),
+	ALCOHOL_DOCUMENTATION(Source.ALKT, Kind.DOKUMENTATION, false),
+	TOBACCO_DOCUMENTATION(Source.ALKOL, Kind.DOKUMENTATION, false);
 
 	private final Source source;
 	private final Kind kind;

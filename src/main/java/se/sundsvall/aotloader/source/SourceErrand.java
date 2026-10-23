@@ -38,4 +38,11 @@ public interface SourceErrand {
 	 * @return the day the errand was registered, UpplagdDatum
 	 */
 	LocalDate upplagd();
+
+	/**
+	 * @return the day the errand was opened, or else registered; null when it has neither
+	 */
+	default LocalDate openedOrRegistered() {
+		return oppnad() == null ? upplagd() : oppnad();
+	}
 }

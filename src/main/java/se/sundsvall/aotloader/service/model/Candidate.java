@@ -26,8 +26,10 @@ import static java.util.Objects.requireNonNull;
  * @param asset         the post in PartyAssets, null for an errand without one
  * @param files         the files that follow the errand
  * @param investigation the investigation of an inspection errand, null for an errand without one
- * @param permitLink    for an inspection errand, what decides the relation to the permit errand, otherwise null
+ * @param permitLink    for an inspection errand or visit, what decides the relation to the permit errand, and for a
+ *                      documentation errand, what it is filed under; otherwise null
  * @param measures      the measures of an inspection visit, its remarks (decision 57)
+ * @param decision      the decision a permit was granted by, null for an errand without one (decision 70)
  */
 public record Candidate(
 	ItemKey key,
@@ -43,7 +45,8 @@ public record Candidate(
 	CandidateFiles files,
 	InvestigationData investigation,
 	PermitLink permitLink,
-	List<MeasureData> measures) {
+	List<MeasureData> measures,
+	DecisionData decision) {
 
 	public Candidate {
 		requireNonNull(key, "key");
@@ -59,7 +62,7 @@ public record Candidate(
 	 * @return the candidate with another post in PartyAssets
 	 */
 	public Candidate withAsset(final AssetData value) {
-		return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, errand, value, files, investigation, permitLink, measures);
+		return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, errand, value, files, investigation, permitLink, measures, decision);
 	}
 
 	public static Builder builder(final ItemKey key, final ErrandType type) {
@@ -153,6 +156,7 @@ public record Candidate(
 		private AssetData asset;
 		private PermitLink permitLink;
 		private InvestigationData investigation;
+		private DecisionData decision;
 
 		private Builder(final ItemKey key, final ErrandType type) {
 			this.key = key;
@@ -268,9 +272,14 @@ public record Candidate(
 			return this;
 		}
 
+		public Builder decision(final DecisionData value) {
+			this.decision = value;
+			return this;
+		}
+
 		public Candidate build() {
 			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, new ErrandContent(title, description, labelPaths, externalTags, parameters), asset,
-				new CandidateFiles(files, assetFiles, fileDetails), investigation, permitLink, measures);
+				new CandidateFiles(files, assetFiles, fileDetails), investigation, permitLink, measures, decision);
 		}
 	}
 }

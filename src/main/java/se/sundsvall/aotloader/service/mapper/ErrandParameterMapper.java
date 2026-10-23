@@ -24,6 +24,7 @@ final class ErrandParameterMapper {
 		return new generated.se.sundsvall.supportmanagement.Parameter()
 			.key(parameter.key())
 			.displayName(parameter.displayName())
+			.group(parameter.group())
 			.values(parameter.values().stream().flatMap(value -> Texts.split(value, ERRAND_PARAMETER_MAX_LENGTH).stream()).toList());
 	}
 }

@@ -53,10 +53,10 @@ class PartyResolver {
 
 	/**
 	 * G10 for a holder that Party does not know: a hit that stops a permit, and information only for the holder of an
-	 * inspection errand, also one without a number. A permit holder without a number has hit G8 already.
+	 * inspection or documentation errand, also one without a number. A permit holder without a number has hit G8 already.
 	 */
 	private static void holderNotFound(final Candidate candidate, final Holder holder, final List<RuleHit> hits) {
-		if (candidate.type().getKind().isInspection()) {
+		if (candidate.type().getKind().hasConcernedHolder()) {
 			hits.add(RuleHit.of(INSPECTION_HOLDER_NOT_IN_PARTY, holder.legalId() == null ? "numret saknas eller har fel format" : null));
 		} else if (holder.legalId() != null) {
 			hits.add(RuleHit.of(HOLDER_NOT_IN_PARTY));

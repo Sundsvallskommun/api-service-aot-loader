@@ -85,6 +85,21 @@ public final class Journal {
 		return Texts.join("\n", lines(entries));
 	}
 
+	/** The columns of {@link #rows}. */
+	public static final List<String> COLUMNS = List.of("Datum", "Händelse", "Text");
+
+	/**
+	 * @return the entries in order of time, an entry without a time first, each a row of its date "ÅÅÅÅ-MM-DD", its heading
+	 *         and its text, a cell null when the entry lacks it; an entry with neither a heading nor a text is left out
+	 */
+	public static List<List<String>> rows(final Collection<Entry> entries) {
+		return entries.stream().sorted(ORDER)
+			.filter(entry -> Texts.trimToNull(entry.heading()) != null || Texts.trimToNull(entry.text()) != null)
+			.map(entry -> Arrays.asList(Optional.ofNullable(entry.tidpunkt()).map(LocalDateTime::toLocalDate).map(SourceValues::format).orElse(null),
+				Texts.trimToNull(entry.heading()), Texts.trimToNull(entry.text())))
+			.toList();
+	}
+
 	/**
 	 * @return the entries as lines in order of time, an entry without a time first, leaving out an entry without anything
 	 */

@@ -16,8 +16,10 @@ import se.sundsvall.aotloader.source.alkt.AlktRepository.EventText;
 import se.sundsvall.aotloader.source.alkt.AlktRepository.EventTexts;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -49,10 +51,15 @@ class AlktRepositoryTest {
 		assertThat(split.errandFiles()).containsOnlyKeys(500);
 		final var first = new FileDetails(null, LocalDateTime.of(2020, 1, 1, 14, 35));
 		assertThat(split.errandFiles().get(500)).containsExactly(new FileRow(500, "11111111.rtf", true, first), new FileRow(500, "ansokan.pdf", false, first), AlktTestRows.file(500, "fasad.jpg", false));
-		assertThat(split.placeFiles()).containsOnlyKeys(1);
+		// The files of the events of the place without an errand go to their documentation errands (decision 71)
+		final var texts = List.of(new EventText(2, null, 1, AlktTestRows.text(LocalDateTime.of(2020, 1, 2, 9, 0), "UTSKR", false, null)),
+			new EventText(3, 900, 1, AlktTestRows.text(null, "REMS", false, null)), new EventText(4, null, null, AlktTestRows.text(null, "REMP", false, null)));
+		final var placeEvents = AlktRepository.placeEvents(texts, events, Set.of(500));
+		assertThat(placeEvents).containsOnlyKeys(1);
 		// The attachment of an event of a referral answer is one
-		assertThat(split.placeFiles().get(1)).containsExactly(new FileRow(null, "22222222.rtf", true, new FileDetails(null, LocalDateTime.of(2020, 1, 2, 9, 0))),
-			new FileRow(null, "remissvar.pdf", false, new FileDetails(FilePurposes.STATEMENT_RESPONSE, null, true)));
+		assertThat(placeEvents.get(1)).extracting(PlaceEventRow::handelseId, PlaceEventRow::files).containsExactly(
+			tuple(2, List.of(new FileRow(null, "22222222.rtf", true, new FileDetails(null, LocalDateTime.of(2020, 1, 2, 9, 0))))),
+			tuple(3, List.of(new FileRow(null, "remissvar.pdf", false, new FileDetails(FilePurposes.STATEMENT_RESPONSE, null, true)))));
 		assertThat(split.unplacedFiles()).containsOnlyKeys(4);
 		// A document made from the template of a referral to the police is one
 		assertThat(split.unplacedFiles().get(4)).containsExactly(new FileRow(null, "33333333.rtf", true, new FileDetails(FilePurposes.POLICE_REQUEST, null, true)), AlktTestRows.file(null, "ingenstans.pdf", false));
@@ -74,19 +81,22 @@ class AlktRepositoryTest {
 		final var pictureWithoutText = AlktTestRows.text(null, null, true, null);
 		final var pictureOfMissingErrand = AlktTestRows.text(null, null, true, "bild utan ärende");
 
-		final var split = EventTexts.of(
-			List.of(new EventText(500, 1, withErrand), new EventText(900, 1, missingErrand), new EventText(null, 1, withoutErrand), new EventText(null, 1, withoutErrandOrText),
-				new EventText(null, null, nowhere), new EventText(500, 1, withoutText)),
-			List.of(new EventText(500, null, picture), new EventText(500, null, pictureWithoutText), new EventText(901, null, pictureOfMissingErrand)),
+		final var events = List.of(new EventText(1, 500, 1, withErrand), new EventText(5, 900, 1, missingErrand), new EventText(3, null, 1, withoutErrand),
+			new EventText(4, null, 1, withoutErrandOrText), new EventText(2, null, null, nowhere), new EventText(6, 500, 1, withoutText));
+		final var split = EventTexts.of(events,
+			List.of(new EventText(null, 500, null, picture), new EventText(null, 500, null, pictureWithoutText), new EventText(null, 901, null, pictureOfMissingErrand)),
 			Set.of(500));
 
 		// Every event of the errand makes the journal of its investigation, also one without a text, but a picture only with
 		// one
 		assertThat(split.errandTexts()).containsOnlyKeys(500);
 		assertThat(split.errandTexts().get(500)).containsExactly(withErrand, withoutText, picture);
-		// An event whose errand is missing belongs to its place, but only with a text; a picture has no place
-		assertThat(split.placeTexts()).containsOnlyKeys(1);
-		assertThat(split.placeTexts().get(1)).containsExactly(missingErrand, withoutErrand);
+		// An event whose errand is missing belongs to its place, with a text or not, in the order of the ids; an event without
+		// a place, and a picture, goes nowhere
+		final var placeEvents = AlktRepository.placeEvents(events, List.of(), Set.of(500));
+		assertThat(placeEvents).containsOnlyKeys(1);
+		assertThat(placeEvents.get(1)).containsExactly(new PlaceEventRow(3, withoutErrand, List.of()), new PlaceEventRow(4, withoutErrandOrText, List.of()),
+			new PlaceEventRow(5, missingErrand, List.of()));
 	}
 
 	@ParameterizedTest

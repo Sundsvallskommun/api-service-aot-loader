@@ -77,7 +77,7 @@ public class AlkolRepository {
 
 	// Ordered, like the errands, so that decisions at the same time keep their order in the journal from run to run
 	private static final String SELECT_DECISIONS = """
-		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum,
+		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum, b.GiltigtTOM_Datum,
 		       b.Dokument, b.Worddokument, b.Bifogadfil, b.BeslutsText, b.BeslutsFattare
 		FROM dbo.Beslut b
 		ORDER BY b.BeslutsID
@@ -278,6 +278,7 @@ public class AlkolRepository {
 			text(rs, "BeslutsTyp"),
 			dateTime(rs, "BeslutsDatumTid"),
 			date(rs, "GiltigtFROM_Datum"),
+			date(rs, "GiltigtTOM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
 			text(rs, BIFOGADFIL),

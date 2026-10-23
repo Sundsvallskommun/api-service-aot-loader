@@ -23,6 +23,7 @@ import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
+import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
@@ -86,7 +87,8 @@ final class AlkolNotifications {
 		final var owner = index.ownerOf(place);
 		index.ownerHits(place, owner, hits);
 		final var registrations = registrations(place, product, owner);
-		final var notified = notifiedDate(place, product, registrations, hits);
+		final var notified = notifiedDate(place, registrations);
+		notifiedDateHits(product, registrations, notified, hits);
 		SourceRules.openErrandHits(registrations.errands(), hits);
 		formerHolderHits(registrations, hits);
 
@@ -126,7 +128,7 @@ final class AlkolNotifications {
 				.add("anmaldUppskattat", "Datumet är uppskattat", notified.estimated() ? "Ja" : null)
 				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
 				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", registrations.errands().stream().map(ErrandRow::noteringar).filter(Objects::nonNull).distinct().toList())
-				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.lines(log(registrations, ownEvents)))
+				.table(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.COLUMNS, Journal.rows(log(registrations, ownEvents)))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
@@ -136,12 +138,11 @@ final class AlkolNotifications {
 
 	/**
 	 * @return the events of the place without an errand whose files and texts go to the notification: those that register
-	 *         or confirm the product, and, when the place has no tobacco permit, those that concern no notification
-	 *         (decision 37)
+	 *         or confirm the product (decision 37). The place's other events become documentation errands (decision 71).
 	 */
 	private List<EventRow> ownEvents(final SalesPlaceRow place, final Product product) {
 		return index.eventsWithoutErrand(place.fsId())
-			.filter(event -> product.concerns(event) || (!index.hasPermit(place.fsId()) && !Product.registersNotification(place, event)))
+			.filter(product::concerns)
 			.toList();
 	}
 
@@ -151,7 +152,7 @@ final class AlkolNotifications {
 	 * that confirm it, from its errands and the events that register or confirm the product, also go on the post in
 	 * PartyAssets: the drawings in the category of their purpose, the others without one, as pw-alkt puts a file without a
 	 * purpose there (decisions 38 and 40). Those of a former holder's registrations stay on the errand only (G31), as does
-	 * anything else, such as an investigation, a referral answer or a file of the place's other events.
+	 * anything else, such as an investigation or a referral answer.
 	 */
 	private FileList files(final Product product, final Registrations registrations, final List<EventRow> ownEvents) {
 		final var files = index.addErrandFiles(registrations.errands().stream().map(ErrandRow::arendeId).toList(), index.newFileList());
@@ -222,10 +223,8 @@ final class AlkolNotifications {
 
 	/**
 	 * @return the registrations of the product on the place: its errands, and its events that register or confirm it,
-	 *         with or without an errand. An errand whose applicant has another number than the owner is a former
-	 *         holder's (as G19 compares them). Then what came before the first errand of the owner is a former holder's
-	 *         too, or, without one, what came up to the day the last former holder's errand closed; an event of an errand
-	 *         goes with its errand, and an errand whose applicant is the owner is never a former holder's.
+	 *         with or without an errand. Which of the errands and days were a former holder's is told by the errands of the
+	 *         product alone ({@link FormerHolders}); an event of an errand goes with its errand.
 	 */
 	private Registrations registrations(final SalesPlaceRow place, final Product product, final ContactRow owner) {
 		final var errands = index.errandsOfPlace(place.fsId()).stream()
@@ -234,26 +233,12 @@ final class AlkolNotifications {
 		final var events = index.eventsOfPlace(place.fsId()).stream()
 			.filter(product::concerns)
 			.toList();
-		final var formerEnd = errands.stream()
-			.filter(errand -> index.applicantIsNotOwner(errand, owner))
-			.map(errand -> Optional.ofNullable(errand.avslutad()).orElse(errandDate(errand)))
-			.filter(Objects::nonNull)
-			.max(Comparator.naturalOrder());
-		final var ownerStart = errands.stream()
-			.filter(errand -> index.applicantIsOwner(errand, owner))
-			.map(AlkolNotifications::errandDate)
-			.filter(Objects::nonNull)
-			.min(Comparator.naturalOrder());
-		final var formerUntil = formerEnd.map(end -> ownerStart.map(start -> start.minusDays(1)).orElse(end)).orElse(null);
-		final var formerIds = errands.stream()
-			.filter(errand -> index.applicantIsNotOwner(errand, owner) || (!index.applicantIsOwner(errand, owner) && isUpTo(errandDate(errand), formerUntil)))
-			.map(ErrandRow::arendeId)
-			.collect(toSet());
+		final var former = FormerHolders.of(errands, snapshot.applicants(), owner, today);
 		final var errandIds = errands.stream().map(ErrandRow::arendeId).collect(toSet());
 		final var formerEvents = events.stream()
-			.filter(event -> errandIds.contains(event.arendeId()) ? formerIds.contains(event.arendeId()) : isUpTo(dateOf(event), formerUntil))
+			.filter(event -> errandIds.contains(event.arendeId()) ? former.errandIds().contains(event.arendeId()) : former.isUpTo(dateOf(event)))
 			.collect(toSet());
-		return new Registrations(errands, events, formerIds, formerEvents);
+		return new Registrations(errands, events, former.errandIds(), formerEvents);
 	}
 
 	/**
@@ -272,45 +257,49 @@ final class AlkolNotifications {
 		}
 	}
 
-	private static boolean isUpTo(final LocalDate date, final LocalDate until) {
-		return date != null && until != null && !date.isAfter(until);
-	}
-
-	/**
-	 * @return the day the errand was opened, or else registered (UpplagdDatum); null when it has neither
-	 */
-	private static LocalDate errandDate(final ErrandRow errand) {
-		return Optional.ofNullable(errand.oppnad()).orElse(errand.upplagd());
-	}
-
 	private static LocalDate dateOf(final EventRow event) {
 		return event.tidpunkt() == null ? null : event.tidpunkt().toLocalDate();
 	}
 
 	/**
-	 * @return the date of the notification: the first registration of the product, or, when the product is only a mark on
-	 *         the sales place, the earliest date of the place (G22); no date at all hits G23
+	 * @param  place   a sales place
+	 * @param  product a product the place is marked for
+	 * @return         the date the notification of the product on the place has, as below
 	 */
-	private NotifiedDate notifiedDate(final SalesPlaceRow place, final Product product, final Registrations registrations, final List<RuleHit> hits) {
+	NotifiedDate notifiedDate(final SalesPlaceRow place, final Product product) {
+		return notifiedDate(place, registrations(place, product, index.ownerOf(place)));
+	}
+
+	/**
+	 * @return the date of the notification: the first registration of the product, or, when the product is only a mark on
+	 *         the sales place, the earliest date of the place
+	 */
+	private NotifiedDate notifiedDate(final SalesPlaceRow place, final Registrations registrations) {
 		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
-			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.parameterText()));
 			final var earliest = earliestDate(place.fsId()).orElse(null);
-			if (earliest == null) {
-				hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.parameterText()));
-			}
 			return new NotifiedDate(earliest, earliest != null);
 		}
 		// The current holder's first registration, or the first of all when every one is a former holder's (G19)
 		final var current = registrations.ofCurrentHolder();
 		final var dated = current.errands().isEmpty() && current.events().isEmpty() ? registrations : current;
-		final var first = Stream.concat(dated.errands().stream().map(AlkolNotifications::errandDate), dated.events().stream().map(AlkolNotifications::dateOf))
+		return new NotifiedDate(Stream.concat(dated.errands().stream().map(ErrandRow::openedOrRegistered), dated.events().stream().map(AlkolNotifications::dateOf))
 			.filter(Objects::nonNull)
 			.min(Comparator.naturalOrder())
-			.orElse(null);
-		if (first == null) {
+			.orElse(null), false);
+	}
+
+	/**
+	 * G22 when the product is only a mark on the sales place, and G23 when the notification has no date at all.
+	 */
+	private static void notifiedDateHits(final Product product, final Registrations registrations, final NotifiedDate notified, final List<RuleHit> hits) {
+		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
+			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.parameterText()));
+			if (notified.date() == null) {
+				hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.parameterText()));
+			}
+		} else if (notified.date() == null) {
 			hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.parameterText() + ", anmälan saknar datum"));
 		}
-		return new NotifiedDate(first, false);
 	}
 
 	/**
@@ -319,7 +308,7 @@ final class AlkolNotifications {
 	private static String latestDiaryNumber(final List<ErrandRow> errands, final List<EventRow> events) {
 		return errands.stream()
 			.filter(errand -> errand.diarieNr() != null)
-			.max(Comparator.comparing(AlkolNotifications::errandDate, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(ErrandRow::arendeId))
+			.max(Comparator.comparing(ErrandRow::openedOrRegistered, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(ErrandRow::arendeId))
 			.map(ErrandRow::diarieNr)
 			.or(() -> events.stream()
 				.filter(event -> event.diarieNr() != null)
@@ -336,7 +325,7 @@ final class AlkolNotifications {
 		record Registration(LocalDateTime when, boolean serving) {
 		}
 		final var latest = Stream.concat(
-			errands.stream().map(errand -> new Registration(Optional.ofNullable(errandDate(errand)).map(LocalDate::atStartOfDay).orElse(null), product.isServingCode(errand.arendeTyp()))),
+			errands.stream().map(errand -> new Registration(Optional.ofNullable(errand.openedOrRegistered()).map(LocalDate::atStartOfDay).orElse(null), product.isServingCode(errand.arendeTyp()))),
 			events.stream().filter(product::isRegistration).map(event -> new Registration(event.tidpunkt(), product.isServingCode(event.handelseTyp()))))
 			.max(Comparator.comparing(Registration::when, Comparator.nullsFirst(Comparator.naturalOrder())));
 		if (latest.isPresent()) {
@@ -352,7 +341,7 @@ final class AlkolNotifications {
 	 */
 	private Optional<LocalDate> earliestDate(final Integer fsId) {
 		return Stream.concat(
-			index.errandsOfPlace(fsId).stream().map(AlkolNotifications::errandDate),
+			index.errandsOfPlace(fsId).stream().map(ErrandRow::openedOrRegistered),
 			index.eventsOfPlace(fsId).stream().map(AlkolNotifications::dateOf))
 			.filter(Objects::nonNull)
 			.min(Comparator.naturalOrder());
@@ -395,7 +384,7 @@ final class AlkolNotifications {
 	 * @param date      the date, null when unknown
 	 * @param estimated true when the date is the earliest date of the sales place rather than of the notification
 	 */
-	private record NotifiedDate(LocalDate date, boolean estimated) {
+	record NotifiedDate(LocalDate date, boolean estimated) {
 
 		/**
 		 * @return the date as "ÅÅÅÅ-MM-DD", followed by " (uppskattat)" when it is estimated, or null when it is unknown

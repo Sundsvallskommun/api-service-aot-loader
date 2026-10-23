@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
@@ -24,9 +25,9 @@ import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
-import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
+import se.sundsvall.aotloader.source.PermitDecisions;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.SourceRules;
@@ -69,6 +70,7 @@ import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.CandidateTexts.UNKNOWN_SERVING_PLACE;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_CONDITION;
+import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_DECISION;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_POSITION;
 
 /**
@@ -166,13 +168,13 @@ final class AlktPermits {
 				.add("villkor", "Villkor", content.conditions())
 				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", index.decisionText(decision, true))
-				.add(ErrandParameters.EVENT_LOG, "Händelselogg i AlkT", Journal.lines(index.entries(snapshot.placeTextsOf(permit.objektId()), null)))
 				.add(CandidateTexts.migrated(today, ALKT))
 				.build())
 			.asset(new AssetData(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(),
 				ServingPermits.validTo(permit, periods),
 				assetParameters(content, holder, premises, restaurantNumber), legalBasisDocuments(permit, decision, files)))
-			.files(files.build(), files.assetFiles(), files.details());
+			.files(files.build(), files.assetFiles(), files.details())
+			.decision(decisionData(permit, decision, ServingPermits.validTo(permit, periods), content.conditions(), files));
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -233,6 +235,18 @@ final class AlktPermits {
 			hits.add(RuleHit.of(DECISION_EXPIRED, "beslutstyp %s, giltigt till %s".formatted(decision.beslutsTyp(), decision.giltigtTom())));
 		}
 		return decision;
+	}
+
+	/**
+	 * @return the decision the permit points to, which its errand gets with the conditions of the permit as terms (decision
+	 *         70); null when it points to none
+	 */
+	private DecisionData decisionData(final PermitRow permit, final DecisionRow decision, final LocalDate validTo, final List<String> conditions, final FileList files) {
+		if (decision == null) {
+			return null;
+		}
+		return PermitDecisions.of(decision, snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()), snapshot.visits().handlerName(decision.beslutsfattare()), permit.utfardandeDatum(),
+			validTo, conditions, files, ALKT);
 	}
 
 	/**
@@ -327,8 +341,9 @@ final class AlktPermits {
 	}
 
 	/**
-	 * The files of the permit: those of the errands that issued it and of the place (decision 7), and those of the place's
-	 * events without an errand (decision 37). The latest certificate and annexes of the place, and the drawings and the
+	 * The files of the permit: those of the errands that issued it and of the place (decision 7). The files of the place's
+	 * events without an errand go to their documentation errands (decision 71). The latest certificate and annexes of the
+	 * place, and the drawings and the
 	 * permit decisions of the issuing errands, also go on the post in PartyAssets, in that order of precedence (decisions
 	 * 34, 35 and 39). A certificate older than the permit, or without a date, may be a former holder's: it goes on the
 	 * errand only and hits G29, as does a permit without a certificate. An annex older than the permit, or of catering on a
@@ -339,7 +354,6 @@ final class AlktPermits {
 		if (place != null) {
 			Stream.of(place.bifogadfil(), place.bifogadfil2()).forEach(name -> files.add(name, ATTACHMENTS, FilePurposes.detailsOf(ALKT, ATTACHMENTS, name, null)));
 		}
-		snapshot.placeFilesOf(permit.objektId()).forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
 
 		index.latestDocument(permit.objektId(), CERTIFICATE_TEMPLATES).ifPresentOrElse(certificate -> {
 			files.add(certificate.name(), DOCUMENTS, certificate.details());

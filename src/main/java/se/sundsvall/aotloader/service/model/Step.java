@@ -10,6 +10,7 @@ public enum Step {
 	ARENDE("Ärende"),
 	BILAGOR("Bilagor"),
 	TILLSTAND("Tillstånd i PartyAssets"),
+	BESLUT("Beslut"),
 	RELATION("Relation till tillståndsärendet"),
 	AKTIVERA("Aktivera ärendet");
 

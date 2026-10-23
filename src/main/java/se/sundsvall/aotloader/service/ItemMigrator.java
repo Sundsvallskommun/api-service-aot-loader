@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
 import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
 import se.sundsvall.aotloader.service.mapper.AssetMapper;
+import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -27,12 +28,15 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.Constants.ERRAND_NUMBER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.PLACE_NAME_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.PLACE_NUMBER_MAX_LENGTH;
 import static se.sundsvall.aotloader.service.model.ItemStatus.ARENDE_SKAPAT;
+import static se.sundsvall.aotloader.service.model.ItemStatus.BESLUT_KLART;
 import static se.sundsvall.aotloader.service.model.ItemStatus.BILAGOR_KLARA;
 import static se.sundsvall.aotloader.service.model.ItemStatus.GRANSKAS;
 import static se.sundsvall.aotloader.service.model.ItemStatus.KLAR;
@@ -105,8 +109,8 @@ public class ItemMigrator {
 
 	/**
 	 * Leaves an item already migrated as it is: changes in the source after the migration are not carried over (decision
-	 * 11). The one thing added afterwards is the relation of an inspection errand whose permit was migrated after it, for
-	 * instance once the exception list let the permit through.
+	 * 11). The one thing added afterwards is the relation of an inspection or documentation errand whose permit or
+	 * notification was migrated after it, for instance once the exception list let the permit through.
 	 */
 	private ItemResult alreadyMigrated(final Candidate candidate, final RunContext context, final MigrationItemEntity entity) {
 		final var unchanged = new ItemResult(Outcome.REDAN_MIGRERAD, List.of(), null, entity.getErrandNumber());
@@ -123,7 +127,7 @@ public class ItemMigrator {
 			targets.ensureRelation(municipalityId, plan.permitErrandId(), entity.getErrandId(), notes).ifPresent(relationId -> {
 				entity.setRelationId(relationId);
 				saveItem(entity, candidate, KLAR, context);
-				notes.line("Relation till tillståndsärendet %s, tillagd i efterhand".formatted(candidate.permitLink().permitKey()));
+				notes.line("Relation till %s, tillagd i efterhand".formatted(RelationPlanner.errandText(candidate.permitLink().permitKey())));
 			});
 			return notes.result(Outcome.REDAN_MIGRERAD, entity.getErrandNumber());
 		} catch (final RuntimeException e) {
@@ -205,12 +209,17 @@ public class ItemMigrator {
 					: stop(MIGRERAS_INTE, Outcome.MIGRERAS_INTE, reportTexts(assessment.reasons()));
 			}
 			final var relationPlan = relationPlanner.plan(candidate, context, notes);
+			if (relationPlan.stops()) {
+				return wasActivated(municipalityId) ? activatedBefore() : stop(MIGRERAS_INTE, Outcome.MIGRERAS_INTE, List.of(relationPlan.notMigratedReason()));
+			}
 			if (relationPlan.waits()) {
 				return wasActivated(municipalityId) ? activatedBefore() : stop(VANTAR, Outcome.VANTAR, List.of(relationPlan.waitReason()));
 			}
 			if (context.dryRun()) {
-				fileUploader.check(candidate, context, notes);
+				final var uploadable = fileUploader.check(candidate, context, notes);
 				noteTruncatedParameters(legalBasisReader.withLegalBasis(candidate, context, notes));
+				// Counted as the real run counts them, among the files it would upload
+				noteDecision(municipalityId, candidate.decision() == null ? 0 : (int) candidate.decision().documents().stream().filter(uploadable::contains).distinct().count());
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -244,21 +253,33 @@ public class ItemMigrator {
 			}
 
 			step = Step.BILAGOR;
+			var uploaded = UploadedFiles.NONE;
 			if (!active) {
-				final var material = fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
-				fileUploader.linkToInvestigation(candidate, municipalityId, errand.getId(), material, notes);
+				uploaded = fileUploader.upload(candidate, context, municipalityId, errand.getId(), notes);
+				fileUploader.linkToInvestigation(candidate, municipalityId, errand.getId(), uploaded.material(), notes);
 			}
 			saveAs(BILAGOR_KLARA);
 
 			step = Step.TILLSTAND;
+			var withLegalBasis = candidate;
 			if (candidate.asset() != null) {
 				if (active) {
 					entity.setPartyAssetsId(targets.findMigratedAsset(candidate, municipalityId, errand.getId(), entity.getPartyAssetsId(), parties, notes));
 					entity.setAssetId(errand.getId());
 				} else {
-					writeAsset(municipalityId, errand.getId(), parties, expired, errand.getId().equals(earlierErrandId));
+					withLegalBasis = writeAsset(municipalityId, errand.getId(), parties, expired, errand.getId().equals(earlierErrandId));
 				}
 				saveAs(TILLSTAND_SKAPAT);
+			}
+
+			step = Step.BESLUT;
+			if (getsDecision()) {
+				if (!active) {
+					writeDecision(municipalityId, errand.getId(), withLegalBasis, uploaded);
+				}
+				saveAs(BESLUT_KLART);
+			} else if (!active) {
+				noteDecision(municipalityId, 0);
 			}
 
 			step = Step.RELATION;
@@ -288,11 +309,59 @@ public class ItemMigrator {
 		}
 
 		/**
+		 * @return true when the errand gets the decision its permit was granted by (decision 70): its type gets decisions,
+		 *         and the source has one for it
+		 */
+		private boolean getsDecision() {
+			return candidate.decision() != null && properties.errandType(candidate.type()).withDecision();
+		}
+
+		/**
+		 * Gives the draft the decision its permit was granted by, completed, linking the documents of the decision that are
+		 * on the errand (decision 70).
+		 *
+		 * @param withLegalBasis the candidate with the legal basis read from its documents, which the decision gets too
+		 * @param uploaded       the attachments of the files of the item on the errand
+		 */
+		private void writeDecision(final String municipalityId, final String errandId, final Candidate withLegalBasis, final UploadedFiles uploaded) {
+			final var legalBasis = Optional.ofNullable(withLegalBasis.asset()).map(asset -> asset.parameters().get(ASSET_PARAMETER_LEGAL_BASIS)).orElse(null);
+			final var documentIds = uploaded.idsOf(candidate.decision().documents());
+			final var outcomeText = context.decisionOutcomeText(municipalityId, TargetMapper.decisionOutcome(candidate.decision())).orElse(null);
+			if (targets.ensureDecision(withLegalBasis, municipalityId, errandId, legalBasis, documentIds, outcomeText)) {
+				noteDecision(municipalityId, documentIds.size());
+			} else {
+				notes.line("Beslutet från en tidigare körning är redan fattat i SupportManagement och ändras inte");
+			}
+		}
+
+		/**
+		 * Tells in the report which decision the errand of a permit gets (decision 70), or that it gets none, since the
+		 * source has no decision with a time for the permit. An errand of a type without decisions gets no line.
+		 *
+		 * @param documents the number of documents the decision links
+		 */
+		private void noteDecision(final String municipalityId, final int documents) {
+			if (!properties.errandType(candidate.type()).withDecision()) {
+				return;
+			}
+			final var decision = candidate.decision();
+			if (decision == null) {
+				notes.line("Inget beslut: %s har inget beslut med tidpunkt för tillståndet".formatted(candidate.key().source().getDisplayName()));
+				return;
+			}
+			final var outcome = TargetMapper.decisionOutcome(decision);
+			notes.line("Beslut: %s, fattat %s, %d villkor, %d dokument".formatted(context.decisionOutcomeText(municipalityId, outcome).orElse(outcome),
+				SourceValues.format(decision.decidedAt().toLocalDate()), decision.terms().size(), documents));
+		}
+
+		/**
 		 * Makes the post in PartyAssets of an item whose errand is a draft, or brings the one an earlier run made up to date,
 		 * with its legal basis and its files. A post that is to be EXPIRED is ACTIVE while it gets its content and the files it
 		 * lacks, since an EXPIRED post takes neither, and EXPIRED once at the end.
+		 *
+		 * @return the candidate with the legal basis read from its documents
 		 */
-		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
+		private Candidate writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
 			final var withLegalBasis = legalBasisReader.withLegalBasis(candidate, context, notes);
 			noteTruncatedParameters(withLegalBasis);
 			final var post = targets.ensureAsset(withLegalBasis, municipalityId, new PostLookup(errandId, entity.getPartyAssetsId(), earlierErrand), parties, expired, notes);
@@ -301,12 +370,12 @@ public class ItemMigrator {
 			entity.setAssetId(errandId);
 			if (!expired) {
 				assetFileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
-				return;
+				return withLegalBasis;
 			}
 			// An EXPIRED post is ACTIVE while it gets its files, and EXPIRED once at the end
 			if (post.status() == Status.EXPIRED) {
 				if (assetFileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
-					return;
+					return withLegalBasis;
 				}
 				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
 			}
@@ -317,6 +386,7 @@ public class ItemMigrator {
 				throw e;
 			}
 			targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
+			return withLegalBasis;
 		}
 
 		/**

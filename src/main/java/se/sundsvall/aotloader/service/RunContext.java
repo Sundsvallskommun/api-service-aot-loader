@@ -23,6 +23,7 @@ public final class RunContext {
 	private final boolean dryRun;
 	private final Map<String, Map<String, String>> labelIds;
 	private final Map<String, Map<String, FilePurpose>> purposes;
+	private final Map<String, Map<String, String>> decisionOutcomes;
 	private final Integer limit;
 	private final AtomicBoolean stopRequested;
 	private final Function<Source, FileArea> fileAreaFactory;
@@ -35,8 +36,9 @@ public final class RunContext {
 	 * @param runId           the run
 	 * @param municipalityId  the municipality the run is started for, which every item is written to (decision 19)
 	 * @param dryRun          true for a dry run, which writes nothing to the target systems or the status table
-	 * @param check           what the checks before the run found: the ids of the labels by normalized resource path
-	 *                        and the attachment purposes a file can get by name, per municipality
+	 * @param check           what the checks before the run found: the ids of the labels by normalized resource path,
+	 *                        the attachment purposes a file can get by name and the display names of the decision
+	 *                        outcomes by name, per municipality
 	 * @param limit           the largest number of items the run writes, null for no limit
 	 * @param stopRequested   set when the run is to stop before its next item
 	 * @param fileAreaFactory creates the file area of a source, once per run
@@ -48,6 +50,7 @@ public final class RunContext {
 		this.dryRun = dryRun;
 		this.labelIds = check.labelIds();
 		this.purposes = check.purposes();
+		this.decisionOutcomes = check.decisionOutcomes();
 		this.limit = limit;
 		this.stopRequested = stopRequested;
 		this.fileAreaFactory = fileAreaFactory;
@@ -77,6 +80,13 @@ public final class RunContext {
 	 */
 	public Optional<FilePurpose> purpose(final String municipalityId, final String name) {
 		return Optional.ofNullable(purposes.getOrDefault(municipalityId, Map.of()).get(name));
+	}
+
+	/**
+	 * @return the display name of the decision outcome in the municipality, empty when it was not read for it
+	 */
+	public Optional<String> decisionOutcomeText(final String municipalityId, final String name) {
+		return Optional.ofNullable(decisionOutcomes.getOrDefault(municipalityId, Map.of()).get(name));
 	}
 
 	public boolean stopRequested() {

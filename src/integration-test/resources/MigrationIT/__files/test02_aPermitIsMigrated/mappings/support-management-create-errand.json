@@ -82,7 +82,7 @@
 				"matchesJsonPath": "$.externalTags[?(@.key == 'diarienummer' && @.value == 'IAN-2019-1')]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handelselogg' && @.values[0] == '2020-02-01 Anteckning: Samtal om öppettider')]"
+				"doesNotMatch": "(?s).*handelselogg.*"
 			},
 			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Anna Berg')]"

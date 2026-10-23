@@ -70,8 +70,9 @@ class MigrationIT extends AbstractAppTest {
 	private static final String PERMIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000001";
 	private static final String INTERRUPTED_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000006";
 	private static final String VISIT_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000010";
+	private static final String DOCUMENTATION_ERRAND_ID = "11111111-aaaa-bbbb-cccc-000000000012";
 	private static final Set<String> CHECKS_BEFORE_A_RUN = Set.of("support-management-action-config-2281", "support-management-attachment-purposes-2281", "support-management-labels-2281",
-		"support-management-roles-2281", "support-management-statuses-2281", "support-management-categories-2281");
+		"support-management-roles-2281", "support-management-statuses-2281");
 	private static final Pattern LOG_EVENT = Pattern.compile("(?m)^(?=\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} \\[)");
 	private static final Path FILE_AREA = createFileArea();
 	private static final Map<String, String> FILE_AREA_BEFORE = snapshot(FILE_AREA);
@@ -191,7 +192,7 @@ class MigrationIT extends AbstractAppTest {
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
 			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26)
-			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "55555555.rtf", "serveringsansvarig.pdf");
+			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "55555555.rtf");
 		assertThat(uploads).filteredOn(request -> "55555555.rtf".equals(request.getPart("errandAttachment").getFileName()))
 			.singleElement()
 			.extracting(request -> request.queryParameter("received").firstValue())
@@ -220,6 +221,12 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(companyParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
 			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Ägarbolag")),
 				tuple("organizationNumber", List.of("559988-7766")));
+		final var decision = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/decisions"))).getFirst().getBodyAsString();
+		final List<String> decisionParameters = JsonPath.read(decision, "$.parameters[*].key");
+		assertThat(decisionParameters)
+			.as("The decision has the parameters of the permit, but its legal basis and conditions, which are a field and a term of the decision (decision 70)")
+			.contains("permitHolderName", "servingHours", "decisionText", "decisionDate", "validFrom")
+			.doesNotContain("legalBasis", "conditions");
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/1");
@@ -431,12 +438,32 @@ class MigrationIT extends AbstractAppTest {
 	}
 
 	@Test
-	void test20_theFileAreaIsUnchanged() {
+	void test20_aStandaloneEventBecomesADocumentationErrand() {
+		// The event of the permit's place without an errand: its own errand, with its document and its attachment, related from
+		// the permit errand that test 2 migrated (decision 71)
+		migrateItem("ALKT/DOKUMENTATION/31020", false);
+
+		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + DOCUMENTATION_ERRAND_ID + "/attachments")));
+		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName()).containsExactlyInAnyOrder("31020000.rtf", "testbilaga.pdf");
+		assertThat(uploads).extracting(request -> request.queryParameter("received").firstValue())
+			.as("The files came in at the time of the event, in UTC")
+			.containsOnly("2026-10-13T08:00:00Z");
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party-assets/.*")))).as("A documentation errand has no permit").isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/support-management/2281/AOT/errands/" + DOCUMENTATION_ERRAND_ID + "/(investigations|decisions).*"))))
+			.as("A documentation errand has no investigation and no decision")
+			.isEmpty();
+		verifyStubs();
+
+		itemIs("ALKT/DOKUMENTATION/31020");
+	}
+
+	@Test
+	void test21_theFileAreaIsUnchanged() {
 		assertThat(snapshot(FILE_AREA)).isEqualTo(FILE_AREA_BEFORE);
 	}
 
 	@Test
-	void test21_aDryRunOfACleanupRemovesNothing() {
+	void test22_aDryRunOfACleanupRemovesNothing() {
 		cleanupItem("ALKT/TILLSTAND/1", true);
 
 		verifyCleanupStubs();
@@ -444,7 +471,7 @@ class MigrationIT extends AbstractAppTest {
 	}
 
 	@Test
-	void test22_aPermitIsCleanedUpWithItsRelations() {
+	void test23_aPermitIsCleanedUpWithItsRelations() {
 		// The relations from the permit errand to the inspection errands and to the permit in PartyAssets go; one a case
 		// handler wrote stays, since no DELETE of it is mapped
 		cleanupItem("ALKT/TILLSTAND/1", false);
@@ -543,6 +570,8 @@ class MigrationIT extends AbstractAppTest {
 			Files.writeString(root.resolve("alkt-bilder").resolve("besöksrapport.pdf"), "%PDF-1.4 besök");
 			Files.writeString(root.resolve("alkt-bilder").resolve("foto.jpg"), "foto");
 			Files.writeString(root.resolve("alkt-bilder").resolve("serveringsansvarig.pdf"), "%PDF-1.4 serveringsansvarig");
+			Files.writeString(root.resolve("alkt-dokument").resolve("31020000.rtf"), "{\\rtf1 Anteckning}");
+			Files.writeString(root.resolve("alkt-bilder").resolve("testbilaga.pdf"), "%PDF-1.4 testbilaga");
 			Files.writeString(root.resolve("alkol").resolve("33333333.rtf"), "{\\rtf1 Tobak}");
 			Files.writeString(root.resolve("alkol").resolve("folkol-anmalan.pdf"), "%PDF-1.4 anmälan folköl");
 			root.toFile().deleteOnExit();

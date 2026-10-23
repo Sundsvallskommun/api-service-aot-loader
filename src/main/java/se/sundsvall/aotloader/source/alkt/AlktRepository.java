@@ -5,7 +5,9 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +36,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
@@ -41,7 +44,9 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 import se.sundsvall.aotloader.support.Texts;
 
+import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toList;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.Rows.byKey;
 import static se.sundsvall.aotloader.source.Rows.date;
@@ -107,7 +112,7 @@ public class AlktRepository {
 
 	// Ordered, like the errands, so that decisions at the same time keep their order in the journal from run to run
 	private static final String SELECT_DECISIONS = """
-		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtTOM_Datum, b.Dokument, b.Worddokument, b.BifogadFil,
+		SELECT b.BeslutsID, b.ArendeID, b.BeslutsTyp, b.BeslutsDatumTid, b.GiltigtFROM_Datum, b.GiltigtTOM_Datum, b.Dokument, b.Worddokument, b.BifogadFil,
 		       b.BeslutsText, b.BeslutsText2, b.BeslutsFattare
 		FROM dbo.[Ärende_Beslut] b
 		ORDER BY b.BeslutsID
@@ -137,7 +142,7 @@ public class AlktRepository {
 		ORDER BY bi.BildID
 		""";
 
-	// Also the events without an errand, whose files go to the permit of their place (decision 37). Ordered, as the
+	// Also the events without an errand, whose files go to their documentation errands (decision 71). Ordered, as the
 	// other file queries, since a file on two events keeps the date and purpose of the first from run to run
 	private static final String SELECT_EVENT_FILES = """
 		SELECT h.HandelseID, h.ArendeID, h.ObjektID, h.HandelseTyp, h.Dokument, h.HandelseDatumTid, h.Worddokument, h.Bifogadfil
@@ -231,17 +236,13 @@ public class AlktRepository {
 
 	private static AlktSnapshot snapshotOf(final JdbcTemplate jdbc) {
 		final var errands = byKey(jdbc.query(SELECT_ERRANDS, (rs, _) -> toErrand(rs)), ErrandRow::arendeId);
-		final var eventFiles = EventFiles.of(
-			Stream.concat(
-				jdbc.query(SELECT_EVENT_FILES, (rs, _) -> toEventFile(rs)).stream(),
-				jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> toEventExtraFile(rs)).stream()).toList(),
-			jdbc.query(SELECT_PICTURES, (rs, _) -> toPicture(rs)),
-			errands.keySet());
+		final var files = Stream.concat(
+			jdbc.query(SELECT_EVENT_FILES, (rs, _) -> toEventFile(rs)).stream(),
+			jdbc.query(SELECT_EVENT_EXTRA_FILES, (rs, _) -> toEventExtraFile(rs)).stream()).toList();
+		final var eventFiles = EventFiles.of(files, jdbc.query(SELECT_PICTURES, (rs, _) -> toPicture(rs)), errands.keySet());
 
-		final var eventTexts = EventTexts.of(
-			jdbc.query(SELECT_EVENT_TEXTS, (rs, _) -> toEventText(rs)),
-			jdbc.query(SELECT_PICTURE_TEXTS, (rs, _) -> toPictureText(rs)),
-			errands.keySet());
+		final var events = jdbc.query(SELECT_EVENT_TEXTS, (rs, _) -> toEventText(rs));
+		final var eventTexts = EventTexts.of(events, jdbc.query(SELECT_PICTURE_TEXTS, (rs, _) -> toPictureText(rs)), errands.keySet());
 
 		final var codeTexts = readCodeTexts(jdbc);
 		return new AlktSnapshot(
@@ -252,11 +253,10 @@ public class AlktRepository {
 			byKey(jdbc.query(SELECT_DECISIONS, (rs, _) -> toDecision(rs)), DecisionRow::beslutsId),
 			errands,
 			eventFiles.errandFiles(),
-			eventFiles.placeFiles(),
+			placeEvents(events, files, errands.keySet()),
 			eventFiles.unplacedFiles(),
 			eventFiles.documents(),
 			eventTexts.errandTexts(),
-			eventTexts.placeTexts(),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
@@ -358,6 +358,7 @@ public class AlktRepository {
 			integer(rs, ARENDE_ID),
 			text(rs, "BeslutsTyp"),
 			dateTime(rs, "BeslutsDatumTid"),
+			date(rs, "GiltigtFROM_Datum"),
 			date(rs, "GiltigtTOM_Datum"),
 			text(rs, "Dokument"),
 			text(rs, "Worddokument"),
@@ -449,46 +450,63 @@ public class AlktRepository {
 	}
 
 	static EventText toEventText(final ResultSet rs) throws SQLException {
-		return new EventText(integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID),
+		return new EventText(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID),
 			new TextRow(dateTime(rs, HANDELSE_DATUM), text(rs, HANDELSE_TYP), false, text(rs, "HandelseText"), flag(rs, "Sekretess"), text(rs, "DiarieNr")));
 	}
 
 	static EventText toPictureText(final ResultSet rs) throws SQLException {
-		return new EventText(integer(rs, ARENDE_ID), null, new TextRow(dateTime(rs, "BildDatumTid"), null, true, text(rs, "BildText"), false, null));
+		return new EventText(null, integer(rs, ARENDE_ID), null, new TextRow(dateTime(rs, "BildDatumTid"), null, true, text(rs, "BildText"), false, null));
 	}
 
 	/**
 	 * The text of an event or a picture with where it belongs: its errand, or the place of an event without one.
+	 *
+	 * @param handelseId the event, null for a picture
 	 */
-	record EventText(Integer arendeId, Integer objektId, TextRow row) {
+	record EventText(Integer handelseId, Integer arendeId, Integer objektId, TextRow row) {
 	}
 
 	/**
-	 * The events and the texts of the pictures, split the same way as the files (decisions 37, 47 and 52). Every event of
-	 * an errand counts, also one without a text, but a picture only with a text, and an event without an errand only with
-	 * a text, for the log of the permit. An event whose errand is missing in Ärende counts as one without an errand; an
-	 * event without an errand or a place goes nowhere.
+	 * The events of the errands and the texts of their pictures (decisions 44 and 52). Every event of an errand counts,
+	 * also one without a text, but a picture only with a text. An event whose errand is missing in Ärende counts as one
+	 * without an errand, which {@link #placeEvents} takes.
 	 *
 	 * @param errandTexts the events with an errand, and the texts of the pictures, by ArendeID
-	 * @param placeTexts  the events with a text that have no errand, by the ObjektID of the event
 	 */
-	record EventTexts(Map<Integer, List<TextRow>> errandTexts, Map<Integer, List<TextRow>> placeTexts) {
+	record EventTexts(Map<Integer, List<TextRow>> errandTexts) {
 
 		static EventTexts of(final List<EventText> events, final List<EventText> pictures, final Set<Integer> errandIds) {
 			final var errandTexts = new HashMap<Integer, List<TextRow>>();
-			final var placeTexts = new HashMap<Integer, List<TextRow>>();
-			Stream.concat(events.stream(), pictures.stream()).forEach(text -> {
-				final var row = text.row();
-				if (text.arendeId() != null && errandIds.contains(text.arendeId())) {
-					if (!row.picture() || row.text() != null) {
-						errandTexts.computeIfAbsent(text.arendeId(), _ -> new ArrayList<>()).add(row);
-					}
-				} else if (!row.picture() && row.text() != null && text.objektId() != null) {
-					placeTexts.computeIfAbsent(text.objektId(), _ -> new ArrayList<>()).add(row);
-				}
-			});
-			return new EventTexts(errandTexts, placeTexts);
+			Stream.concat(events.stream(), pictures.stream())
+				.filter(text -> text.arendeId() != null && errandIds.contains(text.arendeId()))
+				.filter(text -> !text.row().picture() || text.row().text() != null)
+				.forEach(text -> errandTexts.computeIfAbsent(text.arendeId(), _ -> new ArrayList<>()).add(text.row()));
+			return new EventTexts(errandTexts);
 		}
+	}
+
+	/**
+	 * The events of the places that belong to no errand, each with its text and its files, which become documentation
+	 * errands (decision 71). An event whose errand is missing in Ärende counts as one without an errand; an event without
+	 * a place goes nowhere.
+	 *
+	 * @param  events    every event, with its text
+	 * @param  files     the files of the events
+	 * @param  errandIds the errands in Ärende
+	 * @return           the events by the ObjektID of the event, each place's in the order of their ids
+	 */
+	static Map<Integer, List<PlaceEventRow>> placeEvents(final List<EventText> events, final List<EventFile> files, final Set<Integer> errandIds) {
+		final Predicate<Integer> withoutErrand = arendeId -> arendeId == null || !errandIds.contains(arendeId);
+		final var filesOfEvents = files.stream()
+			.filter(file -> withoutErrand.test(file.arendeId()) && file.objektId() != null)
+			.collect(groupingBy(EventFile::handelseId, LinkedHashMap::new, flatMapping(file -> file.files(null), toList())));
+		final var placeEvents = new HashMap<Integer, List<PlaceEventRow>>();
+		events.stream()
+			.filter(event -> event.handelseId() != null && event.objektId() != null && withoutErrand.test(event.arendeId()))
+			.sorted(Comparator.comparing(EventText::handelseId))
+			.forEach(event -> placeEvents.computeIfAbsent(event.objektId(), _ -> new ArrayList<>())
+				.add(new PlaceEventRow(event.handelseId(), event.row(), filesOfEvents.getOrDefault(event.handelseId(), List.of()))));
+		return placeEvents;
 	}
 
 	static FileRow toPicture(final ResultSet rs) throws SQLException {
@@ -501,11 +519,11 @@ public class AlktRepository {
 	 * one without an errand.
 	 *
 	 * @param errandFiles   the files of the events with an errand, and the pictures, by ArendeID
-	 * @param placeFiles    the files of the events without an errand, by the ObjektID of the event
-	 * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID
+	 * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; the files of the
+	 *                      events with a place but no errand are {@link #placeEvents}'
 	 * @param documents     the documents of every event, with their template
 	 */
-	record EventFiles(Map<Integer, List<FileRow>> errandFiles, Map<Integer, List<FileRow>> placeFiles, Map<Integer, List<FileRow>> unplacedFiles, List<DocumentRow> documents) {
+	record EventFiles(Map<Integer, List<FileRow>> errandFiles, Map<Integer, List<FileRow>> unplacedFiles, List<DocumentRow> documents) {
 
 		static EventFiles of(final List<EventFile> events, final List<FileRow> pictures, final Set<Integer> errandIds) {
 			final Predicate<EventFile> withErrand = event -> event.arendeId() != null && errandIds.contains(event.arendeId());
@@ -513,18 +531,14 @@ public class AlktRepository {
 				events.stream().filter(withErrand).flatMap(event -> event.files(event.arendeId())),
 				pictures.stream().filter(row -> row.name() != null && row.arendeId() != null))
 				.collect(groupingBy(FileRow::arendeId));
-			final var placeFiles = new HashMap<Integer, List<FileRow>>();
-			final var unplacedFiles = new HashMap<Integer, List<FileRow>>();
-			events.stream()
-				.filter(withErrand.negate())
-				.forEach(event -> event.files(null).forEach(row -> (event.objektId() == null
-					? unplacedFiles.computeIfAbsent(event.handelseId(), _ -> new ArrayList<>())
-					: placeFiles.computeIfAbsent(event.objektId(), _ -> new ArrayList<>())).add(row)));
+			final var unplacedFiles = events.stream()
+				.filter(withErrand.negate().and(event -> event.objektId() == null))
+				.collect(groupingBy(EventFile::handelseId, LinkedHashMap::new, flatMapping(event -> event.files(null), toList())));
 			final var documents = events.stream()
 				.filter(event -> event.worddokument() != null)
 				.map(event -> new DocumentRow(event.handelseId(), event.arendeId(), event.objektId(), event.mall(), event.tidpunkt(), event.worddokument()))
 				.toList();
-			return new EventFiles(errandFiles, placeFiles, unplacedFiles, documents);
+			return new EventFiles(errandFiles, unplacedFiles, documents);
 		}
 	}
 }

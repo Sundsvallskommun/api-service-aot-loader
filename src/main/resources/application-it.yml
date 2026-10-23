@@ -45,6 +45,7 @@ integration:
     url: http://localhost:${wiremock.server.port:}/support-management
 aot-loader:
   errand-status: CLOSED
+  decision-ad-account: mig01dec
   cleanup:
     enabled: true
   result-directory: target/it-resultat

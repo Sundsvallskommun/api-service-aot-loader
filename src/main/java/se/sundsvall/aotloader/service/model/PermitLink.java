@@ -4,16 +4,34 @@ import java.time.LocalDate;
 
 /**
  * What an inspection errand or visit needs to be related to the permit errand of its place (section 7.7.1, decision
- * 61). The legal ids are compared in memory only.
+ * 61), or what a documentation errand is filed under (decision 71). The legal ids are compared in memory only.
  *
- * @param permit           the current permit of the place, null when the place has none
+ * @param permit           the current permit of the place, or for a documentation errand the permit or notification it
+ *                         is filed under; null when the place has none
  * @param permitHolder     the holder of that permit, the current owner of the place; null when it cannot be seen or for
  *                         a visit, which is related by its day
  * @param inspectionHolder the holder the inspection errand concerned, null when it cannot be seen, as for every visit
  * @param inspected        the day of the inspection: of the visit, or the day the errand was opened or else registered;
  *                         null when unknown
+ * @param filed            true for a documentation errand, which is related whatever its holder and day, and is not
+ *                         migrated without the errand it is filed under
  */
-public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspectionHolder, LocalDate inspected) {
+public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspectionHolder, LocalDate inspected, boolean filed) {
+
+	/**
+	 * The link of an inspection errand or visit.
+	 */
+	public PermitLink(final PlacePermit permit, final LegalId permitHolder, final LegalId inspectionHolder, final LocalDate inspected) {
+		this(permit, permitHolder, inspectionHolder, inspected, false);
+	}
+
+	/**
+	 * @param  permit the permit or notification of the place that a documentation errand is filed under (decision 71)
+	 * @return        the link of the documentation errand
+	 */
+	public static PermitLink filedUnder(final PlacePermit permit) {
+		return new PermitLink(permit, null, null, null, true);
+	}
 
 	/**
 	 * Why an inspection is related to the permit or not.
@@ -22,6 +40,8 @@ public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspe
 
 		/** The place has no current permit. */
 		NO_PERMIT(false),
+		/** A documentation errand, which is filed under the permit or notification of its place. */
+		FILED(true),
 		/** The inspection concerned the holder of the permit. */
 		SAME_HOLDER(true),
 		/** The inspection concerned another holder. */
@@ -66,13 +86,16 @@ public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspe
 	 * Decides whether the inspection concerned the holder of the permit. Its holder decides when it is known, whatever its
 	 * day. Otherwise its day does: a new holder needs a new permit, so an inspection on or after the day the permit was
 	 * issued, and not after it ended, concerned the holder of the permit, unless the permit may have been issued to
-	 * another than the current owner.
+	 * another than the current owner. A documentation errand is filed under the permit whatever its holder and day.
 	 *
 	 * @return the basis, which tells whether there is a relation
 	 */
 	public Basis basis() {
 		if (permit == null) {
 			return Basis.NO_PERMIT;
+		}
+		if (filed) {
+			return Basis.FILED;
 		}
 		if (inspectionHolder != null) {
 			if (permitHolder == null) {

@@ -5,6 +5,6 @@
 	"placeName": "Kiosken",
 	"outcome": "MIGRERAD",
 	"rules": "G29,G14",
-	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; G14 1 fil togs inte emot av SupportManagement (33333333.rtf)",
+	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; G14 1 fil togs inte emot av SupportManagement (33333333.rtf); Beslut: Bifall, fattat 2019-07-01, 0 villkor, 0 dokument",
 	"errandNumber": "ALKT-2026-3"
 }

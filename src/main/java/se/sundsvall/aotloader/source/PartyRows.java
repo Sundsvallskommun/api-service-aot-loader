@@ -92,6 +92,28 @@ public final class PartyRows {
 		return LegalIds.normalize(raw, today).map(LegalId::number).or(() -> LegalIds.digitsOf(raw));
 	}
 
+	/**
+	 * @return true when both have a number that can be read and it is the same, so that two posts of one holder are the
+	 *         same holder
+	 */
+	public static boolean sameHolder(final ContactRow one, final ContactRow other, final LocalDate today) {
+		final var number = numberOf(one, today);
+		return number.isPresent() && number.equals(numberOf(other, today));
+	}
+
+	/**
+	 * @return true when both have a number that can be read and the numbers differ; false when either is unknown
+	 */
+	public static boolean otherHolder(final ContactRow one, final ContactRow other, final LocalDate today) {
+		final var number = numberOf(one, today);
+		final var otherNumber = numberOf(other, today);
+		return number.isPresent() && otherNumber.isPresent() && !number.equals(otherNumber);
+	}
+
+	private static Optional<String> numberOf(final ContactRow contact, final LocalDate today) {
+		return Optional.ofNullable(contact).flatMap(found -> numberKey(found.organisationsNr(), today));
+	}
+
 	private static ContactRow toContact(final ResultSet rs, final String idColumn) throws SQLException {
 		return new ContactRow(
 			integer(rs, idColumn),

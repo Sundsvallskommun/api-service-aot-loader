@@ -29,6 +29,14 @@
 			"resourcePath": "/CATEGORYROOT",
 			"labels": [
 				{
+					"id": "label-serving-permit",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION"
+				},
+				{
+					"id": "label-documentation",
+					"resourcePath": "/CATEGORYROOT/DOCUMENTATION/DOCUMENTATION"
+				},
+				{
 					"id": "label-temporary-public",
 					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PUBLIC"
 				},

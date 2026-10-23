@@ -30,6 +30,7 @@ import se.sundsvall.aotloader.support.Texts;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
 import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
@@ -74,7 +75,8 @@ public final class InspectionCandidates {
 
 	/**
 	 * Starts the candidate of an inspection errand with what both sources give it. The source adds the rest, such as the
-	 * files.
+	 * files. An errand whose applicant is not the current owner of the place concerned a former holder and is not migrated
+	 * (G32, decision 72).
 	 *
 	 * @param  errand    what the errand was in the source
 	 * @param  place     the place of the errand, null when it has none
@@ -93,6 +95,9 @@ public final class InspectionCandidates {
 		}
 		if (errand.closed() == null) {
 			hits.add(RuleHit.of(ERRAND_OPEN));
+		}
+		if (PartyRows.otherHolder(applicant, owner, today)) {
+			hits.add(RuleHit.of(FORMER_HOLDER, "sökanden i ärendet är inte ställets nuvarande ägare"));
 		}
 		final var holder = PartyRows.holder(applicant, today);
 		final var ownerLegalId = Optional.ofNullable(PartyRows.holder(owner, today)).map(Holder::legalId).orElse(null);

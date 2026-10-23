@@ -180,7 +180,7 @@ public record AlkolSnapshot(
 	 * @param beslutsText    the text of the decision, null when blank
 	 * @param beslutsfattare the code of who made the decision, BeslutsFattare, null when blank
 	 */
-	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, String mall, String worddokument,
+	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, LocalDate giltigtTom, String mall, String worddokument,
 		String bifogadfil, String beslutsText, String beslutsfattare)
 		implements
 		SourceDecision {

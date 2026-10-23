@@ -24,6 +24,7 @@ import se.sundsvall.aotloader.source.DiaryNumberCounts;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.OwnerNumbers;
 import se.sundsvall.aotloader.source.ParameterList;
@@ -38,6 +39,7 @@ import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
+import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_COPY_DIFFERS;
@@ -207,30 +209,20 @@ final class AlkolIndex {
 	}
 
 	/**
-	 * @return true when the applicant of the errand is the current owner of the place, both with a number that can be read
-	 */
-	boolean applicantIsOwner(final ErrandRow errand, final ContactRow owner) {
-		final var applicantNumber = applicantNumber(errand);
-		return applicantNumber.isPresent() && applicantNumber.equals(ownerNumber(owner));
-	}
-
-	/**
 	 * @return true when the applicant of the errand is not the current owner of the place, both with a number that can be
 	 *         read (G19)
 	 */
 	boolean applicantIsNotOwner(final ErrandRow errand, final ContactRow owner) {
-		final var applicantNumber = applicantNumber(errand);
-		final var ownerNumber = ownerNumber(owner);
-		return applicantNumber.isPresent() && ownerNumber.isPresent() && !applicantNumber.equals(ownerNumber);
+		final var applicant = Optional.ofNullable(errand).map(ErrandRow::sokandeId).map(snapshot.applicants()::get).orElse(null);
+		return PartyRows.otherHolder(applicant, owner, today);
 	}
 
-	private Optional<String> applicantNumber(final ErrandRow errand) {
-		return Optional.ofNullable(errand).map(ErrandRow::sokandeId).map(snapshot.applicants()::get)
-			.flatMap(applicant -> PartyRows.numberKey(applicant.organisationsNr(), today));
-	}
-
-	private Optional<String> ownerNumber(final ContactRow owner) {
-		return Optional.ofNullable(owner).flatMap(found -> PartyRows.numberKey(found.organisationsNr(), today));
+	/**
+	 * @param  errands the errands of the place, all of them or those of one kind
+	 * @return         what of them and of the days of the place was a former holder's
+	 */
+	FormerHolders formerHolders(final SalesPlaceRow place, final List<ErrandRow> errands) {
+		return FormerHolders.of(errands, snapshot.applicants(), ownerOf(place), today);
 	}
 
 	Optional<DecisionRow> latestGrant(final Integer fsId) {
@@ -307,6 +299,26 @@ final class AlkolIndex {
 		final var grantErrand = grant == null ? null : errandsById.get(grant.arendeId());
 		return new PlacePermit(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), issued(grant), endingAfter(fsId, grant).map(DecisionRow::beslutsDatum).orElse(null),
 			placesById.containsKey(fsId) && !applicantIsNotOwner(grantErrand, ownerOf(placesById.get(fsId))));
+	}
+
+	/**
+	 * What the documentation errands of the place are filed under (decision 71): its tobacco permit when it is current, or
+	 * else the notification of the first product it is marked for while it has not ceased, or else a tobacco permit that is
+	 * not current, which the documentation then follows: it is migrated only if the permit is.
+	 *
+	 * @return the permit or notification, null when the place has neither
+	 */
+	PlacePermit filedUnder(final SalesPlaceRow place) {
+		if (place == null) {
+			return null;
+		}
+		if (hasCurrentPermit(place.fsId())) {
+			return placePermit(place.fsId());
+		}
+		final var notification = place.upphort() ? Optional.<Product>empty() : Product.notifiedOn(place).stream().findFirst();
+		return notification
+			.map(product -> new PlacePermit(new ItemKey(ALKOL, ANMALAN, AlkolNotifications.notificationId(place, product.code())), null, null, true))
+			.orElseGet(() -> placePermit(place.fsId()));
 	}
 
 	Place place(final SalesPlaceRow place) {

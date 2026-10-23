@@ -14,6 +14,8 @@ public final class ErrandParameters {
 	public static final String ALKOL_FS_ID = "alkolFsId";
 	public static final String EVENT_LOG = "handelselogg";
 	public static final String HANDLERS = "handlaggare";
+	/** Who made an inspection visit, the field Kontrollant of AlkT (decision 66). */
+	public static final String INSPECTORS = "kontrollant";
 
 	private ErrandParameters() {}
 }

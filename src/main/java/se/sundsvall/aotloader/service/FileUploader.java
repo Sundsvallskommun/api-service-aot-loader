@@ -5,6 +5,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -46,18 +47,19 @@ class FileUploader {
 	 * errand, with the same name and content, is not uploaded again, but gets the purpose and date it lacks. A file that
 	 * cannot be uploaded for good is listed in the report.
 	 *
-	 * @return                    the ids of the attachments of the files that are material of the investigation (decision
-	 *                            60), uploaded now or found on the errand, by name and content
+	 * @return                    the attachments of the files on the errand, uploaded now or found there by name and
+	 *                            content, and which of them are material of the investigation (decision 60)
 	 * @throws MigrationException when the file area or a file cannot be read, or a purpose of a file was not read for the
 	 *                            municipality, so that the step is made again in the next run
 	 */
-	Set<String> upload(final Candidate candidate, final RunContext context, final String municipalityId, final String errandId, final ReportNotes notes) {
+	UploadedFiles upload(final Candidate candidate, final RunContext context, final String municipalityId, final String errandId, final ReportNotes notes) {
 		if (candidate.files().references().isEmpty()) {
-			return Set.of();
+			return UploadedFiles.NONE;
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var attached = new ArrayList<>(supportManagement.getAttachments(municipalityId, errandId).stream().map(AttachedFile::of).toList());
 		final var problems = new FileProblems();
+		final var attachmentIds = new LinkedHashMap<FileReference, String>();
 		final var material = new LinkedHashSet<String>();
 		for (final var reference : candidate.files().references()) {
 			final var lookup = ItemFiles.find(fileArea, reference, candidate);
@@ -67,12 +69,15 @@ class FileUploader {
 				continue;
 			}
 			final var details = candidate.files().detailsOf(reference);
-			uploadFile(municipalityId, errandId, lookup, wanted(details, context, municipalityId), attached, problems)
-				.filter(_ -> isMaterial(candidate, reference))
-				.ifPresent(material::add);
+			uploadFile(municipalityId, errandId, lookup, wanted(details, context, municipalityId), attached, problems).ifPresent(id -> {
+				attachmentIds.put(reference, id);
+				if (isMaterial(candidate, reference)) {
+					material.add(id);
+				}
+			});
 		}
 		itemFiles.reportAndFailOnUnreadable(problems, notes, candidate);
-		return material;
+		return new UploadedFiles(attachmentIds, material);
 	}
 
 	/**
@@ -111,20 +116,26 @@ class FileUploader {
 	/**
 	 * Checks that the files can be found and would be uploaded, without uploading anything, and tells which would go on
 	 * the post in PartyAssets.
+	 *
+	 * @return the files that would be uploaded, the files of the item that have no problem
 	 */
-	void check(final Candidate candidate, final RunContext context, final ReportNotes notes) {
+	Set<FileReference> check(final Candidate candidate, final RunContext context, final ReportNotes notes) {
 		if (candidate.files().references().isEmpty()) {
-			return;
+			return Set.of();
 		}
 		final var fileArea = context.fileArea(candidate.key().source());
 		final var problems = new FileProblems();
+		final var uploadable = new LinkedHashSet<FileReference>();
 		var material = 0;
 		for (final var reference : candidate.files().references()) {
 			final var lookup = fileArea.find(reference);
 			final var problem = FileProblem.of(reference, lookup);
 			problem.ifPresent(found -> problems.add(found, lookup.name()));
-			if (problem.isEmpty() && isMaterial(candidate, reference)) {
-				material++;
+			if (problem.isEmpty()) {
+				uploadable.add(reference);
+				if (isMaterial(candidate, reference)) {
+					material++;
+				}
 			}
 		}
 		if (candidate.asset() != null && !candidate.files().onPost().isEmpty()) {
@@ -134,6 +145,7 @@ class FileUploader {
 			notes.line(investigationMaterial(material));
 		}
 		problems.report(notes, itemFiles.maxFileSizeText());
+		return uploadable;
 	}
 
 	/**
