@@ -42,6 +42,7 @@ import se.sundsvall.aotloader.integration.party.PartyIntegration;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.relation.RelationIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
@@ -158,7 +159,7 @@ class ItemMigratorTest {
 	@Test
 	void anItemAlreadyMigratedIsLeftAsItIs() {
 		final var candidate = TestData.permit("1");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, ERRAND_ID)));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, ERRAND_ID)));
 
 		final var result = migrator.process(candidate, context(false));
 
@@ -187,7 +188,7 @@ class ItemMigratorTest {
 	void anItemWithABlockingRuleHitIsReviewed() {
 		final var candidate = TestData.permit("1", RuleHit.of(OWNER_DIFFERS, "AgarID 1, 2"), RuleHit.of(NO_ISSUING_ERRAND));
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 
 		final var result = migrator.process(candidate, context(false));
@@ -210,7 +211,7 @@ class ItemMigratorTest {
 	void anItemWhoseErrandAnEarlierRunActivatedIsMigratedAlthoughItWouldStopNow() {
 		final var candidate = TestData.permit("1", RuleHit.of(OWNER_DIFFERS, "AgarID 1, 2"));
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
 
 		final var result = migrator.process(candidate, context(false));
@@ -228,7 +229,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setErrandNumber(null);
 		existing.setPartyAssetsId("asset-internal-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 
 		final var result = migrator.process(candidate, context(false));
@@ -251,7 +252,7 @@ class ItemMigratorTest {
 
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA);
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 
 		final var migrated = migrator.process(candidate, context(true));
 		assertThat(migrated.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
@@ -300,7 +301,7 @@ class ItemMigratorTest {
 
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA);
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 
 		assertThat(migrator.process(TestData.permitWithoutFiles("1"), context(true)).outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
 	}
@@ -424,7 +425,7 @@ class ItemMigratorTest {
 	void anItemIsNeverMovedToAnotherMunicipality() {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setMunicipalityId(TIMRA);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 
 		final var result = migrator.process(TestData.permit("1", "Timrå"), context(false));
 
@@ -439,7 +440,7 @@ class ItemMigratorTest {
 	void anInterruptedItemContinuesWithItsDraft() {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.TILLSTAND);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
@@ -468,7 +469,7 @@ class ItemMigratorTest {
 
 	@Test
 	void anErrandThatIsGoneIsLookedUpByItsTagAndAnActiveOneIsLeftAsItIs() {
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.ARENDE_SKAPAT, "gone")));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.ARENDE_SKAPAT, "gone")));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, "gone")).thenReturn(Optional.empty());
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("asset-internal-id", Status.ACTIVE)));
@@ -488,7 +489,7 @@ class ItemMigratorTest {
 		gone.setAssetId("gone-errand-id");
 		gone.setPartyAssetsId("old-asset-id");
 		gone.setRelationId("old-relation-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(gone));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(gone));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, "gone-errand-id")).thenReturn(Optional.empty());
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
 		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
@@ -576,7 +577,7 @@ class ItemMigratorTest {
 	void anExpiredPermitAccordingToTheExceptionList() {
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
@@ -620,8 +621,8 @@ class ItemMigratorTest {
 		existing.setPartyAssetsId("asset-internal-id");
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new ErrandAttachment().id("a1").fileName("beslut.rtf").fileSize("dokument".length())));
@@ -693,7 +694,7 @@ class ItemMigratorTest {
 	private void expiredByTheExceptionList() {
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
@@ -706,8 +707,8 @@ class ItemMigratorTest {
 		existing.setPartyAssetsId("asset-internal-id");
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
@@ -731,7 +732,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("gone-asset-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.getAsset(MUNICIPALITY_ID, "gone-asset-id")).thenReturn(Optional.empty());
@@ -764,7 +765,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("asset-internal-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
@@ -773,7 +774,7 @@ class ItemMigratorTest {
 
 		final var result = migrator.process(TestData.permitWithoutFiles("1"), context(false));
 
-		final var wanted = new TargetMapper(properties, CLOCK).toAsset(TestData.permitWithoutFiles("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
+		final var wanted = new AssetMapper(properties).toAsset(TestData.permitWithoutFiles("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
 		// The source gives the permit no last day, so the old one is removed
@@ -785,7 +786,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("asset-internal-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		// PartyAssets before 6.8 answers the change with 204 and keeps the content
@@ -804,7 +805,7 @@ class ItemMigratorTest {
 		// The earlier run made the post but lost the answer, and the holder has changed in the source since
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.TILLSTAND);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
@@ -823,7 +824,7 @@ class ItemMigratorTest {
 
 	@Test
 	void aStatusTableThatCannotBeReadFailsTheItemOnly() {
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenThrow(new IllegalStateException("Låst"));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenThrow(new IllegalStateException("Låst"));
 
 		final var result = migrator.process(TestData.permit("1"), context(false));
 
@@ -837,7 +838,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("asset-internal-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		// The holder's number was corrected in the source after the earlier run made the post
@@ -857,8 +858,8 @@ class ItemMigratorTest {
 		existing.setPartyAssetsId("asset-internal-id");
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
@@ -886,8 +887,8 @@ class ItemMigratorTest {
 		existing.setPartyAssetsId("asset-internal-id");
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		// PartyAssets before 6.8 answers the change with 204 and keeps the content
@@ -906,7 +907,7 @@ class ItemMigratorTest {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("asset-internal-id");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE))).thenReturn(Optional.empty());
@@ -941,7 +942,7 @@ class ItemMigratorTest {
 	void anExpiredPermitThatStaysExpiredGetsItsContentWhileActive() {
 		final var exception = new ReviewExceptionEntity();
 		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
-		when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(exception));
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(staleAsset("stale-asset-id", Status.EXPIRED)));
@@ -1026,7 +1027,7 @@ class ItemMigratorTest {
 	@Test
 	void anInspectionErrandWaitsForThePermitOfItsPlace() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.GRANSKAS, null)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.GRANSKAS, null)));
 
 		final var result = migrator.process(TestData.inspection("700", permitKey, TestData.HOLDER_ID), context(false));
 
@@ -1038,7 +1039,7 @@ class ItemMigratorTest {
 	@Test
 	void anInspectionErrandThatCanGetNoRelationDoesNotWaitForThePermit() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.GRANSKAS, null)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.GRANSKAS, null)));
 
 		final var formerHolder = new LegalId("5599887766", PartyType.ENTERPRISE);
 		lenient().when(party.getPartyId(MUNICIPALITY_ID, formerHolder)).thenReturn(Optional.of("former-party"));
@@ -1063,7 +1064,7 @@ class ItemMigratorTest {
 	@Test
 	void anInspectionErrandGetsItsRelation() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of());
 		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), errandCaptor.capture())).thenReturn(ERRAND_ID);
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
@@ -1091,7 +1092,7 @@ class ItemMigratorTest {
 	@Test
 	void anInvestigationAnEarlierRunCreatedIsNotCreatedAgain() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-id")));
@@ -1105,7 +1106,7 @@ class ItemMigratorTest {
 	@Test
 	void anExistingRelationIsReusedAndSeveralAreReported() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
 		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of(new Relation().id("existing")));
 
@@ -1127,10 +1128,10 @@ class ItemMigratorTest {
 
 		assertThat(migrator.process(TestData.inspection("700", null, TestData.HOLDER_ID), context(true)).detail()).isEqualTo("Ingen relation: stället har inget gällande tillstånd");
 
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
 		assertThat(migrator.process(TestData.inspection("701", permitKey, TestData.HOLDER_ID), context(true)).detail()).isEqualTo("Ingen relation: tillståndet migreras inte");
 
-		lenient().when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		lenient().when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		final var former = migrator.process(TestData.inspection("702", permitKey, formerHolder), context(true));
 		assertThat(former.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
 		assertThat(former.rules()).containsExactly("G10");
@@ -1157,8 +1158,8 @@ class ItemMigratorTest {
 	void aMigratedInspectionErrandGetsItsRelationWhenItsPermitIsMigratedAfterIt() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
 		final var inspection = item(ItemStatus.KLAR, ERRAND_ID);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSYN, "700")).thenReturn(Optional.of(inspection));
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSYN, "700"))).thenReturn(Optional.of(inspection));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of());
 		when(relations.createRelation(eq(MUNICIPALITY_ID), any())).thenReturn("relation-id");
 
@@ -1179,8 +1180,8 @@ class ItemMigratorTest {
 	@Test
 	void aMigratedInspectionErrandIsLeftAsItIsWhenItsPermitIsNotMigratedOrInADryRun() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSYN, "700")).thenReturn(Optional.of(item(ItemStatus.KLAR, ERRAND_ID)));
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSYN, "700"))).thenReturn(Optional.of(item(ItemStatus.KLAR, ERRAND_ID)));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.MIGRERAS_INTE, null)));
 
 		assertThat(migrator.process(TestData.inspection("700", permitKey, TestData.HOLDER_ID), context(false)).detail()).isNull();
 		assertThat(migrator.process(TestData.inspection("700", permitKey, TestData.HOLDER_ID), context(true)).outcome()).isEqualTo(Outcome.REDAN_MIGRERAD);
@@ -1192,8 +1193,8 @@ class ItemMigratorTest {
 	void aRelationAddedAfterwardsThatFailsIsReportedAndTheItemStaysMigrated() {
 		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
 		final var inspection = item(ItemStatus.KLAR, ERRAND_ID);
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSYN, "700")).thenReturn(Optional.of(inspection));
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSYN, "700"))).thenReturn(Optional.of(inspection));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
 		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte"))
 			.thenReturn(List.of(new Relation().id("a"), new Relation().id("b")));
 
@@ -1214,15 +1215,16 @@ class ItemMigratorTest {
 	}
 
 	private ItemMigrator migrator(final AotLoaderProperties settings) {
-		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, partyAssets, settings, CLOCK),
-			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings, CLOCK)), settings, CLOCK);
+		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, settings, CLOCK), new AssetFileUploader(partyAssets, settings), new LegalBasisReader(
+			settings),
+			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings, CLOCK), new AssetMapper(settings)), settings, CLOCK);
 	}
 
 	/**
 	 * @return the post of permit 1 as the migration creates it
 	 */
 	private Asset assetAsCreated(final String id, final Status status) {
-		final var created = new TargetMapper(properties, CLOCK).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
+		final var created = new AssetMapper(properties).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
 		return new Asset().id(id).assetId(created.getAssetId()).partyId(created.getPartyId()).type(created.getType()).title(created.getTitle()).description(created.getDescription())
 			.issued(created.getIssued()).validTo(created.getValidTo()).additionalParameters(created.getAdditionalParameters()).status(status);
 	}

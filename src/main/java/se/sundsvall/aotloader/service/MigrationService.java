@@ -177,7 +177,7 @@ public class MigrationService {
 	 * @return the row of the status table of the item, when it is of the municipality, as above
 	 */
 	public MigrationItem getItem(final String municipalityId, final ItemKey key) {
-		return itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId())
+		return itemRepository.findByKey(key)
 			.filter(item -> isOf(item, municipalityId))
 			.map(MigrationService::toMigrationItem)
 			.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s finns inte i statustabellen".formatted(key)));

@@ -8,7 +8,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
+import se.sundsvall.aotloader.source.files.SharedFileNames;
 
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.groupingBy;
@@ -41,22 +43,6 @@ public record InspectionVisitRows(
 	Map<String, String> remarkTexts,
 	Map<String, String> handlerNames,
 	Map<Integer, RoundRow> rounds) {
-
-	/**
-	 * Visits without rounds of inspection.
-	 */
-	public InspectionVisitRows(final List<VisitRow> visits, final Map<Integer, List<RemarkRow>> remarks, final Map<Integer, List<String>> files,
-		final Map<String, String> kindTexts, final Map<String, String> remarkTexts, final Map<String, String> handlerNames) {
-		this(visits, remarks, files, kindTexts, remarkTexts, handlerNames, Map.of());
-	}
-
-	/**
-	 * Visits without names for the handlers or rounds of inspection.
-	 */
-	public InspectionVisitRows(final List<VisitRow> visits, final Map<Integer, List<RemarkRow>> remarks, final Map<Integer, List<String>> files,
-		final Map<String, String> kindTexts, final Map<String, String> remarkTexts) {
-		this(visits, remarks, files, kindTexts, remarkTexts, Map.of());
-	}
 
 	/**
 	 * @return no visits at all
@@ -103,6 +89,19 @@ public record InspectionVisitRows(
 		consumer.accept(visit.bifogadfil(), ATTACHMENTS);
 		filesOf(visit.tillfalleNr()).forEach(name -> consumer.accept(name, ATTACHMENTS));
 		remarksOf(visit.tillfalleNr()).forEach(remark -> consumer.accept(remark.bifogadfil(), ATTACHMENTS));
+	}
+
+	/**
+	 * Adds every file reference of the visits to the file names of the source, each with the place of its visit, or the
+	 * visit itself when it has no place.
+	 *
+	 * @param placeKey the key of a place of the source, by its id
+	 */
+	public void addFileNames(final SharedFileNames.Builder names, final Function<Integer, String> placeKey) {
+		visits.forEach(visit -> {
+			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : placeKey.apply(visit.objektId());
+			forEachFile(visit, (name, folder) -> names.add(place, name, folder));
+		});
 	}
 
 	/**
@@ -189,22 +188,6 @@ public record InspectionVisitRows(
 			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
 			staff = staff == null ? StaffMarks.NONE : staff;
 			covered = covered == null ? List.of() : List.copyOf(covered);
-		}
-
-		/**
-		 * A visit outside a round of inspection, without marks of what it covered and without an end day.
-		 */
-		public VisitRow(final Integer tillfalleNr, final Integer objektId, final LocalDate datum, final String startTid, final String slutTid, final String tillsynsart,
-			final String fritext, final String worddokument, final String bifogadfil, final List<String> handlaggare, final StaffMarks staff) {
-			this(tillfalleNr, objektId, datum, null, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, handlaggare, staff, null, List.of(), false);
-		}
-
-		/**
-		 * A visit without handlers or marks about the staff.
-		 */
-		public VisitRow(final Integer tillfalleNr, final Integer objektId, final LocalDate datum, final String startTid, final String slutTid, final String tillsynsart,
-			final String fritext, final String worddokument, final String bifogadfil) {
-			this(tillfalleNr, objektId, datum, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, List.of(), StaffMarks.NONE);
 		}
 
 		@Override

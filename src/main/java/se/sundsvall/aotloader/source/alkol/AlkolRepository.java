@@ -21,6 +21,7 @@ import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.SourceDatabases;
+import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.CodeLists;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.EventRow;
@@ -173,12 +174,8 @@ public class AlkolRepository {
 			jdbc.query(SELECT_EVENTS, (rs, _) -> toEvent(rs)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
-			codeTable(jdbc, "Beslutskoder"),
-			codeTable(jdbc, "[Händelsetyper]"),
-			codeTable(jdbc, "[Ärendetyper]"),
-			codeTable(jdbc, "Kategorier"),
-			codeTable(jdbc, "[Områden]"),
-			codeTable(jdbc, "PBI_Roller"),
+			new CodeLists(codeTable(jdbc, "Beslutskoder"), codeTable(jdbc, "[Händelsetyper]"), codeTable(jdbc, "[Ärendetyper]"), codeTable(jdbc, "Kategorier"), codeTable(jdbc, "[Områden]"),
+				codeTable(jdbc, "PBI_Roller"), users.byCode()),
 			new InspectionVisitRows(
 				jdbc.query(SELECT_VISITS, (rs, _) -> toVisit(rs)).stream().filter(row -> row.tillfalleNr() != null).toList(),
 				jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
@@ -187,8 +184,7 @@ public class AlkolRepository {
 				codeTable(jdbc, "Anmarkningar"),
 				users.byNumber(),
 				// Tillsyn_Omgång has no primary key in AlkOL, so the first row of an id, by its dates and name, counts
-				byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id)),
-			users.byCode());
+				byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id)));
 	}
 
 	/**

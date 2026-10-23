@@ -9,6 +9,8 @@ import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
+import se.sundsvall.aotloader.source.SourceDecision;
+import se.sundsvall.aotloader.source.SourceErrand;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -110,35 +112,20 @@ public record AlktSnapshot(
 
 	/**
 	 * A row of Gällande_Tillstånd. The serving times hold the eight intervals in order, start and end.
+	 *
+	 * @param servingPublic  ServeringAllmanhet, serving to the public
+	 * @param servingPrivate ServeringSlutetSallskap, serving to a closed company
 	 */
 	public record PermitRow(
 		Integer objektId,
 		Integer gtAgarId,
-		boolean starkol,
-		boolean vin,
-		boolean spritdrycker,
-		boolean ajaDrycker,
-		boolean alp,
-		boolean aretRunt,
-		String arligPeriodStart,
-		String arligPeriodSlut,
-		String periodStart,
-		String periodSlut,
-		boolean pausservering,
-		boolean uteservering,
-		boolean trafikservering,
-		boolean minibar,
-		boolean roomservice,
-		boolean catering,
-		boolean provsmakning,
-		boolean kryddning,
-		boolean gardsforsaljning,
+		Drinks drinks,
+		Period period,
+		Scope scope,
 		boolean servingPublic,
 		boolean servingPrivate,
 		List<ServingTime> servingTimes,
-		String hogstaAntal,
-		String sittplatser,
-		String serveringslokal,
+		ServingArea servingArea,
 		List<String> notes,
 		LocalDate ersatterDatum,
 		String ersatterDiarienr,
@@ -150,6 +137,50 @@ public record AlktSnapshot(
 		@Override
 		public String toString() {
 			return "PermitRow[objektId=" + objektId + ", gtAgarId=" + gtAgarId + ", beslutsId=" + beslutsId + "]";
+		}
+	}
+
+	/**
+	 * The drinks a serving permit covers.
+	 *
+	 * @param ajaDrycker other fermented drinks, AJADrycker
+	 * @param alp        ALP, alcohol-like preparations
+	 */
+	public record Drinks(boolean starkol, boolean vin, boolean spritdrycker, boolean ajaDrycker, boolean alp) {
+	}
+
+	/**
+	 * When a serving permit holds: all year, every year during a season, or during a period of dates, as the source
+	 * writes them.
+	 *
+	 * @param aretRunt         AretRunt, all year
+	 * @param arligPeriodStart the first day of the season, ArligPeriodStart
+	 * @param arligPeriodSlut  the last day of the season, ArligPeriodSlut
+	 * @param periodStart      the first day of the period, PeriodStart
+	 * @param periodSlut       the last day of the period, PeriodSlut
+	 */
+	public record Period(boolean aretRunt, String arligPeriodStart, String arligPeriodSlut, String periodStart, String periodSlut) {
+	}
+
+	/**
+	 * The kinds of serving a serving permit covers besides serving to guests at the place.
+	 */
+	public record Scope(boolean pausservering, boolean uteservering, boolean trafikservering, boolean minibar, boolean roomservice, boolean catering, boolean provsmakning, boolean kryddning,
+		boolean gardsforsaljning) {
+	}
+
+	/**
+	 * The serving area of a serving permit, as the source writes it.
+	 *
+	 * @param hogstaAntal     the largest number of guests, Hogstaantal
+	 * @param sittplatser     the number of seats, Sittplatser2
+	 * @param serveringslokal the description of the serving area, Serveringslokal
+	 */
+	public record ServingArea(String hogstaAntal, String sittplatser, String serveringslokal) {
+
+		@Override
+		public String toString() {
+			return "ServingArea[hogstaAntal=" + hogstaAntal + ", sittplatser=" + sittplatser + "]";
 		}
 	}
 
@@ -210,36 +241,15 @@ public record AlktSnapshot(
 		LocalDate giltigtTom,
 		String mall,
 		String worddokument,
-		String bifogadFil,
+		String bifogadfil,
 		String beslutsText,
-		String beslutsfattare) {
-
-		/**
-		 * A decision without a decision maker.
-		 */
-		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtTom, final String mall,
-			final String worddokument, final String bifogadFil, final String beslutsText) {
-			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtTom, mall, worddokument, bifogadFil, beslutsText, null);
-		}
-
-		/**
-		 * A decision without a text.
-		 */
-		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtTom, final String mall,
-			final String worddokument, final String bifogadFil) {
-			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtTom, mall, worddokument, bifogadFil, null);
-		}
+		String beslutsfattare)
+		implements
+		SourceDecision {
 
 		@Override
 		public String toString() {
 			return "DecisionRow[beslutsId=" + beslutsId + ", arendeId=" + arendeId + ", beslutsTyp=" + beslutsTyp + "]";
-		}
-
-		/**
-		 * @return the date the decision was made, null when unknown
-		 */
-		public LocalDate beslutsDatum() {
-			return beslutad == null ? null : beslutad.toLocalDate();
 		}
 	}
 
@@ -260,35 +270,13 @@ public record AlktSnapshot(
 		Integer sokandeId,
 		List<String> notes,
 		List<String> handlaggare,
-		LocalDate upplagd) {
+		LocalDate upplagd)
+		implements
+		SourceErrand {
 
 		public ErrandRow {
 			notes = notes == null ? List.of() : List.copyOf(notes);
 			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
-		}
-
-		/**
-		 * An errand without the day it was registered.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer objektId, final String arendeTyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId, final List<String> notes, final List<String> handlaggare) {
-			this(arendeId, objektId, arendeTyp, diarieNr, oppnad, avslutad, sokandeId, notes, handlaggare, null);
-		}
-
-		/**
-		 * An errand without handlers.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer objektId, final String arendeTyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId, final List<String> notes) {
-			this(arendeId, objektId, arendeTyp, diarieNr, oppnad, avslutad, sokandeId, notes, List.of());
-		}
-
-		/**
-		 * An errand without notes.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer objektId, final String arendeTyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId) {
-			this(arendeId, objektId, arendeTyp, diarieNr, oppnad, avslutad, sokandeId, List.of());
 		}
 
 		@Override
@@ -310,20 +298,6 @@ public record AlktSnapshot(
 	 */
 	public record TextRow(LocalDateTime tidpunkt, String handelseTyp, boolean picture, String text, boolean confidential, String diarieNr) {
 
-		/**
-		 * An event or picture without a diary number of its own.
-		 */
-		public TextRow(final LocalDateTime tidpunkt, final String handelseTyp, final boolean picture, final String text, final boolean confidential) {
-			this(tidpunkt, handelseTyp, picture, text, confidential, null);
-		}
-
-		/**
-		 * An event or picture that is not marked as confidential.
-		 */
-		public TextRow(final LocalDateTime tidpunkt, final String handelseTyp, final boolean picture, final String text) {
-			this(tidpunkt, handelseTyp, picture, text, false);
-		}
-
 		@Override
 		public String toString() {
 			return "TextRow[tidpunkt=" + tidpunkt + ", handelseTyp=" + handelseTyp + ", picture=" + picture + ", confidential=" + confidential + "]";
@@ -344,12 +318,6 @@ public record AlktSnapshot(
 			details = details == null ? FileDetails.NONE : details;
 		}
 
-		/**
-		 * A file without a purpose or a date.
-		 */
-		public FileRow(final Integer arendeId, final String name, final boolean generated) {
-			this(arendeId, name, generated, FileDetails.NONE);
-		}
 	}
 
 	/**

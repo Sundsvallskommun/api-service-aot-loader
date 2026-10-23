@@ -96,7 +96,7 @@ class ReviewExceptionServiceTest {
 		existing.setSource(Source.ALKT);
 		existing.setKind(TILLSTAND);
 		existing.setSourceId("1");
-		lenient().when(exceptionRepository.findBySourceAndKindAndSourceId(Source.ALKT, TILLSTAND, "1")).thenReturn(Optional.of(existing));
+		lenient().when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(existing));
 		when(exceptionRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(existing));
 
 		final var changed = service.putException(key, new ReviewExceptionRequest(ExceptionOutcome.MIGRERA_SOM_UTGANGET, "annan", LocalDate.of(2026, 9, 1), null));

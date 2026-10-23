@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.relation.RelationIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemKey;
@@ -37,12 +38,15 @@ class TargetWriter {
 	private final PartyAssetsIntegration partyAssets;
 	private final RelationIntegration relations;
 	private final TargetMapper mapper;
+	private final AssetMapper assetMapper;
 
-	TargetWriter(final SupportManagementIntegration supportManagement, final PartyAssetsIntegration partyAssets, final RelationIntegration relations, final TargetMapper mapper) {
+	TargetWriter(final SupportManagementIntegration supportManagement, final PartyAssetsIntegration partyAssets, final RelationIntegration relations, final TargetMapper mapper,
+		final AssetMapper assetMapper) {
 		this.supportManagement = supportManagement;
 		this.partyAssets = partyAssets;
 		this.relations = relations;
 		this.mapper = mapper;
+		this.assetMapper = assetMapper;
 	}
 
 	/**
@@ -117,15 +121,15 @@ class TargetWriter {
 			.or(() -> lookup.earlierErrand() && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
-			final var wanted = mapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
-			if (expired && found.get().getStatus() == Status.EXPIRED && mapper.toContentUpdate(found.get(), wanted).isEmpty() && Objects.equals(found.get().getPartyId(), wanted.getPartyId())) {
+			final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
+			if (expired && found.get().getStatus() == Status.EXPIRED && assetMapper.toContentUpdate(found.get(), wanted).isEmpty() && Objects.equals(found.get().getPartyId(), wanted.getPartyId())) {
 				unchangeable(found.get(), wanted, words).ifPresent(notes::line);
 				return new Post(found.get().getId(), Status.EXPIRED);
 			}
 			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), words, notes), Status.ACTIVE);
 		}
-		final var wanted = mapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
-		return new Post(partyAssets.createAsset(municipalityId, mapper.toSourceReference(errandId), wanted)
+		final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
+		return new Post(partyAssets.createAsset(municipalityId, assetMapper.toSourceReference(errandId), wanted)
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
 				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes)),
 			Status.ACTIVE);
@@ -238,7 +242,7 @@ class TargetWriter {
 		if (!Objects.equals(asset.getPartyId(), wanted.getPartyId())) {
 			throw new MigrationException("%s %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(words.capitalized(), asset.getId()));
 		}
-		final var content = mapper.toContentUpdate(asset, wanted);
+		final var content = assetMapper.toContentUpdate(asset, wanted);
 		final var statusChanges = from != to;
 		final var contentChanges = content.isPresent() && (from == Status.ACTIVE || statusChanges);
 		if (from == Status.ACTIVE) {
@@ -278,7 +282,7 @@ class TargetWriter {
 		final var updated = partyAssets.getAsset(municipalityId, id)
 			.orElseThrow(() -> new MigrationException("%s %s fanns inte i PartyAssets efter ändringen".formatted(words.capitalized(), id)));
 		// PartyAssets before 6.8 answers a change of the content with 204 and leaves the content as it was
-		if (updated.getStatus() != status || mapper.toContentUpdate(updated, wanted).isPresent()) {
+		if (updated.getStatus() != status || assetMapper.toContentUpdate(updated, wanted).isPresent()) {
 			throw new MigrationException("PartyAssets gjorde inte hela ändringen av %s %s, vilket kräver PartyAssets 6.8 eller senare".formatted(words.definite(), id));
 		}
 	}

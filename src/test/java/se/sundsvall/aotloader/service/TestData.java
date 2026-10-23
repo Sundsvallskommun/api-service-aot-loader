@@ -21,6 +21,7 @@ import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Parameter;
@@ -194,7 +195,7 @@ public final class TestData {
 			.placeName("Restaurang 1")
 			.holder(new Holder(link.inspectionHolder(), "Bolaget AB", null, null, null, null, null, null))
 			.title("Tillsyn – Restaurang 1")
-			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0)))
+			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0), InvestigationTexts.NONE))
 			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
 			.permitLink(link)
 			.build();

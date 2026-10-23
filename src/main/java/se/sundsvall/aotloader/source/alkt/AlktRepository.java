@@ -29,10 +29,14 @@ import se.sundsvall.aotloader.source.SourceDatabases;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 import se.sundsvall.aotloader.support.Texts;
@@ -310,31 +314,14 @@ public class AlktRepository {
 		return new PermitRow(
 			integer(rs, OBJEKT_ID),
 			integer(rs, "GTAgarID"),
-			flag(rs, "Starkol"),
-			flag(rs, "Vin"),
-			flag(rs, "Spritdrycker"),
-			flag(rs, "AJADrycker"),
-			flag(rs, "ALP"),
-			flag(rs, "AretRunt"),
-			text(rs, "ArligPeriodStart"),
-			text(rs, "ArligPeriodSlut"),
-			text(rs, "PeriodStart"),
-			text(rs, "PeriodSlut"),
-			flag(rs, "Pausservering"),
-			flag(rs, "Uteservering"),
-			flag(rs, "Trafikservering"),
-			flag(rs, "Minibar"),
-			flag(rs, "Roomservice"),
-			flag(rs, "Catering"),
-			flag(rs, "Provsmakning"),
-			flag(rs, "Kryddning"),
-			flag(rs, "Gardsforsaljning"),
+			new Drinks(flag(rs, "Starkol"), flag(rs, "Vin"), flag(rs, "Spritdrycker"), flag(rs, "AJADrycker"), flag(rs, "ALP")),
+			new Period(flag(rs, "AretRunt"), text(rs, "ArligPeriodStart"), text(rs, "ArligPeriodSlut"), text(rs, "PeriodStart"), text(rs, "PeriodSlut")),
+			new Scope(flag(rs, "Pausservering"), flag(rs, "Uteservering"), flag(rs, "Trafikservering"), flag(rs, "Minibar"), flag(rs, "Roomservice"), flag(rs, "Catering"), flag(rs, "Provsmakning"),
+				flag(rs, "Kryddning"), flag(rs, "Gardsforsaljning")),
 			flag(rs, "ServeringAllmanhet"),
 			flag(rs, "ServeringSlutetSallskap"),
 			servingTimes,
-			text(rs, "Hogstaantal"),
-			text(rs, "Sittplatser2"),
-			text(rs, "Serveringslokal"),
+			new ServingArea(text(rs, "Hogstaantal"), text(rs, "Sittplatser2"), text(rs, "Serveringslokal")),
 			notes.stream().filter(Objects::nonNull).toList(),
 			date(rs, "Ersatter_Datum"),
 			text(rs, "Ersatter_Diarienr"),
@@ -467,7 +454,7 @@ public class AlktRepository {
 	}
 
 	static EventText toPictureText(final ResultSet rs) throws SQLException {
-		return new EventText(integer(rs, ARENDE_ID), null, new TextRow(dateTime(rs, "BildDatumTid"), null, true, text(rs, "BildText")));
+		return new EventText(integer(rs, ARENDE_ID), null, new TextRow(dateTime(rs, "BildDatumTid"), null, true, text(rs, "BildText"), false, null));
 	}
 
 	/**

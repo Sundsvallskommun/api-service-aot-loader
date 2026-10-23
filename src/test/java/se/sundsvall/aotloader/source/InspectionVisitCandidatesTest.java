@@ -40,7 +40,7 @@ class InspectionVisitCandidatesTest {
 		final LocalDateTime startedAt, final LocalDateTime completedAt) {
 		final var visit = new VisitRow(900, 1, date, endDay, start, end, "04", null, null, null, List.of(), StaffMarks.NONE, null, List.of(), false);
 
-		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of(), null)).isEqualTo(new InvestigationData("Tillsynsbesök", startedAt, completedAt));
+		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of(), null)).isEqualTo(new InvestigationData("Tillsynsbesök", startedAt, completedAt, InvestigationTexts.NONE));
 	}
 
 	@ParameterizedTest
@@ -59,7 +59,7 @@ class InspectionVisitCandidatesTest {
 
 	@Test
 	void theRemarksOfAVisitAreItsMeasures() {
-		final var rows = new InspectionVisitRows(List.of(), Map.of(), Map.of(), Map.of(), Map.of("05", "Servering till minderårig"));
+		final var rows = VisitTestRows.visits(List.of(), Map.of(), Map.of(), Map.of(), Map.of("05", "Servering till minderårig"));
 		final var remarks = List.of(
 			new RemarkRow(900, "05", " Ungdomar i baren ", null),
 			new RemarkRow(900, "77", null, null),
@@ -77,7 +77,7 @@ class InspectionVisitCandidatesTest {
 
 	@Test
 	void theTextsOfTheInvestigationOfAVisitAreItsRoundItsNoteAndItsRemarks() {
-		final var visit = new VisitRow(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
+		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
 
 		assertThat(InspectionVisitCandidates.investigation("Tillsynsbesök", visit, List.of("Anmärkning"), new RoundRow(40, "Krogrunda", null, null, "Med polisen.")).texts())
 			.isEqualTo(InvestigationTexts.of(new Part("Tillsynsomgång", "Krogrunda\nMed polisen."), new Part("Anteckning", "Lugnt i baren."), new Part("Anmärkningar", "Anmärkning")));
@@ -89,7 +89,7 @@ class InspectionVisitCandidatesTest {
 
 	@Test
 	void theContentOfAVisitShowsNoNamesOrRemarks() {
-		final var visit = new VisitRow(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
+		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", " Lugnt i baren. ", null, null);
 		final var content = new InspectionVisitCandidates.VisitContent(visit, "Tillsynsbesök", "14:05", List.of("Anmärkning"), List.of("Tolvan Tolvansson"), List.of("Saknade utbildning"), null);
 
 		assertThat(content).hasToString("VisitContent[visit=VisitRow[tillfalleNr=900], kind=Tillsynsbesök]");

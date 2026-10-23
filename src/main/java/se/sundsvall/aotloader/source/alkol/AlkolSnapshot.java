@@ -5,32 +5,29 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
+import se.sundsvall.aotloader.source.SourceDecision;
+import se.sundsvall.aotloader.source.SourceErrand;
 
 import static java.util.stream.Collectors.toMap;
 
 /**
  * What the migration reads from AlkOL in one go. It holds personal data and is never logged or stored.
  *
- * @param places        the sales places
- * @param permitView    the current tobacco permits of the view FS_GT_Tobak, by FSID
- * @param owners        the owners by AgarID
- * @param errands       the errands
- * @param decisions     the decisions
- * @param events        the events
- * @param applicants    the applicants by SokandeID
- * @param persons       the active persons with significant influence, by AgarID
- * @param decisionTypes the texts of Beslutskoder
- * @param eventTypes    the texts of Händelsetyper
- * @param errandTypes   the texts of Ärendetyper
- * @param categories    the texts of Kategorier
- * @param areas         the texts of Områden
- * @param positions     the texts of PBI_Roller, the positions of the persons
- * @param visits        the inspection visits, with the texts of TillsynsArt and Anmarkningar, and the names of the
- *                      handlers by the number of the user (AnvID)
- * @param userNames     the names of the users by AnvändarKod, the code the decisions name who made them with
+ * @param places     the sales places
+ * @param permitView the current tobacco permits of the view FS_GT_Tobak, by FSID
+ * @param owners     the owners by AgarID
+ * @param errands    the errands
+ * @param decisions  the decisions
+ * @param events     the events
+ * @param applicants the applicants by SokandeID
+ * @param persons    the active persons with significant influence, by AgarID
+ * @param codes      the texts of the code lists
+ * @param visits     the inspection visits, with the texts of TillsynsArt and Anmarkningar, and the names of the
+ *                   handlers by the number of the user (AnvID)
  */
 public record AlkolSnapshot(
 	List<SalesPlaceRow> places,
@@ -41,28 +38,66 @@ public record AlkolSnapshot(
 	List<EventRow> events,
 	Map<Integer, ContactRow> applicants,
 	Map<Integer, List<PersonRow>> persons,
-	Map<String, String> decisionTypes,
-	Map<String, String> eventTypes,
-	Map<String, String> errandTypes,
-	Map<String, String> categories,
-	Map<String, String> areas,
-	Map<String, String> positions,
-	InspectionVisitRows visits,
-	Map<String, String> userNames) {
-
-	/**
-	 * A snapshot without the names of the users by their code.
-	 */
-	public AlkolSnapshot(final List<SalesPlaceRow> places, final Map<Integer, PermitViewRow> permitView, final Map<Integer, ContactRow> owners, final List<ErrandRow> errands,
-		final List<DecisionRow> decisions, final List<EventRow> events, final Map<Integer, ContactRow> applicants, final Map<Integer, List<PersonRow>> persons,
-		final Map<String, String> decisionTypes, final Map<String, String> eventTypes, final Map<String, String> errandTypes, final Map<String, String> categories,
-		final Map<String, String> areas, final Map<String, String> positions, final InspectionVisitRows visits) {
-		this(places, permitView, owners, errands, decisions, events, applicants, persons, decisionTypes, eventTypes, errandTypes, categories, areas, positions, visits, Map.of());
-	}
+	CodeLists codes,
+	InspectionVisitRows visits) {
 
 	@Override
 	public String toString() {
 		return "AlkolSnapshot[places=" + places.size() + "]";
+	}
+
+	/**
+	 * The texts of the code lists of AlkOL, by code. A code a list does not have is its own text.
+	 *
+	 * @param decisionTypes the texts of Beslutskoder
+	 * @param eventTypes    the texts of Händelsetyper
+	 * @param errandTypes   the texts of Ärendetyper
+	 * @param categories    the texts of Kategorier
+	 * @param areas         the texts of Områden
+	 * @param positions     the texts of PBI_Roller, the positions of the persons
+	 * @param userNames     the names of the users by AnvändarKod, the code the decisions name who made them with
+	 */
+	public record CodeLists(
+		Map<String, String> decisionTypes,
+		Map<String, String> eventTypes,
+		Map<String, String> errandTypes,
+		Map<String, String> categories,
+		Map<String, String> areas,
+		Map<String, String> positions,
+		Map<String, String> userNames) {
+
+		public String decisionType(final String code) {
+			return CodeTexts.textOf(decisionTypes, code);
+		}
+
+		public String eventType(final String code) {
+			return CodeTexts.textOf(eventTypes, code);
+		}
+
+		public String errandType(final String code) {
+			return CodeTexts.textOf(errandTypes, code);
+		}
+
+		public String category(final String code) {
+			return CodeTexts.textOf(categories, code);
+		}
+
+		public String area(final String code) {
+			return CodeTexts.textOf(areas, code);
+		}
+
+		public String position(final String code) {
+			return CodeTexts.textOf(positions, code);
+		}
+
+		public String userName(final String code) {
+			return CodeTexts.textOf(userNames, code);
+		}
+
+		@Override
+		public String toString() {
+			return "CodeLists[userNames=" + userNames.size() + "]";
+		}
 	}
 
 	/**
@@ -123,40 +158,18 @@ public record AlkolSnapshot(
 	 *                    text, those that are set
 	 * @param upplagd     the day the errand was registered, UpplagdDatum
 	 */
-	public record ErrandRow(Integer arendeId, Integer fsId, String arendetyp, String diarieNr, LocalDate oppnad, LocalDate avslutad, Integer sokandeId, String noteringar,
-		List<String> handlaggare, LocalDate upplagd) {
+	public record ErrandRow(Integer arendeId, Integer fsId, String arendeTyp, String diarieNr, LocalDate oppnad, LocalDate avslutad, Integer sokandeId, String noteringar,
+		List<String> handlaggare, LocalDate upplagd)
+		implements
+		SourceErrand {
 
 		public ErrandRow {
 			handlaggare = handlaggare == null ? List.of() : List.copyOf(handlaggare);
 		}
 
-		/**
-		 * An errand without the day it was registered.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer fsId, final String arendetyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId, final String noteringar, final List<String> handlaggare) {
-			this(arendeId, fsId, arendetyp, diarieNr, oppnad, avslutad, sokandeId, noteringar, handlaggare, null);
-		}
-
-		/**
-		 * An errand without handlers.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer fsId, final String arendetyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId, final String noteringar) {
-			this(arendeId, fsId, arendetyp, diarieNr, oppnad, avslutad, sokandeId, noteringar, List.of());
-		}
-
-		/**
-		 * An errand without notes.
-		 */
-		public ErrandRow(final Integer arendeId, final Integer fsId, final String arendetyp, final String diarieNr, final LocalDate oppnad, final LocalDate avslutad,
-			final Integer sokandeId) {
-			this(arendeId, fsId, arendetyp, diarieNr, oppnad, avslutad, sokandeId, null);
-		}
-
 		@Override
 		public String toString() {
-			return "ErrandRow[arendeId=" + arendeId + ", fsId=" + fsId + ", arendetyp=" + arendetyp + "]";
+			return "ErrandRow[arendeId=" + arendeId + ", fsId=" + fsId + ", arendeTyp=" + arendeTyp + "]";
 		}
 	}
 
@@ -168,34 +181,13 @@ public record AlkolSnapshot(
 	 * @param beslutsfattare the code of who made the decision, BeslutsFattare, null when blank
 	 */
 	public record DecisionRow(Integer beslutsId, Integer arendeId, String beslutsTyp, LocalDateTime beslutad, LocalDate giltigtFrom, String mall, String worddokument,
-		String bifogadfil, String beslutsText, String beslutsfattare) {
-
-		/**
-		 * A decision without a decision maker.
-		 */
-		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtFrom, final String mall,
-			final String worddokument, final String bifogadfil, final String beslutsText) {
-			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtFrom, mall, worddokument, bifogadfil, beslutsText, null);
-		}
-
-		/**
-		 * A decision without a text.
-		 */
-		public DecisionRow(final Integer beslutsId, final Integer arendeId, final String beslutsTyp, final LocalDateTime beslutad, final LocalDate giltigtFrom, final String mall,
-			final String worddokument, final String bifogadfil) {
-			this(beslutsId, arendeId, beslutsTyp, beslutad, giltigtFrom, mall, worddokument, bifogadfil, null);
-		}
+		String bifogadfil, String beslutsText, String beslutsfattare)
+		implements
+		SourceDecision {
 
 		@Override
 		public String toString() {
 			return "DecisionRow[beslutsId=" + beslutsId + ", arendeId=" + arendeId + ", beslutsTyp=" + beslutsTyp + "]";
-		}
-
-		/**
-		 * @return the date the decision was made, null when unknown
-		 */
-		public LocalDate beslutsDatum() {
-			return beslutad == null ? null : beslutad.toLocalDate();
 		}
 	}
 
@@ -208,22 +200,6 @@ public record AlkolSnapshot(
 	 */
 	public record EventRow(Integer handelseId, Integer fsId, Integer arendeId, String handelseTyp, LocalDateTime tidpunkt, String diarieNr, String mall, String worddokument,
 		String bifogadfil, String text, boolean confidential) {
-
-		/**
-		 * An event that is not marked as confidential.
-		 */
-		public EventRow(final Integer handelseId, final Integer fsId, final Integer arendeId, final String handelseTyp, final LocalDateTime tidpunkt, final String diarieNr,
-			final String mall, final String worddokument, final String bifogadfil, final String text) {
-			this(handelseId, fsId, arendeId, handelseTyp, tidpunkt, diarieNr, mall, worddokument, bifogadfil, text, false);
-		}
-
-		/**
-		 * An event without a text.
-		 */
-		public EventRow(final Integer handelseId, final Integer fsId, final Integer arendeId, final String handelseTyp, final LocalDateTime tidpunkt, final String diarieNr,
-			final String mall, final String worddokument, final String bifogadfil) {
-			this(handelseId, fsId, arendeId, handelseTyp, tidpunkt, diarieNr, mall, worddokument, bifogadfil, null);
-		}
 
 		@Override
 		public String toString() {

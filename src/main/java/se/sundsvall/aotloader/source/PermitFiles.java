@@ -1,10 +1,12 @@
 package se.sundsvall.aotloader.source;
 
+import java.util.Collection;
 import java.util.Set;
 import java.util.regex.Pattern;
 import se.sundsvall.aotloader.support.FileNames;
 
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DECISION;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
@@ -57,13 +59,23 @@ public final class PermitFiles {
 	 *
 	 * @param templates the templates of the documents that are permit decisions
 	 */
-	public static void markPermitDecision(final FileList files, final String template, final String document, final String attachment, final Set<String> templates) {
-		if (isTemplate(template, templates)) {
-			files.add(document, DOCUMENTS, ASSET_CATEGORY_DECISION);
+	public static void markPermitDecision(final FileList files, final SourceDecision decision, final Set<String> templates) {
+		if (isTemplate(decision.mall(), templates)) {
+			files.add(decision.worddokument(), DOCUMENTS, ASSET_CATEGORY_DECISION);
 		}
-		if (isDecision(attachment)) {
-			files.add(attachment, ATTACHMENTS, ASSET_CATEGORY_DECISION);
+		if (isDecision(decision.bifogadfil())) {
+			files.add(decision.bifogadfil(), ATTACHMENTS, ASSET_CATEGORY_DECISION);
 		}
+	}
+
+	/**
+	 * Marks the attachments of the decisions whose names tell they are drawings for the post, in the category of drawings.
+	 */
+	public static void markDrawings(final FileList files, final Collection<? extends SourceDecision> decisions) {
+		decisions.stream()
+			.map(SourceDecision::bifogadfil)
+			.filter(PermitFiles::isDrawing)
+			.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 	}
 
 	/**

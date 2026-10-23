@@ -59,7 +59,7 @@ public class ReviewExceptionService {
 		if (!(key.kind() == Kind.ANMALAN ? NOTIFICATION_ID : ITEM_ID).matcher(key.sourceId()).matches()) {
 			throw Problem.valueOf(BAD_REQUEST, "%s är inte ett id som %s ger ett ärende av sorten %s".formatted(key.sourceId(), key.source().getDisplayName(), key.kind()));
 		}
-		final var entity = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId()).orElseGet(() -> {
+		final var entity = exceptionRepository.findByKey(key).orElseGet(() -> {
 			final var created = new ReviewExceptionEntity();
 			created.setSource(key.source());
 			created.setKind(key.kind());
@@ -78,7 +78,7 @@ public class ReviewExceptionService {
 	 * @throws se.sundsvall.dept44.problem.ThrowableProblem 404 when the item is not in the exception list
 	 */
 	public void deleteException(final ItemKey key) {
-		final var entity = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId())
+		final var entity = exceptionRepository.findByKey(key)
 			.orElseThrow(() -> Problem.valueOf(NOT_FOUND, "Ärendet %s finns inte i undantagslistan".formatted(key)));
 		exceptionRepository.delete(entity);
 	}

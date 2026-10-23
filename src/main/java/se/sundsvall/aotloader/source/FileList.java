@@ -11,11 +11,14 @@ import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
+import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.stream.Collectors.toUnmodifiableMap;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
+import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 
 /**
  * Collects the file references of an item, each file once, in the order they are found, and marks the names that
@@ -53,6 +56,14 @@ public final class FileList {
 			details.merge(keyOf(trimmed, folder), fileDetails, FileDetails::orElse);
 		}
 		return this;
+	}
+
+	/**
+	 * Adds the document and the attachment of the decision, each with its purpose and the time of the decision.
+	 */
+	public FileList addDecisionFiles(final Source source, final SourceDecision decision) {
+		return add(decision.worddokument(), DOCUMENTS, FilePurposes.ofGenerated(source, decision.mall(), null, decision.beslutad()))
+			.add(decision.bifogadfil(), ATTACHMENTS, FilePurposes.detailsOf(source, ATTACHMENTS, decision.bifogadfil(), decision.beslutad()));
 	}
 
 	/**

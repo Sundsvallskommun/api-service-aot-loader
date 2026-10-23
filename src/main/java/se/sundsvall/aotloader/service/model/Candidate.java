@@ -22,15 +22,9 @@ import static java.util.Objects.requireNonNull;
  * @param holder        the permit holder, null when the source has none
  * @param place         the serving place or sales place, null when the source has none
  * @param persons       the persons with significant influence
- * @param title         the title of the errand
- * @param description   the description of the errand
- * @param labelPaths    the resource paths of the labels the errand gets, besides the label for migrated errands
- * @param externalTags  the external tags of the errand, besides the one that marks it as migrated
- * @param parameters    the parameters of the errand
+ * @param errand        what the errand says
  * @param asset         the post in PartyAssets, null for an errand without one
  * @param files         the files that follow the errand
- * @param assetFiles    the files that also go on the post in PartyAssets, each one of the files of the errand
- * @param fileDetails   the purpose and date of the errand's files that have either, by file
  * @param investigation the investigation of an inspection errand, null for an errand without one
  * @param permitLink    for an inspection errand, what decides the relation to the permit errand, otherwise null
  * @param measures      the measures of an inspection visit, its remarks (decision 57)
@@ -44,15 +38,9 @@ public record Candidate(
 	Holder holder,
 	Place place,
 	List<Person> persons,
-	String title,
-	String description,
-	List<String> labelPaths,
-	Map<String, String> externalTags,
-	List<Parameter> parameters,
+	ErrandContent errand,
 	AssetData asset,
-	List<FileReference> files,
-	List<AssetFile> assetFiles,
-	Map<FileReference, FileDetails> fileDetails,
+	CandidateFiles files,
 	InvestigationData investigation,
 	PermitLink permitLink,
 	List<MeasureData> measures) {
@@ -62,28 +50,16 @@ public record Candidate(
 		requireNonNull(type, "type");
 		ruleHits = ruleHits == null ? List.of() : List.copyOf(ruleHits);
 		persons = persons == null ? List.of() : List.copyOf(persons);
-		labelPaths = labelPaths == null ? List.of() : List.copyOf(labelPaths);
-		externalTags = externalTags == null ? Map.of() : unmodifiableMap(new LinkedHashMap<>(externalTags));
-		parameters = parameters == null ? List.of() : List.copyOf(parameters);
-		files = files == null ? List.of() : List.copyOf(files);
-		assetFiles = assetFiles == null ? List.of() : List.copyOf(assetFiles);
-		fileDetails = fileDetails == null ? Map.of() : Map.copyOf(fileDetails);
+		errand = errand == null ? ErrandContent.NONE : errand;
+		files = files == null ? CandidateFiles.NONE : files;
 		measures = measures == null ? List.of() : List.copyOf(measures);
-	}
-
-	/**
-	 * @return the purpose and date of the file, {@link FileDetails#NONE} when it has neither
-	 */
-	public FileDetails detailsOf(final FileReference file) {
-		return fileDetails.getOrDefault(file, FileDetails.NONE);
 	}
 
 	/**
 	 * @return the candidate with another post in PartyAssets
 	 */
 	public Candidate withAsset(final AssetData value) {
-		return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, value, files, assetFiles, fileDetails,
-			investigation, permitLink, measures);
+		return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, errand, value, files, investigation, permitLink, measures);
 	}
 
 	public static Builder builder(final ItemKey key, final ErrandType type) {
@@ -93,6 +69,63 @@ public record Candidate(
 	@Override
 	public String toString() {
 		return "Candidate[key=" + key + ", type=" + type + "]";
+	}
+
+	/**
+	 * What the errand of a candidate says.
+	 *
+	 * @param title        the title of the errand
+	 * @param description  the description of the errand
+	 * @param labelPaths   the resource paths of the labels the errand gets, besides the label for migrated errands
+	 * @param externalTags the external tags of the errand, besides the one that marks it as migrated
+	 * @param parameters   the parameters of the errand
+	 */
+	public record ErrandContent(String title, String description, List<String> labelPaths, Map<String, String> externalTags, List<Parameter> parameters) {
+
+		/** An errand that says nothing. */
+		public static final ErrandContent NONE = new ErrandContent(null, null, List.of(), Map.of(), List.of());
+
+		public ErrandContent {
+			labelPaths = labelPaths == null ? List.of() : List.copyOf(labelPaths);
+			externalTags = externalTags == null ? Map.of() : unmodifiableMap(new LinkedHashMap<>(externalTags));
+			parameters = parameters == null ? List.of() : List.copyOf(parameters);
+		}
+
+		@Override
+		public String toString() {
+			return "ErrandContent[labelPaths=" + labelPaths + "]";
+		}
+	}
+
+	/**
+	 * The files of a candidate.
+	 *
+	 * @param references the files that follow the errand
+	 * @param onPost     the files that also go on the post in PartyAssets, each one of the files of the errand
+	 * @param details    the purpose and date of the errand's files that have either, by file
+	 */
+	public record CandidateFiles(List<FileReference> references, List<AssetFile> onPost, Map<FileReference, FileDetails> details) {
+
+		/** No files. */
+		public static final CandidateFiles NONE = new CandidateFiles(List.of(), List.of(), Map.of());
+
+		public CandidateFiles {
+			references = references == null ? List.of() : List.copyOf(references);
+			onPost = onPost == null ? List.of() : List.copyOf(onPost);
+			details = details == null ? Map.of() : Map.copyOf(details);
+		}
+
+		@Override
+		public String toString() {
+			return "CandidateFiles[references=" + references.size() + ", onPost=" + onPost.size() + "]";
+		}
+
+		/**
+		 * @return the purpose and date of the file, {@link FileDetails#NONE} when it has neither
+		 */
+		public FileDetails detailsOf(final FileReference file) {
+			return details.getOrDefault(file, FileDetails.NONE);
+		}
 	}
 
 	/**
@@ -236,8 +269,8 @@ public record Candidate(
 		}
 
 		public Candidate build() {
-			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, title, description, labelPaths, externalTags, parameters, asset, files, assetFiles, fileDetails, investigation,
-				permitLink, measures);
+			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, new ErrandContent(title, description, labelPaths, externalTags, parameters), asset,
+				new CandidateFiles(files, assetFiles, fileDetails), investigation, permitLink, measures);
 		}
 	}
 }

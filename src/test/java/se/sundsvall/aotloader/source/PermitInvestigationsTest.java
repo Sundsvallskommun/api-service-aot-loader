@@ -33,6 +33,6 @@ class PermitInvestigationsTest {
 
 	@Test
 	void aPermitWithoutErrandsOrIssueDateHasNoDates() {
-		assertThat(PermitInvestigations.of("Tillstånd", List.of(), List.of(), null, null)).isEqualTo(new InvestigationData("Tillstånd", null, null));
+		assertThat(PermitInvestigations.of("Tillstånd", List.of(), List.of(), null, null)).isEqualTo(new InvestigationData("Tillstånd", null, null, InvestigationTexts.NONE));
 	}
 }

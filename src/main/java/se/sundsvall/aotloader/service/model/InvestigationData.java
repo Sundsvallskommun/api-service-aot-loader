@@ -18,10 +18,4 @@ public record InvestigationData(String title, LocalDateTime startedAt, LocalDate
 		texts = texts == null ? InvestigationTexts.NONE : texts;
 	}
 
-	/**
-	 * An investigation without texts.
-	 */
-	public InvestigationData(final String title, final LocalDateTime startedAt, final LocalDateTime completedAt) {
-		this(title, startedAt, completedAt, InvestigationTexts.NONE);
-	}
 }

@@ -316,7 +316,7 @@ class MigrationServiceTest {
 		item.setSourceId("1-FOLKOL");
 		item.setStatus(ItemStatus.KLAR);
 		when(itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(item));
-		when(itemRepository.findBySourceAndKindAndSourceId(Source.ALKOL, ANMALAN, "1-FOLKOL")).thenReturn(Optional.of(item));
+		when(itemRepository.findByKey(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL"))).thenReturn(Optional.of(item));
 
 		assertThat(service.getItems(MUNICIPALITY_ID, null, null, null)).hasSize(1);
 		assertThat(service.getItems(MUNICIPALITY_ID, Source.ALKOL, ANMALAN, ItemStatus.KLAR)).hasSize(1);

@@ -1,8 +1,5 @@
 package se.sundsvall.aotloader.service;
 
-import generated.se.sundsvall.partyassets.Asset;
-import generated.se.sundsvall.partyassets.AssetAttachment;
-import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Investigation;
@@ -28,11 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
-import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
-import se.sundsvall.aotloader.service.FileUploader.AttachedFile;
-import se.sundsvall.aotloader.service.FileUploader.FileProblem;
-import se.sundsvall.aotloader.service.FileUploader.FileProblems;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -40,6 +33,7 @@ import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.InvestigationData;
+import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -70,15 +64,11 @@ class FileUploaderTest {
 
 	private static final String MUNICIPALITY_ID = "2281";
 	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
-	private static final String ASSET_ID = "22222222-2222-2222-2222-222222222222";
 	private static final String ATTACHMENT_ID = "33333333-3333-3333-3333-333333333333";
 	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T10:00:00Z"), SWEDISH_TIME);
 
 	@Mock
 	private SupportManagementIntegration supportManagement;
-
-	@Mock
-	private PartyAssetsIntegration partyAssets;
 
 	@TempDir
 	private Path documents;
@@ -92,7 +82,7 @@ class FileUploaderTest {
 	@BeforeEach
 	void setUp() throws IOException {
 		properties = TestData.properties(documents.toString(), attachments.toString());
-		uploader = new FileUploader(supportManagement, partyAssets, properties, CLOCK);
+		uploader = new FileUploader(supportManagement, properties, CLOCK);
 		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
 		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
 	}
@@ -170,24 +160,6 @@ class FileUploaderTest {
 	}
 
 	@Test
-	void aFileOfThePostThatCannotBeReadFailsTheStep() {
-		final var gone = new FileReference("borta.pdf", ATTACHMENTS);
-		final var readable = new FileReference("ansokan.pdf", ATTACHMENTS);
-		final var fileArea = mock(FileArea.class);
-		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.UNREADABLE, "borta.pdf", attachments.resolve("borta.pdf"), 0));
-		when(fileArea.find(readable)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "ansokan.pdf", attachments.resolve("ansokan.pdf"), 6));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
-		final var candidate = withAssetFiles(new AssetFile(gone, "Ritning"), new AssetFile(readable, "Beslut"));
-
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(fileArea), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
-			.isInstanceOf(MigrationException.class)
-			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
-
-		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), "Beslut");
-	}
-
-	@Test
 	void theMaterialOfTheInvestigationIsLinkedToItOnce() {
 		final var candidate = withInvestigation(Map.of(
 			new FileReference("Remissvar.pdf", ATTACHMENTS), new FileDetails(FilePurposes.POLICE_RESPONSE, null, true),
@@ -238,42 +210,6 @@ class FileUploaderTest {
 	}
 
 	@Test
-	void aLegalBasisDocumentThatCannotBeReadFailsTheStepRatherThanLeavingThePostWithoutIt() throws IOException {
-		Files.writeString(documents.resolve("bevis.rtf"), "{\\rtf1 8 kap. 2 \\'a7 alkohollagen (2010:1622)}");
-		final var unreadable = new FileReference("beslut.rtf", DOCUMENTS);
-		final var gone = new FileReference("borta.rtf", DOCUMENTS);
-		final var certificate = new FileReference("bevis.rtf", DOCUMENTS);
-		final var fileArea = mock(FileArea.class);
-		when(fileArea.find(unreadable)).thenReturn(new FileArea.Lookup(LookupResult.UNREADABLE, "beslut.rtf", documents.resolve("beslut.rtf"), 0));
-		// Found before the file was removed
-		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "borta.rtf", documents.resolve("borta.rtf"), 6));
-		when(fileArea.find(certificate)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "bevis.rtf", documents.resolve("bevis.rtf"), 50));
-		final var notes = new ReportNotes();
-
-		assertThatThrownBy(() -> uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", unreadable, certificate), context(fileArea), notes))
-			.isInstanceOf(MigrationException.class)
-			.hasMessage("Tillståndets beslut eller bevis på filarean för AlkT gick inte att läsa, och lagrummet läses i nästa körning");
-		assertThatThrownBy(() -> uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", gone, certificate), context(fileArea), notes))
-			.isInstanceOf(MigrationException.class);
-		// A document after the one that states the legal basis is not read
-		assertThat(uploader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", certificate, unreadable), context(fileArea), notes).asset().parameters())
-			.containsEntry("legalBasis", "8 kap. 2 § alkohollagen (2010:1622)");
-	}
-
-	@Test
-	void aDryRunTellsThatALegalBasisDocumentCannotBeRead() {
-		final var unreadable = new FileReference("beslut.rtf", DOCUMENTS);
-		final var fileArea = mock(FileArea.class);
-		when(fileArea.find(unreadable)).thenReturn(new FileArea.Lookup(LookupResult.DIRECTORY_UNAVAILABLE, "beslut.rtf", documents.resolve("beslut.rtf"), 0));
-		final var candidate = TestData.permitWithLegalBasisDocuments("1", unreadable);
-		final var dryRun = new RunContext("run-id", MUNICIPALITY_ID, true, check(), null, new AtomicBoolean(), _ -> fileArea);
-		final var notes = new ReportNotes();
-
-		assertThat(uploader.withLegalBasis(candidate, dryRun, notes)).isSameAs(candidate);
-		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Lagrum: tillståndets beslut eller bevis gick inte att läsa");
-	}
-
-	@Test
 	void aDryRunChecksTheFilesWithoutUploading() throws IOException {
 		Files.delete(attachments.resolve("ansokan.pdf"));
 		final var notes = new ReportNotes();
@@ -314,47 +250,6 @@ class FileUploaderTest {
 
 		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (ansokan.pdf)");
 		verifyNoInteractions(supportManagement);
-	}
-
-	@Test
-	void theFilesOfThePostGoThereInTheirCategoryOnceAndThoseTheErrandStepListsAreSkipped() throws IOException {
-		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
-		final var candidate = withAssetFiles(
-			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
-			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Beslut"),
-			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
-			new AssetFile(new FileReference("saknas.pdf", ATTACHMENTS), "Ritning"),
-			new AssetFile(new FileReference("delad.pdf", ATTACHMENTS, true), "Beslut"));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of(new AssetAttachment().fileName("ANSOKAN.pdf").fileSize("bilaga".length())));
-		when(partyAssets.createAttachment(MUNICIPALITY_ID, ASSET_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), "Tillståndsbevis")).thenReturn(true);
-		when(partyAssets.createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "Ritning")).thenReturn(false);
-		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.ACTIVE)));
-		final var notes = new ReportNotes();
-
-		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
-
-		verify(partyAssets, times(2)).createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString());
-		final var result = notes.result(Outcome.MIGRERAD, null);
-		assertThat(result.rules()).containsExactly("G14");
-		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets har 2 av 5 filer: Tillståndsbevis 1, Beslut 2, Ritning 2; "
-			+ "G14 1 fil togs inte emot av PartyAssets och ligger bara på ärendet (ritning.pdf)");
-		verifyNoInteractions(supportManagement);
-	}
-
-	@Test
-	void aFileWithoutACategoryGoesOnThePostWithoutOne() {
-		final var candidate = withAssetFiles(
-			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), null),
-			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), null));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), isNull())).thenReturn(true);
-		final var notes = new ReportNotes();
-
-		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
-
-		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "beslut.rtf", "dokument".getBytes(StandardCharsets.UTF_8), null);
-		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
-		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 2 av 2 filer: utan kategori 2");
 	}
 
 	@Test
@@ -407,95 +302,17 @@ class FileUploaderTest {
 	}
 
 	@Test
-	void aFileWithAPurposeGetsTheNameShownOfThePurposeAsItsCategoryOnThePost() throws IOException {
-		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
-		final var drawing = new FileReference("ritning.pdf", ATTACHMENTS);
-		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
-			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
-			.files(List.of(drawing))
-			.assetFiles(List.of(new AssetFile(drawing, "Ritning")))
-			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
-			.build();
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
-		final var notes = new ReportNotes();
-
-		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
-
-		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "serving_area_drawing");
-		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 1 av 1 filer: serving_area_drawing 1");
-	}
-
-	@Test
-	void theReportOfANotificationSpeaksOfTheNotification() {
+	void aDryRunOfANotificationSpeaksOfTheNotification() {
 		final var reference = new FileReference("ansokan.pdf", ATTACHMENTS);
 		final var notification = Candidate.builder(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
 			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, Map.of()))
 			.files(List.of(reference), List.of(new AssetFile(reference, null)), Map.of())
 			.build();
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), isNull())).thenReturn(false);
-		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
 		final var dryRun = new ReportNotes();
 
 		uploader.check(notification, context(), dryRun);
 
 		assertThat(dryRun.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till anmälan i PartyAssets: utan kategori 1");
-		assertThatThrownBy(() -> uploader.uploadToAsset(notification, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
-			.isInstanceOf(MigrationException.class)
-			.hasMessage("Anmälan " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
-	}
-
-	@Test
-	void aFileRefusedSinceThePostIsNoLongerActiveFailsTheStep() {
-		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(false);
-		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
-
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
-			.isInstanceOf(MigrationException.class)
-			.hasMessage("Tillståndet " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
-	}
-
-	@Test
-	void theFilesMissingOnThePostAreThoseToBeUploadedThatAreNotThere() throws IOException {
-		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
-		final var candidate = withAssetFiles(
-			new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"),
-			new AssetFile(new FileReference("ansokan.pdf", ATTACHMENTS), "Beslut"),
-			new AssetFile(new FileReference("ritning.pdf", ATTACHMENTS), "Ritning"),
-			new AssetFile(new FileReference("saknas.pdf", ATTACHMENTS), "Ritning"),
-			new AssetFile(new FileReference("delad.pdf", ATTACHMENTS, true), "Beslut"));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of(
-			new AssetAttachment().fileName("beslut.rtf").fileSize("dokument".length()),
-			new AssetAttachment().fileName("ansokan.pdf").fileSize(1)));
-
-		assertThat(uploader.missingOnAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID)).as("ansokan.pdf has another size, ritning.pdf is not there").isEqualTo(2);
-		assertThat(uploader.missingOnAsset(TestData.permit("1"), context(), MUNICIPALITY_ID, ASSET_ID)).isZero();
-		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
-	}
-
-	@Test
-	void aPermitWithoutFilesForThePostCallsNothing() {
-		final var notes = new ReportNotes();
-
-		uploader.uploadToAsset(TestData.permit("1"), context(), MUNICIPALITY_ID, ASSET_ID, notes);
-
-		verifyNoInteractions(partyAssets);
-		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
-	}
-
-	@Test
-	void aFileAreaThatCannotBeReadStopsTheFilesOfThePost() {
-		properties = TestData.properties(documents.resolve("finns-inte").toString(), attachments.toString());
-		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
-		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
-
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
-			.isInstanceOf(MigrationException.class)
-			.hasMessage("Filarean för AlkT gick inte att läsa");
-		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
 	}
 
 	@Test
@@ -508,99 +325,12 @@ class FileUploaderTest {
 			new AssetFile(new FileReference("anmalan.pdf", ATTACHMENTS), null)), context(), notes);
 
 		assertThat(notes.result(Outcome.SKULLE_MIGRERAS, null).detail()).isEqualTo("Till tillståndet i PartyAssets: Tillståndsbevis 1, Ritning 1, utan kategori 1");
-		verifyNoInteractions(supportManagement, partyAssets);
-	}
-
-	@Test
-	void attachedFiles() {
-		final var file = new AttachedFile("Beslut.rtf", "ABC", 3);
-
-		assertThat(file.isSameAs(new AttachedFile("beslut.RTF", "abc", 99))).isTrue();
-		assertThat(file.isSameAs(new AttachedFile("beslut.rtf", "abd", 3))).isFalse();
-		assertThat(file.isSameAs(new AttachedFile("annan.rtf", "abc", 3))).isFalse();
-		assertThat(new AttachedFile("beslut.rtf", null, 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isTrue();
-		assertThat(new AttachedFile("beslut.rtf", null, 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 4))).isFalse();
-		assertThat(new AttachedFile("beslut.rtf", null, null).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
-		assertThat(new AttachedFile(null, "abc", 3).isSameAs(new AttachedFile("beslut.rtf", "abc", 3))).isFalse();
-		assertThat(AttachedFile.of(new ErrandAttachment().fileName("a.pdf").hash("h").fileSize(1))).isEqualTo(new AttachedFile("a.pdf", "h", 1));
-		assertThat(AttachedFile.of(new AssetAttachment().fileName("a.pdf").fileSize(1))).isEqualTo(new AttachedFile("a.pdf", null, 1));
+		verifyNoInteractions(supportManagement);
 	}
 
 	@Test
 	void sha256() {
 		assertThat(FileUploader.sha256("abc".getBytes(StandardCharsets.UTF_8))).isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-	}
-
-	@Test
-	void everyLookupResultButFoundIsAProblem() {
-		Arrays.stream(LookupResult.values())
-			.filter(result -> result != LookupResult.FOUND)
-			.forEach(result -> assertThat(FileProblem.of(result).name()).isEqualTo(result.name()));
-		assertThatThrownBy(() -> FileProblem.of(LookupResult.FOUND)).isInstanceOf(IllegalArgumentException.class);
-	}
-
-	@Test
-	void fileProblems() {
-		final var single = new FileProblems();
-		final var several = new FileProblems();
-		Arrays.stream(FileProblem.values()).forEach(problem -> {
-			single.add(problem, "en.pdf");
-			several.add(problem, "ett.pdf");
-			several.add(problem, "två.pdf");
-		});
-		final var singleNotes = new ReportNotes();
-		final var severalNotes = new ReportNotes();
-
-		single.report(singleNotes, "50 MB");
-		several.report(severalNotes, "50 MB");
-
-		assertThat(singleNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
-			"G14 1 fil saknas på filarean (en.pdf)",
-			"G14 1 fil är större än 50 MB och laddas inte upp (en.pdf)",
-			"1 länk hoppas över (en.pdf)",
-			"G14 1 filreferens har ett ogiltigt namn (en.pdf)",
-			"G14 1 fil gick inte att läsa (en.pdf)",
-			"G14 1 fil kunde inte kontrolleras, filarean gick inte att läsa (en.pdf)",
-			"G14 1 fil togs inte emot av SupportManagement (en.pdf)",
-			"G14 1 fil togs inte emot av PartyAssets och ligger bara på ärendet (en.pdf)",
-			"G14 1 fil har ett namn som också används på ett annat ställe och laddas inte upp (en.pdf)"));
-		assertThat(severalNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo(String.join("; ",
-			"G14 2 filer saknas på filarean (ett.pdf, två.pdf)",
-			"G14 2 filer är större än 50 MB och laddas inte upp (ett.pdf, två.pdf)",
-			"2 länkar hoppas över (ett.pdf, två.pdf)",
-			"G14 2 filreferenser har ett ogiltigt namn (ett.pdf, två.pdf)",
-			"G14 2 filer gick inte att läsa (ett.pdf, två.pdf)",
-			"G14 2 filer kunde inte kontrolleras, filarean gick inte att läsa (ett.pdf, två.pdf)",
-			"G14 2 filer togs inte emot av SupportManagement (ett.pdf, två.pdf)",
-			"G14 2 filer togs inte emot av PartyAssets och ligger bara på ärendet (ett.pdf, två.pdf)",
-			"G14 2 filer har namn som också används på andra ställen och laddas inte upp (ett.pdf, två.pdf)"));
-	}
-
-	@Test
-	void fileProblemsListAtMostTwentyNamesWithNumbersMaskedAndLinksAloneAreNoRuleHit() {
-		final var many = new FileProblems();
-		for (var i = 1; i <= 22; i++) {
-			many.add(FileProblem.MISSING, "fil" + i + ".pdf");
-		}
-		final var masked = new FileProblems();
-		masked.add(FileProblem.MISSING, "Intyg 198001011234.pdf");
-		final var links = new FileProblems();
-		links.add(FileProblem.LINK, "a.url");
-		final var manyNotes = new ReportNotes();
-		final var maskedNotes = new ReportNotes();
-		final var linkNotes = new ReportNotes();
-		final var noNotes = new ReportNotes();
-
-		many.report(manyNotes, "50 MB");
-		masked.report(maskedNotes, "50 MB");
-		links.report(linkNotes, "50 MB");
-		new FileProblems().report(noNotes, "50 MB");
-
-		assertThat(manyNotes.result(Outcome.MIGRERAD, null).detail()).startsWith("G14 22 filer saknas på filarean (fil1.pdf, ").endsWith("fil20.pdf och 2 till)");
-		assertThat(maskedNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("G14 1 fil saknas på filarean (Intyg [nummer].pdf)");
-		assertThat(linkNotes.result(Outcome.MIGRERAD, null).rules()).isEmpty();
-		assertThat(linkNotes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("1 länk hoppas över (a.url)");
-		assertThat(noNotes.result(Outcome.MIGRERAD, null)).isEqualTo(new ItemResult(Outcome.MIGRERAD, List.of(), null, null));
 	}
 
 	private static Candidate withFiles(final FileReference... files) {
@@ -635,7 +365,7 @@ class FileUploaderTest {
 		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
 			.files(List.copyOf(details.keySet()))
 			.fileDetails(details)
-			.investigation(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0)))
+			.investigation(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.NONE))
 			.build();
 	}
 

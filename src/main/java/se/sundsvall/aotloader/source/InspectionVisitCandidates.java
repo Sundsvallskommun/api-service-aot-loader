@@ -27,6 +27,7 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.VisitRow;
+import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -113,6 +114,19 @@ public final class InspectionVisitCandidates {
 			.labelPaths(settings.labels())
 			.parameters(parameters(content))
 			.permitLink(new PermitLink(permit, null, null, visit.datum()));
+	}
+
+	/**
+	 * Starts the candidate of a visit as {@link #builder(VisitRow, InspectionVisitRows, Place, PlacePermit)} does, with
+	 * the files of the visit, each with its purpose and the day of the visit.
+	 *
+	 * @param  sharedFileNames the file names of the source that more than one place refers to
+	 * @return                 the builder of the candidate
+	 */
+	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final SharedFileNames sharedFileNames) {
+		final var files = new FileList(sharedFileNames);
+		rows.forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.ofVisit(type.getSource(), folder, name, SourceValues.startOfDay(visit.datum()))));
+		return builder(visit, rows, place, permit).files(files.build(), files.assetFiles(), files.details());
 	}
 
 	private String description(final String name, final VisitContent content) {

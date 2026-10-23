@@ -31,6 +31,6 @@ class InspectionCandidatesTest {
 		final LocalDateTime lastActivity, final LocalDateTime startedAt, final LocalDateTime completedAt) {
 		final var errand = new InspectionErrand(ALKT, 700, "07", "Tillsyn", null, opened, closed, List.of(), registered, lastActivity);
 
-		assertThat(InspectionCandidates.investigation("Tillsyn", errand, InvestigationTexts.NONE)).isEqualTo(new InvestigationData("Tillsyn", startedAt, completedAt));
+		assertThat(InspectionCandidates.investigation("Tillsyn", errand, InvestigationTexts.NONE)).isEqualTo(new InvestigationData("Tillsyn", startedAt, completedAt, InvestigationTexts.NONE));
 	}
 }

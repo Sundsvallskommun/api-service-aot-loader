@@ -70,6 +70,15 @@ public final class Journal {
 	}
 
 	/**
+	 * @param  type  the text of the decision type
+	 * @param  maker the name or code of who made the decision, null when unknown
+	 * @return       the decision as an entry, headed by its type and who made it, as {@link #decisionHeading} gives them
+	 */
+	public static Entry decisionEntry(final SourceDecision decision, final String type, final String maker) {
+		return new Entry(decision.beslutad(), decisionHeading(type, maker), decision.beslutsText());
+	}
+
+	/**
 	 * @return the entries as lines in order of time, an entry without a time first; null when there are none
 	 */
 	public static String text(final Collection<Entry> entries) {

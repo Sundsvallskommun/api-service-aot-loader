@@ -14,10 +14,14 @@ import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 
@@ -287,8 +291,9 @@ final class AlktTestData {
 			while (servingTimes.size() < 8) {
 				servingTimes.add(new ServingTime(null, null));
 			}
-			return new PermitRow(objektId, gtAgarId, starkol, vin, sprit, aja, alp, aretRunt, arligStart, arligSlut, periodStart, periodSlut, false, uteservering, false, false, false, catering, provsmakning, false,
-				gardsforsaljning, servingPublic, servingPrivate, servingTimes, "200", "80", "Matsal", List.of("En notering"), LocalDate.of(2015, 1, 1), "SN 2015-1", issued, diaryNumber, gtRestaurantNumber, beslutsId);
+			return new PermitRow(objektId, gtAgarId, new Drinks(starkol, vin, sprit, aja, alp), new Period(aretRunt, arligStart, arligSlut, periodStart, periodSlut),
+				new Scope(false, uteservering, false, false, false, catering, provsmakning, false, gardsforsaljning), servingPublic, servingPrivate, servingTimes, new ServingArea("200", "80", "Matsal"),
+				List.of("En notering"), LocalDate.of(2015, 1, 1), "SN 2015-1", issued, diaryNumber, gtRestaurantNumber, beslutsId);
 		}
 	}
 }

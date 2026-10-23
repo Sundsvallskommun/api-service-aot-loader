@@ -1,9 +1,5 @@
 package se.sundsvall.aotloader.service.mapper;
 
-import generated.se.sundsvall.partyassets.Asset;
-import generated.se.sundsvall.partyassets.AssetCreateRequest;
-import generated.se.sundsvall.partyassets.AssetUpdateRequest;
-import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.supportmanagement.ContactChannel;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
@@ -14,16 +10,13 @@ import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.TestData;
-import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.Holder;
@@ -46,12 +39,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
-import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 
 class TargetMapperTest {
 
-	private static final String ERRAND_ID = "11111111-1111-1111-1111-111111111111";
 	private static final String MUNICIPALITY_ID = "2281";
 
 	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T10:00:00Z"), SWEDISH_TIME);
@@ -89,17 +80,6 @@ class TargetMapperTest {
 			tuple("premisesPhone", "Serveringsställets telefon", List.of("060-2")),
 			tuple("restaurantNumber", "Valt restaurangnummer", List.of("12345678")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
-	}
-
-	@Test
-	void theLegalBasisKeepsTheReferencesThatFitWhole() {
-		final var first = "8 kap. 2 § alkohollagen (2010:1622)";
-		final var many = String.join("; ", Collections.nCopies(10, first));
-
-		assertThat(TargetMapper.legalBasisWithin(null)).isNull();
-		assertThat(TargetMapper.legalBasisWithin(first)).isEqualTo(first);
-		assertThat(TargetMapper.legalBasisWithin(many)).doesNotContain("se ärendet").isEqualTo(String.join("; ", Collections.nCopies(6, first)));
-		assertThat(TargetMapper.legalBasisWithin("x".repeat(300))).hasSize(255).endsWith("…");
 	}
 
 	@Test
@@ -285,16 +265,6 @@ class TargetMapperTest {
 		});
 	}
 
-	/**
-	 * A new draft of a permit with a holder, its contact person and two persons, the second without a party id.
-	 */
-	@Test
-	void theParametersOfThePostThatPartyAssetsTakesOnlyCutAreTold() {
-		final var asset = new AssetData(null, "Serveringstillstånd", null, null, Map.of("conditions", "x".repeat(256), "omrade", "x".repeat(255)));
-
-		assertThat(TargetMapper.truncatedParameters(asset)).containsExactly("conditions");
-	}
-
 	@Test
 	void theRemarksOfAVisitAreCompletedMeasuresOfTheMeasureTypeOfItsSettings() {
 		final var visit = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "900"), ErrandType.ALCOHOL_INSPECTION_VISIT)
@@ -318,6 +288,9 @@ class TargetMapperTest {
 		assertThat(newDraft().getMeasures()).isNull();
 	}
 
+	/**
+	 * @return a new draft of a permit with a holder, its contact person and two persons, the second without a party id
+	 */
 	private Errand newDraft() {
 		final var personIds = new ArrayList<String>();
 		personIds.add("person-party-id");
@@ -363,82 +336,16 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void toAsset() {
-		final var asset = mapper.toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, "party-id", false);
-
-		assertThat(asset.getAssetId()).isEqualTo(ERRAND_ID);
-		assertThat(asset.getOrigin()).isEqualTo("SUPPORTMANAGEMENT");
-		assertThat(asset.getPartyId()).isEqualTo("party-id");
-		assertThat(asset.getType()).isEqualTo("AssetSERVING_PERMIT");
-		assertThat(asset.getTitle()).isEqualTo("Titel SERVING_PERMIT");
-		assertThat(asset.getDescription()).isEqualTo("Serveringstillstånd för Restaurang 1");
-		assertThat(asset.getIssued()).isEqualTo(LocalDate.of(2019, 5, 1));
-		assertThat(asset.getValidTo()).isNull();
-		assertThat(asset.getStatus()).isEqualTo(Status.ACTIVE);
-		assertThat(asset.getStatusReason()).isNull();
-		assertThat(asset.getAdditionalParameters()).containsExactly(Map.entry("errandId", ERRAND_ID), Map.entry("migreradFran", "AlkT"), Map.entry("premisesMunicipalityId", "2281"));
-	}
-
-	@Test
-	void aPlaceInAnAreaOfAnotherMunicipalityHasThatMunicipalityOnTheErrandAndThePost() {
-		final var candidate = TestData.permit("1", "timrå");
-
-		final var errand = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
-		final var asset = mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", false);
+	void aPlaceInAnAreaOfAnotherMunicipalityHasThatMunicipalityOnTheErrand() {
+		final var errand = mapper.toNewDraft(TestData.permit("1", "timrå"), MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
 
 		assertThat(errand.getParameters()).filteredOn("key", "premisesMunicipalityId").extracting("values").containsExactly(List.of("2262"));
-		assertThat(asset.getAdditionalParameters()).containsEntry("premisesMunicipalityId", "2262");
 	}
 
 	@Test
-	void toAssetShortensLongValuesAndAddsTheTitleSuffix() {
-		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
-			.asset(new AssetData("detaljhandel", "Tobakstillstånd för " + "b".repeat(300), LocalDate.of(2020, 1, 1), LocalDate.of(2030, 1, 1),
-				Map.of("conditions", "v".repeat(300), "annat", "x".repeat(300))))
-			.build();
-
-		final var asset = mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", true);
-
-		assertThat(asset.getTitle()).isEqualTo("Titel TOBACCO_PERMIT – detaljhandel");
-		assertThat(asset.getStatus()).isEqualTo(Status.EXPIRED);
-		assertThat(asset.getValidTo()).isEqualTo(LocalDate.of(2030, 1, 1));
-		assertThat(asset.getAdditionalParameters().get("conditions")).hasSize(255).endsWith(" … (se ärendet)");
-		assertThat(asset.getAdditionalParameters().get("annat")).hasSize(255).endsWith(" … (se ärendet)");
-		assertThat(asset.getDescription()).hasSize(255).startsWith("Tobakstillstånd för b").endsWith(" … (se ärendet)");
-	}
-
-	@Test
-	void toAssetOfAnErrandWithoutAsset() {
-		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION).build();
-
-		assertThatThrownBy(() -> mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", false)).isInstanceOf(MigrationException.class);
-	}
-
-	@Test
-	void toContentUpdate() {
-		final var wanted = mapper.toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, "party-id", false).validTo(LocalDate.of(2027, 6, 30));
-		final var same = new Asset().title(wanted.getTitle()).validTo(wanted.getValidTo()).additionalParameters(Map.copyOf(wanted.getAdditionalParameters()));
-
-		assertThat(mapper.toContentUpdate(same, wanted)).isEmpty();
-		assertThat(mapper.toContentUpdate(same.type("Annan typ").description("Annan beskrivning"), wanted)).isEmpty();
-		assertThat(mapper.toContentUpdate(new Asset().title("Gammal").validTo(wanted.getValidTo()).additionalParameters(wanted.getAdditionalParameters()), wanted))
-			.contains(new AssetUpdateRequest().title(wanted.getTitle()));
-		assertThat(mapper.toContentUpdate(new Asset().title(wanted.getTitle()).additionalParameters(wanted.getAdditionalParameters()), wanted))
-			.contains(new AssetUpdateRequest().validTo(LocalDate.of(2027, 6, 30)));
-		// PartyAssets replaces the whole map, so every parameter is sent
-		assertThat(mapper.toContentUpdate(new Asset().title(wanted.getTitle()).validTo(wanted.getValidTo()), wanted))
-			.contains(new AssetUpdateRequest().additionalParameters(wanted.getAdditionalParameters()));
-
-		final var withoutTitleOrLastDay = new AssetCreateRequest().additionalParameters(Map.of("errandId", ERRAND_ID));
-		assertThat(mapper.toContentUpdate(new Asset().title("Gammal").validTo(LocalDate.of(2020, 1, 1)).additionalParameters(Map.of("errandId", ERRAND_ID)), withoutTitleOrLastDay))
-			.contains(new AssetUpdateRequest().title("").indefinitely(true));
-	}
-
-	@Test
-	void sourceReferenceRelationAndActivation() {
-		assertThat(mapper.toSourceReference(ERRAND_ID)).isEqualTo("LINK|" + ERRAND_ID + ";case;supportmanagement;AOT|");
-
+	void relationAndActivation() {
 		final var relation = mapper.toRelation("permit-errand", "inspection-errand");
+
 		assertThat(relation.getType()).isEqualTo("LINK");
 		assertThat(relation.getSource()).satisfies(source -> {
 			assertThat(source.getResourceId()).isEqualTo("permit-errand");
@@ -454,8 +361,8 @@ class TargetMapperTest {
 
 	@Test
 	void anInvestigationIsCompletedWhenTheSourceTellsWhenInSwedishTime() {
-		final var completed = mapper.toInvestigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2024, 3, 31, 1, 30), LocalDateTime.of(2024, 3, 31, 3, 30)));
-		final var notCompleted = mapper.toInvestigation(new InvestigationData("x".repeat(300), null, null));
+		final var completed = mapper.toInvestigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2024, 3, 31, 1, 30), LocalDateTime.of(2024, 3, 31, 3, 30), InvestigationTexts.NONE));
+		final var notCompleted = mapper.toInvestigation(new InvestigationData("x".repeat(300), null, null, InvestigationTexts.NONE));
 
 		assertThat(completed.getStatus()).isEqualTo("COMPLETED");
 		assertThat(completed.getTitle()).isEqualTo("Tillsyn – Restaurang 1");
@@ -473,7 +380,7 @@ class TargetMapperTest {
 	void anInvestigationGetsTheTextsOfTheSourceAsItsConclusion() {
 		final var withTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null,
 			InvestigationTexts.of(new Part("Noteringar", "Klagomål & <oro>"), new Part("Händelser", "2020-01-10 Anteckning: text\n2020-01-20 Bild"), new Part("Beslut", "2020-02-01 Erinran"))));
-		final var withoutTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null));
+		final var withoutTexts = mapper.toInvestigation(new InvestigationData("Tillsyn", null, null, InvestigationTexts.NONE));
 
 		// Draken shows only the conclusion, as HTML
 		assertThat(withTexts.getConclusion()).isEqualTo("<p><strong>Noteringar</strong></p><p>Klagomål &amp; &lt;oro&gt;</p>"
@@ -486,8 +393,8 @@ class TargetMapperTest {
 
 	@Test
 	void anInvestigationThatEndsLaterThanNowIsActiveWithoutAnEnd() {
-		final var now = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 0)));
-		final var later = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 1)));
+		final var now = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 0), InvestigationTexts.NONE));
+		final var later = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 1), InvestigationTexts.NONE));
 
 		assertThat(now.getStatus()).isEqualTo("COMPLETED");
 		assertThat(now.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2026-10-15T12:00+02:00"));
@@ -498,9 +405,9 @@ class TargetMapperTest {
 
 	@Test
 	void roles() {
-		assertThat(mapper.holderRole(ErrandType.SERVING_PERMIT)).isEqualTo("PRIMARY");
-		assertThat(mapper.holderRole(ErrandType.TOBACCO_INSPECTION)).isEqualTo("INSPECTED");
-		assertThat(mapper.holderRole(ErrandType.ALCOHOL_INSPECTION_VISIT)).isEqualTo("INSPECTED");
+		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.SERVING_PERMIT)).isEqualTo("PRIMARY");
+		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.TOBACCO_INSPECTION)).isEqualTo("INSPECTED");
+		assertThat(new StakeholderMapper(TestData.properties()).holderRole(ErrandType.ALCOHOL_INSPECTION_VISIT)).isEqualTo("INSPECTED");
 	}
 
 	@Test

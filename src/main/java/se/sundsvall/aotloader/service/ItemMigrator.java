@@ -18,7 +18,7 @@ import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
 import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
-import se.sundsvall.aotloader.service.mapper.TargetMapper;
+import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -58,17 +58,22 @@ public class ItemMigrator {
 	private final PartyResolver partyResolver;
 	private final RelationPlanner relationPlanner;
 	private final FileUploader fileUploader;
+	private final AssetFileUploader assetFileUploader;
+	private final LegalBasisReader legalBasisReader;
 	private final TargetWriter targets;
 	private final AotLoaderProperties properties;
 	private final Clock clock;
 
 	ItemMigrator(final MigrationItemRepository itemRepository, final ReviewExceptionRepository exceptionRepository, final PartyResolver partyResolver, final RelationPlanner relationPlanner,
-		final FileUploader fileUploader, final TargetWriter targets, final AotLoaderProperties properties, final Clock clock) {
+		final FileUploader fileUploader, final AssetFileUploader assetFileUploader, final LegalBasisReader legalBasisReader, final TargetWriter targets, final AotLoaderProperties properties,
+		final Clock clock) {
 		this.itemRepository = itemRepository;
 		this.exceptionRepository = exceptionRepository;
 		this.partyResolver = partyResolver;
 		this.relationPlanner = relationPlanner;
 		this.fileUploader = fileUploader;
+		this.assetFileUploader = assetFileUploader;
+		this.legalBasisReader = legalBasisReader;
 		this.targets = targets;
 		this.properties = properties;
 		this.clock = clock;
@@ -86,7 +91,7 @@ public class ItemMigrator {
 		final var key = candidate.key();
 		final Optional<MigrationItemEntity> existing;
 		try {
-			existing = itemRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId());
+			existing = itemRepository.findByKey(key);
 		} catch (final RuntimeException e) {
 			final var message = ErrorTexts.describe(e);
 			LOG.warn("Item {} could not be read from the status table: {}", key, message);
@@ -205,7 +210,7 @@ public class ItemMigrator {
 			}
 			if (context.dryRun()) {
 				fileUploader.check(candidate, context, notes);
-				noteTruncatedParameters(fileUploader.withLegalBasis(candidate, context, notes));
+				noteTruncatedParameters(legalBasisReader.withLegalBasis(candidate, context, notes));
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -278,7 +283,7 @@ public class ItemMigrator {
 		 * @param withLegalBasis the candidate with the legal basis read from its documents, which is one of the parameters
 		 */
 		private void noteTruncatedParameters(final Candidate withLegalBasis) {
-			Optional.ofNullable(withLegalBasis.asset()).map(TargetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
+			Optional.ofNullable(withLegalBasis.asset()).map(AssetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
 				.ifPresent(keys -> notes.line("Parametrar som kortas till 255 tecken i PartyAssets: " + String.join(", ", keys)));
 		}
 
@@ -288,25 +293,25 @@ public class ItemMigrator {
 		 * lacks, since an EXPIRED post takes neither, and EXPIRED once at the end.
 		 */
 		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
-			final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
+			final var withLegalBasis = legalBasisReader.withLegalBasis(candidate, context, notes);
 			noteTruncatedParameters(withLegalBasis);
 			final var post = targets.ensureAsset(withLegalBasis, municipalityId, new PostLookup(errandId, entity.getPartyAssetsId(), earlierErrand), parties, expired, notes);
 			final var partyAssetsId = post.id();
 			entity.setPartyAssetsId(partyAssetsId);
 			entity.setAssetId(errandId);
 			if (!expired) {
-				fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+				assetFileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
 				return;
 			}
 			// An EXPIRED post is ACTIVE while it gets its files, and EXPIRED once at the end
 			if (post.status() == Status.EXPIRED) {
-				if (fileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
+				if (assetFileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
 					return;
 				}
 				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
 			}
 			try {
-				fileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+				assetFileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
 			} catch (final RuntimeException e) {
 				restoreExpired(municipalityId, partyAssetsId, e);
 				throw e;
@@ -337,7 +342,7 @@ public class ItemMigrator {
 		 */
 		private Assessment assess(final List<RuleHit> hits) {
 			final var key = candidate.key();
-			final var exception = exceptionRepository.findBySourceAndKindAndSourceId(key.source(), key.kind(), key.sourceId()).map(ReviewExceptionEntity::getOutcome);
+			final var exception = exceptionRepository.findByKey(key).map(ReviewExceptionEntity::getOutcome);
 			final var assessment = Assessment.of(hits, exception);
 			hits.forEach(hit -> notes.rule(hit.rule().getCode()));
 			hits.stream().filter(hit -> hit.rule().getSeverity() == INFO).forEach(hit -> notes.line(hit.toReportText()));

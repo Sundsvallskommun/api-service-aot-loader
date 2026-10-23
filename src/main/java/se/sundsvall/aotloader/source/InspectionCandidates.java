@@ -4,9 +4,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -169,6 +172,19 @@ public final class InspectionCandidates {
 
 		public InspectionErrand {
 			handlers = handlers == null ? List.of() : List.copyOf(handlers);
+		}
+
+		/**
+		 * @param  source   the source
+		 * @param  errand   the row of the errand
+		 * @param  typeText the text of its errand type
+		 * @param  handlers the names of its handlers, or their codes when no name is found
+		 * @param  activity the times of its events and decisions, null for one without a time
+		 * @return          what the errand was in its source, last worked on at the latest of the times
+		 */
+		public static InspectionErrand of(final Source source, final SourceErrand errand, final String typeText, final List<String> handlers, final Stream<LocalDateTime> activity) {
+			return new InspectionErrand(source, errand.arendeId(), errand.arendeTyp(), typeText, errand.diarieNr(), errand.oppnad(), errand.avslutad(), handlers, errand.upplagd(),
+				activity.filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null));
 		}
 
 		@Override

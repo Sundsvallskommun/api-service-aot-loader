@@ -49,7 +49,7 @@ class RelationPlanner {
 			return RelationPlan.none();
 		}
 		final var permitKey = link.permitKey();
-		final var permitItem = itemRepository.findBySourceAndKindAndSourceId(permitKey.source(), permitKey.kind(), permitKey.sourceId());
+		final var permitItem = itemRepository.findByKey(permitKey);
 		final var permitStatus = permitItem.map(MigrationItemEntity::getStatus).orElse(null);
 		final var permitOutcome = context.outcomeOf(permitKey).orElse(null);
 		final var permitDone = permitStatus == KLAR || (context.dryRun() && permitOutcome == Outcome.SKULLE_MIGRERAS);
