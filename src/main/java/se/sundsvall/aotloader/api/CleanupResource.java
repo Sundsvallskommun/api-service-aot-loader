@@ -80,8 +80,7 @@ class CleanupResource {
 	}
 
 	@PostMapping(path = "/items/{source}/{kind}/{sourceId}/cleanup", produces = APPLICATION_JSON_VALUE)
-	@Operation(summary = "Clean up a single item, or try it in a dry run", description = """
-		Removes what the migration wrote for one item of the status table, as a cleanup does, and waits for it.""", responses = {
+	@Operation(summary = "Clean up a single item, or try it in a dry run", description = "Removes what the migration wrote for one item of the status table, as a cleanup does, and waits for it.", responses = {
 		@ApiResponse(responseCode = "200", description = "OK - the row of the report for the item", useReturnTypeSchema = true),
 		@ApiResponse(responseCode = "404", description = "Not Found - the status table has no such item", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),
 		@ApiResponse(responseCode = "409", description = "Conflict - a run is running", content = @Content(mediaType = APPLICATION_PROBLEM_JSON_VALUE, schema = @Schema(implementation = Problem.class))),

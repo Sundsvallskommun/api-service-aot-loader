@@ -230,22 +230,33 @@ public class MigrationService {
 			// Taken before the run starts, since the runner changes the entity in its own thread
 			final var started = toRun(run, Map.of());
 			register.accept(run.getId());
-			try {
-				executor.execute(() -> {
-					try {
-						work.run();
-					} finally {
-						lock.release(run.getId());
-					}
-				});
-			} catch (final RuntimeException e) {
-				forget.accept(run.getId());
-				throw e;
-			}
+			handOver(run.getId(), forget, work);
 			return started;
 		} catch (final RuntimeException e) {
 			lock.release(run.getId());
 			throw e;
+		}
+	}
+
+	/**
+	 * Hands the work to its thread, which releases the lock when the work is done.
+	 *
+	 * @param forget removes the stop flag of the run when the work could not be handed over
+	 */
+	private void handOver(final String runId, final Consumer<String> forget, final Runnable work) {
+		try {
+			executor.execute(() -> runAndRelease(runId, work));
+		} catch (final RuntimeException e) {
+			forget.accept(runId);
+			throw e;
+		}
+	}
+
+	private void runAndRelease(final String runId, final Runnable work) {
+		try {
+			work.run();
+		} finally {
+			lock.release(runId);
 		}
 	}
 

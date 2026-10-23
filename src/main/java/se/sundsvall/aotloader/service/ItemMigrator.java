@@ -17,6 +17,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
+import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
@@ -289,7 +290,7 @@ public class ItemMigrator {
 		private void writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
 			final var withLegalBasis = fileUploader.withLegalBasis(candidate, context, notes);
 			noteTruncatedParameters(withLegalBasis);
-			final var post = targets.ensureAsset(withLegalBasis, municipalityId, errandId, entity.getPartyAssetsId(), parties, expired, earlierErrand, notes);
+			final var post = targets.ensureAsset(withLegalBasis, municipalityId, new PostLookup(errandId, entity.getPartyAssetsId(), earlierErrand), parties, expired, notes);
 			final var partyAssetsId = post.id();
 			entity.setPartyAssetsId(partyAssetsId);
 			entity.setAssetId(errandId);

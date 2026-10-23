@@ -100,24 +100,21 @@ class TargetWriter {
 	 *
 	 * @param  candidate          the item
 	 * @param  municipalityId     the municipality the item belongs to
-	 * @param  errandId           the id of the errand, which is the asset id of the post (decision 4)
-	 * @param  partyAssetsId      the id of the post in the status table, null when it has none
+	 * @param  lookup             where the post is looked for
 	 * @param  parties            the partyIds; the holder's is required unless the post is found by its id
 	 * @param  expired            true when the post is to be EXPIRED, false when ACTIVE
-	 * @param  earlierErrand      true when the errand is one an earlier run made, which may have made the post for a holder
-	 *                            the source has changed since; the post is then also looked for through the relation
-	 *                            PartyAssets writes from the errand to it
 	 * @param  notes              the report of the item, told what was found and changed
 	 * @return                    the id PartyAssets gave the post, and the status it has now
 	 * @throws MigrationException when the post found has a status the migration never gives, or belongs to another party
 	 *                            than the item now gives; it is then left as it is
 	 */
-	Post ensureAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties, final boolean expired,
-		final boolean earlierErrand, final ReportNotes notes) {
+	Post ensureAsset(final Candidate candidate, final String municipalityId, final PostLookup lookup, final PartyIds parties, final boolean expired, final ReportNotes notes) {
 		final var words = AssetWords.of(candidate.key().kind());
+		final var errandId = lookup.errandId();
+		final var partyAssetsId = lookup.partyAssetsId();
 		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, words, notes))
 			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId))
-			.or(() -> earlierErrand && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
+			.or(() -> lookup.earlierErrand() && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
 			final var wanted = mapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
@@ -132,6 +129,18 @@ class TargetWriter {
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
 				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes)),
 			Status.ACTIVE);
+	}
+
+	/**
+	 * Where the post of an item is looked for.
+	 *
+	 * @param errandId      the id of the errand, which is the asset id of the post (decision 4)
+	 * @param partyAssetsId the id of the post in the status table, null when it has none
+	 * @param earlierErrand true when the errand is one an earlier run made, which may have made the post for a holder the
+	 *                      source has changed since; the post is then also looked for through the relation PartyAssets
+	 *                      writes from the errand to it
+	 */
+	record PostLookup(String errandId, String partyAssetsId, boolean earlierErrand) {
 	}
 
 	/**

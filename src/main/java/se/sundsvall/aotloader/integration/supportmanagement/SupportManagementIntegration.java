@@ -81,7 +81,7 @@ public class SupportManagementIntegration {
 			final var result = client.findErrands(municipalityId, namespace, filter, page, PAGE_SIZE);
 			final var content = Optional.ofNullable(result).map(PageErrand::getContent).orElse(emptyList());
 			errands.addAll(content);
-			if (content.size() < PAGE_SIZE || Boolean.TRUE.equals(result.getLast())) {
+			if (result == null || content.size() < PAGE_SIZE || Boolean.TRUE.equals(result.getLast())) {
 				// The filter joins the tags, so a key on one tag and a value on another would also match
 				return errands.stream()
 					.filter(errand -> hasTag(errand, key, value))

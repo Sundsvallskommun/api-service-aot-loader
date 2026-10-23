@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.party.PartyIntegration;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -45,12 +46,27 @@ class PartyResolver {
 		final var holder = candidate.holder();
 		final var holderPartyId = Optional.ofNullable(holder).flatMap(found -> lookup(found.legalId(), municipalityId, context));
 		if (holder != null && holderPartyId.isEmpty()) {
-			if (candidate.type().getKind().isInspection()) {
-				hits.add(RuleHit.of(INSPECTION_HOLDER_NOT_IN_PARTY, holder.legalId() == null ? "numret saknas eller har fel format" : null));
-			} else if (holder.legalId() != null) {
-				hits.add(RuleHit.of(HOLDER_NOT_IN_PARTY));
-			}
+			holderNotFound(candidate, holder, hits);
 		}
+		return new PartyIds(holderPartyId.orElse(null), personPartyIds(candidate, municipalityId, context, hits, notes));
+	}
+
+	/**
+	 * G10 for a holder that Party does not know: a hit that stops a permit, and information only for the holder of an
+	 * inspection errand, also one without a number. A permit holder without a number has hit G8 already.
+	 */
+	private static void holderNotFound(final Candidate candidate, final Holder holder, final List<RuleHit> hits) {
+		if (candidate.type().getKind().isInspection()) {
+			hits.add(RuleHit.of(INSPECTION_HOLDER_NOT_IN_PARTY, holder.legalId() == null ? "numret saknas eller har fel format" : null));
+		} else if (holder.legalId() != null) {
+			hits.add(RuleHit.of(HOLDER_NOT_IN_PARTY));
+		}
+	}
+
+	/**
+	 * @return the partyIds of the persons, in their order, null for a person Party does not know or whose lookup failed
+	 */
+	private List<String> personPartyIds(final Candidate candidate, final String municipalityId, final RunContext context, final List<RuleHit> hits, final ReportNotes notes) {
 		final var personPartyIds = new ArrayList<String>();
 		var notFound = 0;
 		var withoutNumber = 0;
@@ -81,7 +97,7 @@ class PartyResolver {
 		if (withoutNumber > 0) {
 			notes.line("%d person(er) med betydande inflytande saknar nummer eller har ett nummer med fel format och läggs in utan partyId".formatted(withoutNumber));
 		}
-		return new PartyIds(holderPartyId.orElse(null), personPartyIds);
+		return personPartyIds;
 	}
 
 	private Optional<String> lookup(final LegalId legalId, final String municipalityId, final RunContext context) {

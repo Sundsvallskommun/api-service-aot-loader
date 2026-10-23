@@ -84,7 +84,7 @@ class ResultFiles {
 	}
 
 	private static String safe(final String text) {
-		return Optional.ofNullable(text).orElse("").replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-|-$", "");
+		return Optional.ofNullable(text).orElse("").replaceAll("[^A-Za-z0-9]+", "-").replaceAll("(?:^-)|(?:-$)", "");
 	}
 
 	private static void move(final Path from, final Path to) throws IOException {
