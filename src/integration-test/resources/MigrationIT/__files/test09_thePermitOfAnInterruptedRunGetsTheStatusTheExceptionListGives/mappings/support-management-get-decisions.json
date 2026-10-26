@@ -2,7 +2,7 @@
 	"name": "support-management-get-decisions",
 	"request": {
 		"method": "GET",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006/decisions",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000005/decisions",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -32,11 +32,6 @@
 		"headers": {
 			"Content-Type": "application/json"
 		},
-		"jsonBody": [
-			{
-				"id": "decision-1",
-				"status": "COMPLETED"
-			}
-		]
+		"jsonBody": []
 	}
 }

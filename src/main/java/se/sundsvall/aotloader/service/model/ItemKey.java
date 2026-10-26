@@ -16,6 +16,12 @@ import static java.util.Objects.requireNonNull;
  */
 public record ItemKey(Source source, Kind kind, String sourceId) {
 
+	/**
+	 * The start of the id of a row of the report whose item has no id in the source, such as a permit of AlkT without
+	 * ObjektID, followed by its number among them.
+	 */
+	public static final String WITHOUT_ID = "utan-id-";
+
 	// A comma would split the key where a run keeps its selection (ItemSelection)
 	private static final Pattern ID = Pattern.compile("[^\\s,/]+");
 

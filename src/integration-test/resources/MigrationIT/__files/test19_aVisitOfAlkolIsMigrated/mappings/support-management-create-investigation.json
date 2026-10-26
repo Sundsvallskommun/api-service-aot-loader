@@ -24,6 +24,18 @@
 					"expression": "$.conclusion",
 					"equalTo": "<p><strong>Tillsynsomgång</strong></p><p>Kontrollköp vecka 18, 2024-05-03</p><p><strong>Anteckning</strong></p><p>Köpet nekades.</p><p><strong>Anmärkningar</strong></p><p>Påträngande reklam i butik</p>"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters",
+					"absent": true
+				}
 			}
 		]
 	},

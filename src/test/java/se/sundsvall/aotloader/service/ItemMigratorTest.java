@@ -1257,73 +1257,160 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aDecisionAnEarlierRunCompletedIsLeftAsItIs() throws IOException {
+	void aDecisionAnEarlierRunCompletedAsTheSourceGivesItIsKept() throws IOException {
 		withDecisions();
 		stubNewPermit();
-		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("COMPLETED")));
+		final var candidate = TestData.permitWithDecision("1");
+		final var mapper = new TargetMapper(properties, CLOCK);
+		// As SupportManagement gives it back: with ids, its times in UTC and its account in capitals
+		final var found = mapper.toDecisionDraft(candidate, null, null, "Bifall med villkor")
+			.id("decision-1")
+			.status("COMPLETED")
+			.decidedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
+			.completedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
+			.createdBy("AB12CDE")
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
+			.attachments(List.of(new ErrandAttachment().id("attachment-beslut")));
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(found));
 
-		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+		final var result = migrator.process(candidate, contextWithOutcomes(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
-		assertThat(result.detail()).isEqualTo("Beslutet från en tidigare körning är redan fattat i SupportManagement och ändras inte");
+		assertThat(result.detail()).isEqualTo("Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 1 dokument; "
+			+ "Beslutet från en tidigare körning är redan fattat i SupportManagement och har det källan ger nu");
 		assertThat(savedStatuses).contains(ItemStatus.BESLUT_KLART);
+		verify(supportManagement, never()).deleteDecision(anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
 		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
-	}
-
-	@Test
-	void aDraftAnEarlierRunLeftGetsWhatTheSourceSaysNowAndIsCompleted() throws IOException {
-		withDecisions();
-		stubNewPermit();
-		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
-		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT")
-			.terms(List.of(new DecisionTerm().id("term-2").sortOrder(2).text("Mat ska serveras"), new DecisionTerm().id("term-1").sortOrder(1).text("Gammalt villkor")))
-			.attachments(List.of(new ErrandAttachment().id("attachment-beslut")))));
-
-		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
-
-		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
-		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
-		final var order = inOrder(supportManagement);
-		order.verify(supportManagement).updateDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("decision-1"), decisionCaptor.capture());
-		// The terms are not those it is to have, so they are written again
-		order.verify(supportManagement).deleteDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "term-1");
-		order.verify(supportManagement).deleteDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "term-2");
-		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
-		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
-			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
-		assertThat(decisionCaptor.getValue().getStatus()).isEqualTo("DRAFT");
-		assertThat(decisionCaptor.getValue().getInvestigationId()).isNull();
-		// The document is linked already
 		verify(supportManagement, never()).linkDecisionAttachment(anyString(), anyString(), anyString(), anyString());
 	}
 
 	@Test
-	void theTermsOfADraftThatAreThoseItIsToHaveAreKept() throws IOException {
+	void aDecisionAnEarlierRunWroteThatIsNotAsTheSourceGivesItIsWrittenAgain() throws IOException {
 		withDecisions();
 		stubNewPermit();
-		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT")
-			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))));
+		final var candidate = TestData.permitWithDecision("1");
+		final var mapper = new TargetMapper(properties, CLOCK);
+		// Completed with a last day the source no longer gives, which a change could not empty
+		final var completed = mapper.toDecisionDraft(candidate, null, null, "Bifall med villkor")
+			.id("decision-1")
+			.status("COMPLETED")
+			.validTo(LocalDate.of(2020, 12, 31))
+			.completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00"))
+			.createdBy("ab12cde")
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
+			.attachments(List.of(new ErrandAttachment().id("attachment-beslut"), new ErrandAttachment().id("attachment-old")));
+		// And a draft that a run left when it stopped
+		final var draft = new Decision().id("decision-2").status("DRAFT").createdBy("ab12cde");
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(completed, draft));
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), decisionCaptor.capture())).thenReturn("decision-3");
 
-		migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+		final var result = migrator.process(candidate, contextWithOutcomes(false));
 
-		verify(supportManagement, never()).deleteDecisionTerm(anyString(), anyString(), anyString(), anyString());
-		verify(supportManagement, never()).createDecisionTerm(anyString(), anyString(), anyString(), any());
-		verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-beslut");
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Beslut: Bifall med villkor, fattat 2019-04-30, 1 villkor, 1 dokument; "
+			+ "Beslutet från en tidigare körning togs bort och skrevs på nytt med det källan ger nu");
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).deleteDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1");
+		order.verify(supportManagement).deleteDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-2");
+		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
+		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-3", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
+		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-3", "attachment-beslut");
+		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-3",
+			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
+		assertThat(decisionCaptor.getValue().getValidTo()).isNull();
+		verify(supportManagement, never()).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-3", "attachment-old");
 	}
 
 	@Test
-	void aDecisionWithAStatusTheMigrationNeverGivesStopsTheItemBeforeItsErrandIsActivated() throws IOException {
+	void aDecisionSomeoneElseWroteStopsTheItemBeforeItsErrandIsActivated() throws IOException {
 		withDecisions();
 		stubNewPermit();
-		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("CANCELLED")));
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new Decision().id("decision-1").status("DRAFT").createdBy("ab12cde"),
+			new Decision().id("decision-2").status("COMPLETED").createdBy("xy98zzz")));
 
 		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
-		assertThat(result.detail()).isEqualTo("Steg Beslut: Ärendet har redan ett beslut med status CANCELLED, som migreringen aldrig ger, och det ändras inte");
+		assertThat(result.detail()).isEqualTo("Steg Beslut: Ärendet har redan ett beslut som någon annan än migreringen har skrivit, och det ändras inte");
 		verify(supportManagement, never()).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq(new Errand().lifecycle(LifecycleEnum.ACTIVE)));
-		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).deleteDecision(anyString(), anyString(), anyString());
+		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
+	}
+
+	@Test
+	void aDraftARunLeftWhenItStoppedIsWrittenAgain() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT").createdBy("ab12cde")
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))));
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("decision-2");
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.detail()).endsWith("; Beslutet från en tidigare körning togs bort och skrevs på nytt med det källan ger nu");
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).deleteDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1");
+		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
+		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-2", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
+		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-2", "attachment-beslut");
+		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-2",
+			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
+	}
+
+	@Test
+	void withoutAnAdAccountNoDecisionOnTheErrandIsTheMigrationsOwn() throws IOException {
+		properties = TestData.propertiesWithDecisions(documents.toString(), attachments.toString(), " ");
+		migrator = migrator(properties);
+		stubNewPermit();
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Decision().id("decision-1").status("DRAFT").createdBy("ab12cde")));
+
+		final var result = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).startsWith("Steg Beslut: Ärendet har redan ett beslut som någon annan än migreringen har skrivit");
+		verify(supportManagement, never()).deleteDecision(anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void anErrandAnEarlierRunActivatedGetsNoNewDecisionAndADryRunSaysSoToo() throws IOException {
+		withDecisions();
+		Files.writeString(documents.resolve("beslut.rtf"), "dokument");
+		Files.writeString(attachments.resolve("ansokan.pdf"), "bilaga");
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.ACTIVE)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(assetAsCreated("migrated-before", Status.ACTIVE)));
+
+		final var real = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(real.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(real.detail()).endsWith("; Ärendet får inget nytt beslut, eftersom det redan är aktivt (beslut 11)");
+		assertThat(savedStatuses).contains(ItemStatus.BESLUT_KLART);
+		verify(supportManagement, never()).getDecisions(anyString(), anyString());
+
+		// A dry run of an item whose errand an earlier run activated, before the status table says so
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item(ItemStatus.FEL, ERRAND_ID)));
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.ACTIVE)));
+
+		final var dry = migrator.process(TestData.permitWithDecision("1"), contextWithOutcomes(true));
+
+		assertThat(dry.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(dry.detail()).isEqualTo("Ärendet får inget nytt beslut, eftersom det redan är aktivt (beslut 11)");
+	}
+
+	@Test
+	void anItemWhoseCleanupDidNotFinishIsNotMigrated() {
+		final var item = item(ItemStatus.RENSAS, ERRAND_ID);
+		when(itemRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(item));
+
+		final var result = migrator.process(TestData.permit("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).isEqualTo("Rensningen av ärendet blev inte klar och görs klar innan ärendet migreras igen (avsnitt 10.3)");
+		assertThat(result.errandNumber()).isEqualTo("ALKT-2026-1");
+		assertThat(item.getStatus()).isEqualTo(ItemStatus.RENSAS);
+		verify(itemRepository, never()).save(any());
+		verifyNoInteractions(supportManagement, partyAssets, relations, party);
 	}
 
 	@Test
@@ -1480,7 +1567,7 @@ class ItemMigratorTest {
 	private ItemMigrator migrator(final AotLoaderProperties settings) {
 		return new ItemMigrator(itemRepository, exceptionRepository, new PartyResolver(party), new RelationPlanner(itemRepository), new FileUploader(supportManagement, settings, CLOCK), new AssetFileUploader(partyAssets, settings), new LegalBasisReader(
 			settings),
-			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings, CLOCK), new AssetMapper(settings)), settings, CLOCK);
+			new TargetWriter(supportManagement, partyAssets, relations, new TargetMapper(settings, CLOCK), new AssetMapper(settings), settings), settings, CLOCK);
 	}
 
 	/**

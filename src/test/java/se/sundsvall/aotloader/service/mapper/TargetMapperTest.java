@@ -1,9 +1,11 @@
 package se.sundsvall.aotloader.service.mapper;
 
 import generated.se.sundsvall.supportmanagement.ContactChannel;
+import generated.se.sundsvall.supportmanagement.Decision;
 import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
+import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Measure;
@@ -15,8 +17,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -373,6 +378,7 @@ class TargetMapperTest {
 		assertThat(completed.getStartedAt()).isEqualTo(OffsetDateTime.parse("2024-03-31T01:30+01:00"));
 		assertThat(completed.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2024-03-31T03:30+02:00"));
 		assertThat(completed.getType()).isNull();
+		assertThat(completed.getParameters()).isNull();
 		assertThat(notCompleted.getStatus()).isEqualTo("ACTIVE");
 		assertThat(notCompleted.getTitle()).hasSize(255);
 		assertThat(notCompleted.getStartedAt()).isNull();
@@ -392,6 +398,18 @@ class TargetMapperTest {
 		assertThat(withTexts.getDescription()).isNull();
 		assertThat(withTexts.getSummary()).isNull();
 		assertThat(withoutTexts.getConclusion()).isNull();
+	}
+
+	@Test
+	void anInvestigationWithAnInspectionProtocolHasItsTemplateAsTypeAndItsFieldsAsParameters() {
+		final var investigation = mapper.toInvestigation(new InvestigationData("Tillsynsbesök – Krogen", null, null, InvestigationTexts.of(new Part("Anteckning", "Mycket folk.")))
+			.withProtocol("serving_permit", List.of(new Parameter("premisesName", "Restaurang", List.of("Krogen")), new Parameter("visitStartTime", "Inleds kl.", List.of("21:30")))));
+
+		assertThat(investigation.getType()).isEqualTo("serving_permit");
+		assertThat(investigation.getParameters()).extracting(p -> p.getKey(), p -> p.getDisplayName(), p -> p.getGroup(), p -> p.getValues())
+			.containsExactly(tuple("premisesName", "Restaurang", null, List.of("Krogen")), tuple("visitStartTime", "Inleds kl.", null, List.of("21:30")));
+		// The texts are still its conclusion
+		assertThat(investigation.getConclusion()).isEqualTo("<p><strong>Anteckning</strong></p><p>Mycket folk.</p>");
 	}
 
 	@Test
@@ -462,6 +480,68 @@ class TargetMapperTest {
 		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).containsExactly("migreradFran", "decisionDate");
 		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).isEmpty();
 		assertThat(decisionMapper.toDecisionDraft(candidate, " ", null, null).getLegalBasis()).isNull();
+	}
+
+	@Test
+	void whatThePermitWasGrantedWithComesLastWithTheLabelsAndTheGroupOfDraken() {
+		final var permit = TestData.permitWithDecision("1");
+		final var decided = List.of(new Parameter("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STARKOL", "VIN")),
+			new Parameter("decidedServingHoursIndoorPublic", "Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
+		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset()).decision(permit.decision().withDecided(decided)).build();
+		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
+
+		final var parameters = decisionMapper.toDecisionDraft(candidate, null, null, "Bifall med villkor").getParameters();
+
+		assertThat(parameters).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).endsWith("validFrom", "decidedBeverages", "decidedServingHoursIndoorPublic");
+		assertThat(parameters.subList(parameters.size() - 2, parameters.size()))
+			.extracting(generated.se.sundsvall.supportmanagement.Parameter::getDisplayName, generated.se.sundsvall.supportmanagement.Parameter::getGroup,
+				generated.se.sundsvall.supportmanagement.Parameter::getValues)
+			.containsExactly(tuple("Alkoholdrycker som får serveras", "DECIDED", List.of("STARKOL", "VIN")),
+				tuple("Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
+	}
+
+	@Test
+	void aDecisionIsWrittenOnlyWhenItHasAllThatTheMigrationWouldWriteNow() {
+		final var candidate = TestData.permitWithDecision("1");
+		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor");
+		final var completion = decisionMapper.toDecisionCompletion(candidate.decision());
+		final var terms = TargetMapper.toDecisionTerms(candidate.decision());
+		final var documents = List.of("attachment-1", "attachment-2");
+		// As SupportManagement gives it back: its times in UTC, its parameters and attachments in another order
+		final Supplier<Decision> written = () -> decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor")
+			.id("decision-1")
+			.status("COMPLETED")
+			.decidedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
+			.completedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
+			.parameters(draft.getParameters().reversed())
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
+			.attachments(List.of(new ErrandAttachment().id("attachment-2"), new ErrandAttachment().id("attachment-1")))
+			.createdBy("ab12cde");
+
+		assertThat(TargetMapper.isWritten(written.get(), draft, completion, terms, documents)).isTrue();
+
+		final Map<String, UnaryOperator<Decision>> changes = new LinkedHashMap<>();
+		changes.put("a draft", decision -> decision.status("DRAFT"));
+		changes.put("another type", decision -> decision.type("ANNAN"));
+		changes.put("another title", decision -> decision.title("Annan rubrik"));
+		changes.put("another description", decision -> decision.description("Annan beskrivning"));
+		changes.put("another outcome", decision -> decision.outcome("APPROVAL"));
+		changes.put("another method", decision -> decision.method("AUTOMATIC"));
+		changes.put("another decision maker", decision -> decision.decidedBy("Bo Ek"));
+		changes.put("another time", decision -> decision.decidedAt(OffsetDateTime.parse("2019-04-30T07:01Z")));
+		changes.put("no completion", decision -> decision.completedAt(null));
+		changes.put("no legal basis", decision -> decision.legalBasis(null));
+		changes.put("no justification", decision -> decision.justification(null));
+		changes.put("no first day", decision -> decision.validFrom(null));
+		changes.put("a last day", decision -> decision.validTo(LocalDate.of(2030, 1, 1)));
+		changes.put("no investigation", decision -> decision.investigationId(null));
+		changes.put("a parameter less", decision -> decision.parameters(decision.getParameters().subList(1, decision.getParameters().size())));
+		changes.put("another term", decision -> decision.terms(List.of(new DecisionTerm().sortOrder(1).text("Annat villkor"))));
+		changes.put("a term more", decision -> decision.terms(List.of(new DecisionTerm().sortOrder(2).text("Mat ska serveras"), new DecisionTerm().sortOrder(1).text("Annat villkor"))));
+		changes.put("a document less", decision -> decision.attachments(List.of(new ErrandAttachment().id("attachment-1"))));
+		changes.put("another document", decision -> decision.attachments(List.of(new ErrandAttachment().id("attachment-1"), new ErrandAttachment().id("attachment-3"))));
+		changes.forEach((name, change) -> assertThat(TargetMapper.isWritten(change.apply(written.get()), draft, completion, terms, documents)).as(name).isFalse());
 	}
 
 	@Test

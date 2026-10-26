@@ -25,8 +25,9 @@ import se.sundsvall.aotloader.support.ErrorTexts;
 /**
  * Runs a cleanup: removes what the migration wrote to the target systems for the items of the status table in a scope,
  * and the items, the inspection visits first and the permits last (section 10.3). An item that belongs to another
- * municipality is left as it is. Nothing an item does stops the cleanup; a cleanup that cannot go on is marked FAILED
- * with the reason, and the lock is always released by the caller.
+ * municipality is left as it is. A cleanup starts only against a test environment ({@link CleanupGuard}) and the
+ * environment of the local database ({@link TargetGuard}). Nothing an item does stops the cleanup; a cleanup that
+ * cannot go on is marked FAILED with the reason, and the lock is always released by the caller.
  */
 @Component
 public class CleanupRunner {
@@ -37,13 +38,15 @@ public class CleanupRunner {
 		.thenComparing(MigrationItemEntity::getSourceId);
 
 	private final ItemCleaner cleaner;
+	private final CleanupGuard cleanupGuard;
 	private final TargetGuard targetGuard;
 	private final MigrationItemRepository itemRepository;
 	private final RunRecords records;
 	private final Map<String, AtomicBoolean> stopFlags = new ConcurrentHashMap<>();
 
-	CleanupRunner(final ItemCleaner cleaner, final TargetGuard targetGuard, final MigrationItemRepository itemRepository, final RunRecords records) {
+	CleanupRunner(final ItemCleaner cleaner, final CleanupGuard cleanupGuard, final TargetGuard targetGuard, final MigrationItemRepository itemRepository, final RunRecords records) {
 		this.cleaner = cleaner;
+		this.cleanupGuard = cleanupGuard;
 		this.targetGuard = targetGuard;
 		this.itemRepository = itemRepository;
 		this.records = records;
@@ -93,8 +96,8 @@ public class CleanupRunner {
 		final var progress = new Progress();
 		try {
 			final var selection = single.map(key -> ItemSelection.of(List.of(key))).orElseGet(() -> ItemSelection.parse(run.getItemKeys()));
-			targetGuard.check().ifPresentOrElse(
-				wrongTarget -> progress.fail("Rensningen startade inte. " + wrongTarget),
+			cleanupGuard.check().or(targetGuard::check).ifPresentOrElse(
+				refusal -> progress.fail("Rensningen startade inte. " + refusal),
 				() -> clean(run, items(run.getMunicipalityId(), scope, selection, single.isEmpty(), progress), single.isPresent(), stop, progress));
 			if (single.isPresent() && progress.singleResult == null && progress.status() == RunStatus.COMPLETED) {
 				progress.note("Ärendet %s finns inte i statustabellen".formatted(single.get()));
@@ -147,7 +150,7 @@ public class CleanupRunner {
 				progress.note("Gränsen på %d ärenden nåddes; resten tas i nästa rensning".formatted(run.getItemLimit()));
 				return;
 			}
-			final var result = cleaner.clean(item, run.getMunicipalityId(), run.isDryRun());
+			final var result = cleaner.clean(item, run.getMunicipalityId(), run.isDryRun(), run.getId());
 			cleaned++;
 			final var line = saveLine(run, item, result, progress);
 			if (single) {

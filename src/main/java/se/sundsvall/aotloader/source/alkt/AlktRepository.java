@@ -63,6 +63,14 @@ import static se.sundsvall.aotloader.source.Rows.texts;
 public class AlktRepository {
 
 	private static final int SERVING_TIME_INTERVALS = 8;
+	/**
+	 * The text of each serving time interval, in the order of the intervals (analysis round 14c). Noteringar5 is the
+	 * general note of the permit; the texts of interval 5-8 are filled nowhere, and theirs follow the same order.
+	 */
+	private static final List<String> SERVING_TIME_TEXTS = List.of("Noteringar", "Noteringar2", "Noteringar3", "Noteringar4", "Noteringar5B", "Noteringar6", "Noteringar7",
+		"Noteringar8");
+	/** Noteringar5, the general note, comes after the text of this interval, as the columns come. */
+	private static final int GENERAL_NOTE_AFTER_INTERVAL = 4;
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String OBJEKT_ID = "ObjektID";
 	private static final String BIFOGADFIL = "Bifogadfil";
@@ -304,12 +312,17 @@ public class AlktRepository {
 
 	static PermitRow toPermit(final ResultSet rs) throws SQLException {
 		final var servingTimes = new ArrayList<ServingTime>();
-		for (var i = 1; i <= SERVING_TIME_INTERVALS; i++) {
-			servingTimes.add(new ServingTime(text(rs, "ServeringStartTid" + i), text(rs, "ServeringSlutTid" + i)));
-		}
 		final var notes = new ArrayList<String>();
-		for (final var column : List.of("Noteringar", "Noteringar2", "Noteringar3", "Noteringar4", "Noteringar5", "Noteringar5B", "Noteringar6", "Noteringar7", "Noteringar8")) {
-			notes.add(text(rs, column));
+		for (var i = 1; i <= SERVING_TIME_INTERVALS; i++) {
+			final var time = new ServingTime(text(rs, "ServeringStartTid" + i), text(rs, "ServeringSlutTid" + i), text(rs, SERVING_TIME_TEXTS.get(i - 1)));
+			servingTimes.add(time);
+			// The text of an interval without a time is no serving time, and is kept as a note
+			if (!time.isSet()) {
+				notes.add(time.text());
+			}
+			if (i == GENERAL_NOTE_AFTER_INTERVAL) {
+				notes.add(text(rs, "Noteringar5"));
+			}
 		}
 		return new PermitRow(
 			integer(rs, OBJEKT_ID),

@@ -102,9 +102,24 @@ public final class PartyRows {
 	}
 
 	/**
-	 * @return true when both have a number that can be read and the numbers differ; false when either is unknown
+	 * @return true when both have a number that can be normalized and the numbers differ; false when either has none or
+	 *         one that cannot be normalized, which may be a number of the same holder written in part, so that the holder
+	 *         is unknown (section 7.7.1)
 	 */
 	public static boolean otherHolder(final ContactRow one, final ContactRow other, final LocalDate today) {
+		final var number = normalizedNumberOf(one, today);
+		final var otherNumber = normalizedNumberOf(other, today);
+		return number.isPresent() && otherNumber.isPresent() && !number.equals(otherNumber);
+	}
+
+	/**
+	 * For the rules that keep what may be another holder's from the current one, where a number that cannot be normalized
+	 * is no sign of the same holder: G19, which has the item reviewed, and G31, which keeps the files on the errand.
+	 *
+	 * @return true when both have a number and the numbers differ, compared as {@link #numberKey} gives them; false when
+	 *         either has none
+	 */
+	public static boolean mayBeOtherHolder(final ContactRow one, final ContactRow other, final LocalDate today) {
 		final var number = numberOf(one, today);
 		final var otherNumber = numberOf(other, today);
 		return number.isPresent() && otherNumber.isPresent() && !number.equals(otherNumber);
@@ -112,6 +127,10 @@ public final class PartyRows {
 
 	private static Optional<String> numberOf(final ContactRow contact, final LocalDate today) {
 		return Optional.ofNullable(contact).flatMap(found -> numberKey(found.organisationsNr(), today));
+	}
+
+	private static Optional<String> normalizedNumberOf(final ContactRow contact, final LocalDate today) {
+		return Optional.ofNullable(contact).flatMap(found -> LegalIds.normalize(found.organisationsNr(), today)).map(LegalId::number);
 	}
 
 	private static ContactRow toContact(final ResultSet rs, final String idColumn) throws SQLException {

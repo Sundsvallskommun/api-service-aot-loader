@@ -215,12 +215,21 @@ public class SupportManagementIntegration {
 		decisionClient.updateDecision(municipalityId, namespace, errandId, decisionId, decision);
 	}
 
-	public void createDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final DecisionTerm term) {
-		decisionClient.createDecisionTerm(municipalityId, namespace, errandId, decisionId, term);
+	/**
+	 * Removes the decision, with its terms and its links to the attachments of the errand; the attachments stay on the
+	 * errand.
+	 *
+	 * @return true when the decision was removed now, false when it was gone already
+	 */
+	public boolean deleteDecision(final String municipalityId, final String errandId, final String decisionId) {
+		return Fallbacks.unless(NOT_FOUND, false, () -> {
+			decisionClient.deleteDecision(municipalityId, namespace, errandId, decisionId);
+			return true;
+		});
 	}
 
-	public void deleteDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final String termId) {
-		decisionClient.deleteDecisionTerm(municipalityId, namespace, errandId, decisionId, termId);
+	public void createDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final DecisionTerm term) {
+		decisionClient.createDecisionTerm(municipalityId, namespace, errandId, decisionId, term);
 	}
 
 	/**

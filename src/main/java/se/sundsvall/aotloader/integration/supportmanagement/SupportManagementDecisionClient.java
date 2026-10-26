@@ -47,6 +47,13 @@ public interface SupportManagementDecisionClient {
 		@PathVariable String decisionId,
 		@RequestBody Decision decision);
 
+	@DeleteMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}", produces = ALL_VALUE)
+	ResponseEntity<Void> deleteDecision(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String decisionId);
+
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/terms", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
 	ResponseEntity<Void> createDecisionTerm(
 		@PathVariable String municipalityId,
@@ -54,14 +61,6 @@ public interface SupportManagementDecisionClient {
 		@PathVariable String errandId,
 		@PathVariable String decisionId,
 		@RequestBody DecisionTerm term);
-
-	@DeleteMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/terms/{termId}", produces = ALL_VALUE)
-	ResponseEntity<Void> deleteDecisionTerm(
-		@PathVariable String municipalityId,
-		@PathVariable String namespace,
-		@PathVariable String errandId,
-		@PathVariable String decisionId,
-		@PathVariable String termId);
 
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/attachments/{attachmentId}", produces = ALL_VALUE)
 	ResponseEntity<Void> linkDecisionAttachment(

@@ -17,6 +17,7 @@ import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.integration.db.model.ReviewExceptionEntity;
 import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
+import se.sundsvall.aotloader.service.TargetWriter.DecisionWrite;
 import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
 import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
@@ -42,6 +43,7 @@ import static se.sundsvall.aotloader.service.model.ItemStatus.GRANSKAS;
 import static se.sundsvall.aotloader.service.model.ItemStatus.KLAR;
 import static se.sundsvall.aotloader.service.model.ItemStatus.MIGRERAS_INTE;
 import static se.sundsvall.aotloader.service.model.ItemStatus.RELATION_KLAR;
+import static se.sundsvall.aotloader.service.model.ItemStatus.RENSAS;
 import static se.sundsvall.aotloader.service.model.ItemStatus.TILLSTANDSHAVARE_KLAR;
 import static se.sundsvall.aotloader.service.model.ItemStatus.TILLSTAND_SKAPAT;
 import static se.sundsvall.aotloader.service.model.ItemStatus.VANTAR;
@@ -84,8 +86,8 @@ public class ItemMigrator {
 	}
 
 	/**
-	 * Takes the item as far as it can go. Never throws: whatever goes wrong is in the result, also a status table that
-	 * cannot be read.
+	 * Takes the item as far as it can go. An item whose cleanup has not finished is left as it is. Never throws: whatever
+	 * goes wrong is in the result, also a status table that cannot be read.
 	 *
 	 * @param  candidate the item
 	 * @param  context   the run
@@ -103,6 +105,10 @@ public class ItemMigrator {
 		}
 		if (existing.isPresent() && existing.get().getStatus() == KLAR) {
 			return alreadyMigrated(candidate, context, existing.get());
+		}
+		if (existing.isPresent() && existing.get().getStatus() == RENSAS) {
+			// The ids of the item may name what the cleanup has removed already
+			return new ItemResult(Outcome.FEL, List.of(), "Rensningen av ärendet blev inte klar och görs klar innan ärendet migreras igen (avsnitt 10.3)", existing.get().getErrandNumber());
 		}
 		return new Migration(candidate, context, existing.orElse(null)).run();
 	}
@@ -218,8 +224,12 @@ public class ItemMigrator {
 			if (context.dryRun()) {
 				final var uploadable = fileUploader.check(candidate, context, notes);
 				noteTruncatedParameters(legalBasisReader.withLegalBasis(candidate, context, notes));
-				// Counted as the real run counts them, among the files it would upload
-				noteDecision(municipalityId, candidate.decision() == null ? 0 : (int) candidate.decision().documents().stream().filter(uploadable::contains).distinct().count());
+				if (wasActivated(municipalityId)) {
+					noteDecisionOfActiveErrand();
+				} else {
+					// Counted as the real run counts them, among the files it would upload
+					noteDecision(municipalityId, candidate.decision() == null ? 0 : (int) candidate.decision().documents().stream().filter(uploadable::contains).distinct().count());
+				}
 				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 			}
 			if (!context.tryCountWrite()) {
@@ -273,13 +283,15 @@ public class ItemMigrator {
 			}
 
 			step = Step.BESLUT;
-			if (getsDecision()) {
-				if (!active) {
-					writeDecision(municipalityId, errand.getId(), withLegalBasis, uploaded);
-				}
-				saveAs(BESLUT_KLART);
-			} else if (!active) {
+			if (active) {
+				noteDecisionOfActiveErrand();
+			} else if (getsDecision()) {
+				writeDecision(municipalityId, errand.getId(), withLegalBasis, uploaded);
+			} else {
 				noteDecision(municipalityId, 0);
+			}
+			if (getsDecision()) {
+				saveAs(BESLUT_KLART);
 			}
 
 			step = Step.RELATION;
@@ -327,10 +339,12 @@ public class ItemMigrator {
 			final var legalBasis = Optional.ofNullable(withLegalBasis.asset()).map(asset -> asset.parameters().get(ASSET_PARAMETER_LEGAL_BASIS)).orElse(null);
 			final var documentIds = uploaded.idsOf(candidate.decision().documents());
 			final var outcomeText = context.decisionOutcomeText(municipalityId, TargetMapper.decisionOutcome(candidate.decision())).orElse(null);
-			if (targets.ensureDecision(withLegalBasis, municipalityId, errandId, legalBasis, documentIds, outcomeText)) {
-				noteDecision(municipalityId, documentIds.size());
-			} else {
-				notes.line("Beslutet från en tidigare körning är redan fattat i SupportManagement och ändras inte");
+			final var written = targets.ensureDecision(withLegalBasis, municipalityId, errandId, legalBasis, documentIds, outcomeText);
+			noteDecision(municipalityId, documentIds.size());
+			if (written == DecisionWrite.KEPT) {
+				notes.line("Beslutet från en tidigare körning är redan fattat i SupportManagement och har det källan ger nu");
+			} else if (written == DecisionWrite.REPLACED) {
+				notes.line("Beslutet från en tidigare körning togs bort och skrevs på nytt med det källan ger nu");
 			}
 		}
 
@@ -352,6 +366,16 @@ public class ItemMigrator {
 			final var outcome = TargetMapper.decisionOutcome(decision);
 			notes.line("Beslut: %s, fattat %s, %d villkor, %d dokument".formatted(context.decisionOutcomeText(municipalityId, outcome).orElse(outcome),
 				SourceValues.format(decision.decidedAt().toLocalDate()), decision.terms().size(), documents));
+		}
+
+		/**
+		 * Tells in the report that the errand of a permit, which an earlier run activated, gets no decision now (decision
+		 * 11), as a dry run tells it too. An errand of a type without decisions gets no line.
+		 */
+		private void noteDecisionOfActiveErrand() {
+			if (properties.errandType(candidate.type()).withDecision()) {
+				notes.line("Ärendet får inget nytt beslut, eftersom det redan är aktivt (beslut 11)");
+			}
 		}
 
 		/**

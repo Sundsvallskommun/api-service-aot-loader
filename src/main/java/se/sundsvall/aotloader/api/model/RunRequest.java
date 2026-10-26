@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
+import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Source;
 
@@ -33,8 +34,11 @@ public record RunRequest(
 	implements
 	RejectsUnknownFields {
 
-	/** An item as source/kind/id, with the same id as the path of a single item takes. */
-	public static final String ITEM_PATTERN = "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/\\d{1,10}(-[A-Z_]{1,30})?\\s*$";
+	/**
+	 * An item as source/kind/id, with the same id as the path of a single item takes, or that of a row of the report
+	 * without an id in the source.
+	 */
+	public static final String ITEM_PATTERN = "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/(\\d{1,10}(-[A-Z_]{1,30})?|" + ItemKey.WITHOUT_ID + "\\d{1,10})\\s*$";
 
 	/**
 	 * @return false only when the request says so

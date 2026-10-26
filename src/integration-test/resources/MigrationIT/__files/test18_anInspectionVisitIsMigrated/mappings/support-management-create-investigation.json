@@ -27,6 +27,24 @@
 					"expression": "$.conclusion",
 					"equalTo": "<p><strong>Tillsynsomgång</strong></p><p>Krogrunda, 2023-11-04 – 2023-11-05</p><p>Tillsammans med polisen.</p><p><strong>Anteckning</strong></p><p>Mycket folk i baren.</p><p><strong>Anmärkningar</strong></p><p>Servering till minderårig: Ungdomar i baren</p><p>Servering utom tillåten serveringstid</p>"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "serving_permit"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspectionDate' && @.displayName == 'Tillsynsdatum' && @.values[0] == '2023-11-04')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'visitStartTime' && @.values[0] == '21:30')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'visitEndTime' && @.values[0] == '23:00')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspector1NameAndTitle' && @.values[0] == 'Anna Berg')]"
 			}
 		]
 	},

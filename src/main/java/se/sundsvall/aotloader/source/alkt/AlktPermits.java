@@ -3,6 +3,7 @@ package se.sundsvall.aotloader.source.alkt;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.AssetParameters;
 import se.sundsvall.aotloader.source.CandidateTexts;
+import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
@@ -28,6 +30,7 @@ import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitDecisions;
+import se.sundsvall.aotloader.source.PermitDecisions.PermitDays;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.SourceRules;
@@ -53,6 +56,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSIN
 import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.GRANT_DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
@@ -87,6 +91,16 @@ final class AlktPermits {
 	private static final Set<String> CATERING_ANNEX_TEMPLATES = Set.of("TDBBC");
 	/** The templates of the permit decision: of Sundsvall and of Timrå (decision 39). */
 	private static final Set<String> DECISION_TEMPLATES = Set.of("TDB", "TBT");
+	/**
+	 * The types of decision that grant a permit (decision 75): to the public, also in part, for farm sales, to a closed
+	 * company, also in part, and those granted before 1996. Not those that extend or change a permit.
+	 */
+	private static final Set<String> GRANT_TYPES = Set.of("0100", "0110", "0130", "0400", "0410", "9900");
+	/**
+	 * The types of decision that grant a temporary permit: until a decision, to the public, also in part, and to a closed
+	 * company.
+	 */
+	private static final Set<String> TEMPORARY_GRANT_TYPES = Set.of("0231", "0232", "0233", "0235");
 
 	private final AlktIndex index;
 	private final AlktSnapshot snapshot;
@@ -124,10 +138,16 @@ final class AlktPermits {
 		if (permit.utfardandeDatum() == null) {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
 		}
+		final var grant = grantOf(decision, issuingErrands);
+		final var days = PermitDays.of(permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), grant.map(this::errandClosed).orElse(null), today);
+		if (grant.isEmpty() && days.decidedOn() != null) {
+			hits.add(RuleHit.of(GRANT_DECISION_MISSING, Optional.ofNullable(Texts.trimToNull(index.decisionText(decision, false))).map(text -> "tillståndet pekar på " + text).orElse(null)));
+		}
 		final var subtype = ServingPermits.subtype(permit, periods);
 		if (subtype == null) {
 			hits.add(RuleHit.of(SUBTYPE_MISSING));
 		}
+		final var decided = DecidedScopes.of(permit, subtype, hits);
 		final var files = permitFiles(permit, place, issuingErrands, hits);
 
 		final var placeName = place == null ? null : place.namn();
@@ -174,7 +194,7 @@ final class AlktPermits {
 				ServingPermits.validTo(permit, periods),
 				assetParameters(content, holder, premises, restaurantNumber), legalBasisDocuments(permit, decision, files)))
 			.files(files.build(), files.assetFiles(), files.details())
-			.decision(decisionData(permit, decision, ServingPermits.validTo(permit, periods), content.conditions(), files));
+			.decision(Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files)).map(data -> data.withDecided(decided)).orElse(null));
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -238,15 +258,47 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @return the decision the permit points to, which its errand gets with the conditions of the permit as terms (decision
-	 *         70); null when it points to none
+	 * The decision the permit was granted by (decision 75): of the decision the permit points to and the decisions of the
+	 * errands that issued it, the latest whose type grants a permit, or, when none does, the latest that grants a
+	 * temporary one. The decision the permit points to may be a later one that extended or changed it, and a temporary
+	 * permit beside it does not stand in for the grant of the permit.
+	 *
+	 * @param  pointedTo      the decision the permit points to, null when it points to none
+	 * @param  issuingErrands the errands that issued the permit
+	 * @return                the decision, empty when none of them grants a permit
 	 */
-	private DecisionData decisionData(final PermitRow permit, final DecisionRow decision, final LocalDate validTo, final List<String> conditions, final FileList files) {
-		if (decision == null) {
-			return null;
+	private Optional<DecisionRow> grantOf(final DecisionRow pointedTo, final Set<Integer> issuingErrands) {
+		final var decisions = Stream.concat(Stream.ofNullable(pointedTo), issuingErrands.stream().flatMap(arendeId -> index.decisionsOf(arendeId).stream()))
+			.distinct()
+			.toList();
+		return latestOf(decisions, GRANT_TYPES).or(() -> latestOf(decisions, TEMPORARY_GRANT_TYPES));
+	}
+
+	private static Optional<DecisionRow> latestOf(final List<DecisionRow> decisions, final Set<String> types) {
+		return decisions.stream()
+			.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), types))
+			.max(Comparator.comparing(DecisionRow::beslutad, Comparator.nullsFirst(Comparator.naturalOrder()))
+				.thenComparing(DecisionRow::beslutsId, Comparator.nullsFirst(Comparator.naturalOrder())));
+	}
+
+	/**
+	 * @return the decision the permit was granted by, which its errand gets with the conditions of the permit as terms
+	 *         (decision 70), or else one built from the permit (decision 75); null when the decision has no time and the
+	 *         permit gives it no day
+	 */
+	private DecisionData decisionData(final DecisionRow grant, final PermitDays days, final List<String> conditions, final FileList files) {
+		if (grant == null) {
+			return PermitDecisions.fromPermit(days, conditions, ALKT);
 		}
-		return PermitDecisions.of(decision, snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()), snapshot.visits().handlerName(decision.beslutsfattare()), permit.utfardandeDatum(),
-			validTo, conditions, files, ALKT);
+		return PermitDecisions.of(grant, snapshot.codeText(CODE_TYPE_DECISION, grant.beslutsTyp()), snapshot.visits().handlerName(grant.beslutsfattare()), days, conditions, files,
+			ALKT);
+	}
+
+	/**
+	 * @return the day the errand of the decision was closed, null when it has none or the decision has no errand
+	 */
+	private LocalDate errandClosed(final DecisionRow decision) {
+		return Optional.ofNullable(decision.arendeId()).map(snapshot.errands()::get).map(ErrandRow::avslutad).orElse(null);
 	}
 
 	/**
@@ -266,21 +318,25 @@ final class AlktPermits {
 		}
 	}
 
+	/**
+	 * @return the serving times, "hh:mm–hh:mm" followed by the text of the interval, such as "11:00–01:00 Inomhus"; an
+	 *         interval that cannot be read as the source has it, and a hit on G9
+	 */
 	private static List<String> servingTimes(final PermitRow permit, final List<RuleHit> hits) {
 		final var times = new ArrayList<String>();
 		for (var i = 0; i < permit.servingTimes().size(); i++) {
 			final var time = permit.servingTimes().get(i);
-			if (time.start() == null && time.end() == null) {
+			if (!time.isSet()) {
 				continue;
 			}
 			final var start = SourceValues.parseTime(time.start());
 			final var end = SourceValues.parseTime(time.end());
 			if (start.isPresent() && end.isPresent()) {
-				times.add(Texts.range(start.get(), end.get()));
+				times.add(Texts.joinWords(Texts.range(start.get(), end.get()), time.text()));
 			} else {
 				final var raw = Texts.range(time.start(), time.end());
 				hits.add(RuleHit.of(UNPARSEABLE, "serveringstid %d '%s'".formatted(i + 1, raw)));
-				times.add(raw);
+				times.add(Texts.joinWords(raw, time.text()));
 			}
 		}
 		return times;
@@ -438,6 +494,7 @@ final class AlktPermits {
 			.lines(AssetParameters.SERVING_HOURS, content.servingTimes())
 			.lines(ASSET_PARAMETER_CONDITIONS, content.conditions())
 			.text(AssetParameters.CASE_NUMBER, permit.utfardandeDiarienr())
+			.text(AssetParameters.EXECUTION_DATE, SourceValues.format(permit.utfardandeDatum()))
 			.text(AssetParameters.DECISION_DATE_AND_CASE_NUMBER, Texts.join(", ", Arrays.asList(SourceValues.format(permit.utfardandeDatum()), permit.utfardandeDiarienr())))
 			.text(AssetParameters.DIARY_NUMBER, permit.utfardandeDiarienr())
 			.text(AssetParameters.MIGRATED_FROM, ALKT.getDisplayName())

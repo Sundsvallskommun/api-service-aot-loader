@@ -46,6 +46,8 @@ public enum ReviewRule {
 	PERSON_LOOKUP_FAILED("G30", "En person med betydande inflytande gick inte att slå upp i Party. Undantagslistan kan låta personen läggas in utan partyId", BLOCKING, true),
 	NOTIFICATION_OF_FORMER_HOLDER("G31", "Produkten registrerades också av en tidigare ägare. Den registreringens filer läggs bara på ärendet, inte på anmälan i PartyAssets", INFO, true),
 	FORMER_HOLDER("G32", "Ärendet eller händelsen gällde en tidigare ägare av stället, och bara den nuvarande tillståndshavarens följer med (beslut 72)", NOT_MIGRATED, true),
+	GRANT_DECISION_MISSING("G33", "Källsystemet har inget beslut som beviljade tillståndet, så ärendet får ett beslut som bygger på tillståndet (beslut 75)", INFO, true),
+	SERVING_TIME_UNPLACED("G34", "En serveringstid går inte att lägga i beslutets serveringstider i Draken och står bara på ärendet (beslut 76)", INFO, true),
 	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false),
 	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true);
 

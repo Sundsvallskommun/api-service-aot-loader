@@ -209,12 +209,12 @@ final class AlkolIndex {
 	}
 
 	/**
-	 * @return true when the applicant of the errand is not the current owner of the place, both with a number that can be
-	 *         read (G19)
+	 * @return true when the applicant of the errand may not be the current owner of the place: both have a number, and
+	 *         they differ, also when one of them cannot be normalized (G19)
 	 */
 	boolean applicantIsNotOwner(final ErrandRow errand, final ContactRow owner) {
 		final var applicant = Optional.ofNullable(errand).map(ErrandRow::sokandeId).map(snapshot.applicants()::get).orElse(null);
-		return PartyRows.otherHolder(applicant, owner, today);
+		return PartyRows.mayBeOtherHolder(applicant, owner, today);
 	}
 
 	/**

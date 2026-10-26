@@ -138,6 +138,25 @@ class MigrationResourceTest {
 	}
 
 	@Test
+	void aRowOfTheReportWithoutAnIdInTheSourceCanBeSelected() {
+		when(service.startRun(eq(MUNICIPALITY_ID), any())).thenReturn(run(RunStatus.RUNNING));
+
+		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue(new RunRequest(true, null, null, null, List.of("ALKT/TILLSTAND/utan-id-3", " ALKOL/ANMALAN/12-FOLKOL ")))
+			.exchange()
+			.expectStatus().isAccepted();
+
+		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
+			.contentType(APPLICATION_JSON)
+			.bodyValue(new RunRequest(true, null, null, null, List.of("ALKT/TILLSTAND/utan-id-", "ALKT/TILLSTAND/utan-id-3-FOLKOL")))
+			.exchange()
+			.expectStatus().isBadRequest()
+			.expectBody(ConstraintViolationProblem.class)
+			.value(problem -> assertThat(problem.getViolations()).hasSize(2));
+	}
+
+	@Test
 	void startRunWithAFieldItDoesNotHaveOrAnEmptyList() {
 		webTestClient.post().uri("/{municipalityId}/migrations/runs", MUNICIPALITY_ID)
 			.contentType(APPLICATION_JSON)

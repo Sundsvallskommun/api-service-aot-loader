@@ -45,6 +45,7 @@ public final class AssetParameters {
 	public static final String SALES_ONLINE = "salesOnline";
 	public static final String CASE_NUMBER = "caseNumber";
 	public static final String DECISION_DATE_AND_CASE_NUMBER = "decisionDateAndCaseNumber";
+	public static final String EXECUTION_DATE = "executionDate";
 
 	/** The diary number in the source (decision 4); the migration's own key, as the AoT solution has none for it. */
 	public static final String DIARY_NUMBER = "diarienummer";

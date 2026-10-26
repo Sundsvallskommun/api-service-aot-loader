@@ -44,10 +44,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.havingExactly;
+import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.springframework.http.HttpHeaders.LOCATION;
@@ -80,8 +82,10 @@ class MigrationIT extends AbstractAppTest {
 	private static final Pattern LOG_EVENT = Pattern.compile("(?m)^(?=\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} \\[)");
 	private static final Path FILE_AREA = createFileArea();
 	private static final Map<String, String> FILE_AREA_BEFORE = snapshot(FILE_AREA);
+	private static final String DECISION_SENT_BY = "mig01dec; type=adAccount";
 	private static String dryRunId;
 	private static String assetOfTheInterruptedPermit;
+	private static String decisionOfTheInterruptedPermit;
 
 	static {
 		SourceDatabaseContainer.start();
@@ -368,6 +372,7 @@ class MigrationIT extends AbstractAppTest {
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
 			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Ritning på lokalen med serveringsytan markerad"), tuple("44444444.rtf", "Beslut"));
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
+		decisionOfTheInterruptedPermit = writtenDecision(INTERRUPTED_ERRAND_ID);
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/3");
@@ -381,13 +386,24 @@ class MigrationIT extends AbstractAppTest {
 		wiremock.stubFor(get(urlEqualTo("/party-assets/2281/assets/asset-internal-6"))
 			.withHeader("X-Sent-By", havingExactly(SENT_BY))
 			.willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(Json.write(asset))));
+		// The decision as the interrupted run completed it, with the investigation and the attachment by the ids the stubs
+		// of this test give them; the stubs of that test gave every attachment one id and gave back no investigation
+		final Map<String, Object> decision = JsonPath.read(decisionOfTheInterruptedPermit, "$");
+		assertThat(decision.get("attachments")).isEqualTo(List.of(Map.of("id", "x")));
+		decision.put("investigationId", "investigation-1");
+		decision.put("attachments", List.of(Map.of("id", "a1")));
+		wiremock.stubFor(get(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/decisions"))
+			.withHeader("X-Sent-By", havingExactly(DECISION_SENT_BY))
+			.withHeader("X-Trigger-Process", havingExactly("false"))
+			.withHeader("X-notify", havingExactly("false"))
+			.willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(Json.write(List.of(decision)))));
 
 		migrateItem("ALKT/TILLSTAND/3", false);
 
 		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(support-management|party-assets|relation)/.*"))))
-			.as("Nothing is created again: the errand, the files and the permit are found by the ids in the status table")
+			.as("Nothing is created again: the errand, the files, the permit and its decision are found by the ids in the status table")
 			.extracting(request -> request.getMethod().getName())
-			.doesNotContain("POST");
+			.doesNotContain("POST", "DELETE");
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/3");
@@ -514,6 +530,26 @@ class MigrationIT extends AbstractAppTest {
 		} catch (final IOException e) {
 			throw new UncheckedIOException(e);
 		}
+	}
+
+	/**
+	 * @return the decision the test wrote on the errand as SupportManagement gives it back: the draft, with the
+	 *         completion, the terms and the links to the attachments written after it, and the AD account that wrote it
+	 */
+	private String writtenDecision(final String errandId) {
+		final var path = "/support-management/2281/AOT/errands/" + errandId + "/decisions";
+		final Map<String, Object> decision = JsonPath.read(wiremock.findAll(postRequestedFor(urlEqualTo(path))).getFirst().getBodyAsString(), "$");
+		final var decisionId = "decision-1";
+		decision.putAll(JsonPath.read(wiremock.findAll(patchRequestedFor(urlEqualTo(path + "/" + decisionId))).getLast().getBodyAsString(), "$"));
+		decision.put("id", decisionId);
+		decision.put("createdBy", "mig01dec");
+		decision.put("terms", wiremock.findAll(postRequestedFor(urlEqualTo(path + "/" + decisionId + "/terms"))).stream()
+			.map(request -> JsonPath.<Map<String, Object>>read(request.getBodyAsString(), "$"))
+			.toList());
+		decision.put("attachments", wiremock.findAll(postRequestedFor(urlPathMatching(path + "/" + decisionId + "/attachments/.+"))).stream()
+			.map(request -> Map.of("id", request.getUrl().substring(request.getUrl().lastIndexOf('/') + 1)))
+			.toList());
+		return Json.write(decision);
 	}
 
 	/**

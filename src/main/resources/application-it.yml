@@ -48,6 +48,7 @@ aot-loader:
   decision-ad-account: mig01dec
   cleanup:
     enabled: true
+    allowed-hosts: localhost
   result-directory: target/it-resultat
   errand-types:
     serving-permit:

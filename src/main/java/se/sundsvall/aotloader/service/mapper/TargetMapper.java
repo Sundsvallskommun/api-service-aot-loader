@@ -7,6 +7,7 @@ import generated.se.sundsvall.supportmanagement.Decision;
 import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
+import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
@@ -15,10 +16,13 @@ import generated.se.sundsvall.supportmanagement.Priority;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -183,8 +187,9 @@ public class TargetMapper {
 	/**
 	 * @return the investigation of an inspection errand, visit or permit, completed when the source tells when the
 	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source in
-	 *         its conclusion (decisions 44–46); an end later than now, which the source has in error or for a planned
-	 *         inspection, leaves it active without an end
+	 *         its conclusion (decisions 44–46), and with the template and fields of its inspection protocol when it has one
+	 *         (decision 77); an end later than now, which the source has in error or for a planned inspection, leaves it
+	 *         active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
 		final var completedAt = untilNow(investigation.completedAt());
@@ -193,7 +198,12 @@ public class TargetMapper {
 			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
 			.conclusion(conclusion(investigation.texts()))
 			.startedAt(inSwedishTime(investigation.startedAt()))
-			.completedAt(completedAt);
+			.completedAt(completedAt)
+			.type(investigation.protocol())
+			.parameters(investigation.protocolParameters().isEmpty() ? null
+				: investigation.protocolParameters().stream()
+					.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).values(parameter.values()))
+					.toList());
 	}
 
 	/**
@@ -248,6 +258,59 @@ public class TargetMapper {
 	}
 
 	/**
+	 * Tells whether a decision of the errand is the decision the migration would write now, so that it is kept as it is.
+	 * Every field the migration writes is compared, the times as instants and the parameters by key, as well as the terms
+	 * in their order and the attachments the decision links.
+	 *
+	 * @param  found       a decision of the errand, as SupportManagement gives it
+	 * @param  draft       the decision as {@link #toDecisionDraft} gives it
+	 * @param  completion  its completion, as {@link #toDecisionCompletion} gives it
+	 * @param  terms       its terms, as {@link #toDecisionTerms} gives them
+	 * @param  documentIds the attachments of the errand it is to link
+	 * @return             true when the decision found is completed and has all of it, and links no other attachment
+	 */
+	public static boolean isWritten(final Decision found, final Decision draft, final Decision completion, final List<DecisionTerm> terms, final Collection<String> documentIds) {
+		return DECISION_COMPLETED.equals(found.getStatus())
+			&& Objects.equals(found.getType(), draft.getType())
+			&& Objects.equals(found.getTitle(), draft.getTitle())
+			&& Objects.equals(found.getDescription(), draft.getDescription())
+			&& Objects.equals(found.getOutcome(), draft.getOutcome())
+			&& Objects.equals(found.getMethod(), draft.getMethod())
+			&& Objects.equals(found.getDecidedBy(), draft.getDecidedBy())
+			&& sameInstant(found.getDecidedAt(), draft.getDecidedAt())
+			&& sameInstant(found.getCompletedAt(), completion.getCompletedAt())
+			&& Objects.equals(found.getLegalBasis(), draft.getLegalBasis())
+			&& Objects.equals(found.getJustification(), draft.getJustification())
+			&& Objects.equals(found.getValidFrom(), draft.getValidFrom())
+			&& Objects.equals(found.getValidTo(), draft.getValidTo())
+			&& Objects.equals(found.getInvestigationId(), draft.getInvestigationId())
+			&& parameterValues(found.getParameters()).equals(parameterValues(draft.getParameters()))
+			&& termTexts(found.getTerms()).equals(termTexts(terms))
+			&& attachmentIds(found.getAttachments()).equals(Set.copyOf(documentIds));
+	}
+
+	private static boolean sameInstant(final OffsetDateTime one, final OffsetDateTime other) {
+		return one == null ? other == null : other != null && one.isEqual(other);
+	}
+
+	private static Map<String, List<String>> parameterValues(final List<generated.se.sundsvall.supportmanagement.Parameter> parameters) {
+		return Optional.ofNullable(parameters).orElse(List.of()).stream()
+			.collect(Collectors.toMap(parameter -> Texts.trimToNull(parameter.getKey()), parameter -> Optional.ofNullable(parameter.getValues()).orElse(List.of()), (one, other) -> Stream
+				.concat(one.stream(), other.stream()).toList()));
+	}
+
+	private static List<String> termTexts(final List<DecisionTerm> terms) {
+		return Optional.ofNullable(terms).orElse(List.of()).stream()
+			.sorted(Comparator.comparing(DecisionTerm::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+			.map(DecisionTerm::getText)
+			.toList();
+	}
+
+	private static Set<String> attachmentIds(final List<ErrandAttachment> attachments) {
+		return Optional.ofNullable(attachments).orElse(List.of()).stream().map(ErrandAttachment::getId).collect(Collectors.toSet());
+	}
+
+	/**
 	 * @return an approval, with conditions when the decision has terms, as Draken gives it the outcome
 	 */
 	public static String decisionOutcome(final DecisionData decision) {
@@ -257,7 +320,8 @@ public class TargetMapper {
 	/**
 	 * The parameters Draken gives a decision on a permit for its certificate: those of the permit, but its legal basis and
 	 * conditions, which the decision has as fields and terms, followed by the text of the outcome, the day of the decision
-	 * and its first day. A parameter without a value is left out, as Draken leaves it out.
+	 * and its first day. A parameter without a value is left out, as Draken leaves it out. Last come the decided ones,
+	 * such as the beverages and the serving hours, with the labels and the group Draken gives them.
 	 */
 	private static List<generated.se.sundsvall.supportmanagement.Parameter> decisionParameters(final Candidate candidate, final String outcomeText) {
 		final var decision = candidate.decision();
@@ -270,11 +334,15 @@ public class TargetMapper {
 		values.put(DECISION_PARAMETER_TEXT, outcomeText);
 		values.put(DECISION_PARAMETER_DECISION_DATE, SourceValues.format(decision.decidedAt().toLocalDate()));
 		values.put(DECISION_PARAMETER_VALID_FROM, SourceValues.format(decision.validFrom()));
-		return values.entrySet().stream()
+		final var certificate = values.entrySet().stream()
 			.filter(entry -> !Texts.isBlank(entry.getValue()))
 			.map(entry -> new generated.se.sundsvall.supportmanagement.Parameter().key(entry.getKey())
-				.values(List.of(Texts.truncate(entry.getValue().strip(), ERRAND_PARAMETER_MAX_LENGTH, null))))
-			.toList();
+				.values(List.of(Texts.truncate(entry.getValue().strip(), ERRAND_PARAMETER_MAX_LENGTH, null))));
+		// What the permit was granted with, under the keys, labels and group Draken shows them by (decision 76)
+		final var decided = decision.decided().stream()
+			.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).group(parameter.group())
+				.values(parameter.values()));
+		return Stream.concat(certificate, decided).toList();
 	}
 
 	/**

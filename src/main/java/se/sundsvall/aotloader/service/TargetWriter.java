@@ -7,19 +7,16 @@ import generated.se.sundsvall.partyassets.Status;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.relation.ResourceIdentifier;
 import generated.se.sundsvall.supportmanagement.Decision;
-import generated.se.sundsvall.supportmanagement.DecisionTerm;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
-import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.integration.relation.RelationIntegration;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
@@ -29,6 +26,7 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
@@ -41,22 +39,21 @@ import static se.sundsvall.aotloader.Constants.TAG_MIGRATION_ID;
 @Component
 class TargetWriter {
 
-	private static final String DECISION_DRAFT = "DRAFT";
-	private static final String DECISION_COMPLETED = "COMPLETED";
-
 	private final SupportManagementIntegration supportManagement;
 	private final PartyAssetsIntegration partyAssets;
 	private final RelationIntegration relations;
 	private final TargetMapper mapper;
 	private final AssetMapper assetMapper;
+	private final AotLoaderProperties properties;
 
 	TargetWriter(final SupportManagementIntegration supportManagement, final PartyAssetsIntegration partyAssets, final RelationIntegration relations, final TargetMapper mapper,
-		final AssetMapper assetMapper) {
+		final AssetMapper assetMapper, final AotLoaderProperties properties) {
 		this.supportManagement = supportManagement;
 		this.partyAssets = partyAssets;
 		this.relations = relations;
 		this.mapper = mapper;
 		this.assetMapper = assetMapper;
+		this.properties = properties;
 	}
 
 	/**
@@ -346,63 +343,53 @@ class TargetWriter {
 
 	/**
 	 * Gives the errand of a permit the decision its permit was granted by (decision 70), the way Draken writes a decision:
-	 * a draft, then its terms and the documents it links, and last its completion. A completed decision found is left as
-	 * it is, since an earlier run then wrote all of it; a draft an earlier run left is brought up to date and completed.
+	 * a draft, then its terms and the documents it links, and last its completion. A decision an earlier run wrote is kept
+	 * when it is completed and is what the source gives now. Otherwise it is removed and the decision written again, since
+	 * SupportManagement leaves a field that a change does not carry as it is, so a change cannot empty one. Only the
+	 * migration's own decisions are removed: those its AD account wrote.
 	 *
 	 * @param  candidate          the permit, with its decision
 	 * @param  legalBasis         the legal basis read from the documents of the permit, null when none was found
 	 * @param  documentIds        the attachments of the errand that are the documents of the decision
 	 * @param  outcomeText        the display name of the outcome in the namespace, null when unknown
-	 * @return                    true when the decision was written now, false when the errand had it completed already
-	 * @throws MigrationException when the errand has a decision with a status the migration never gives it, which is then
-	 *                            left as it is
+	 * @return                    whether the decision was written now, kept or written again
+	 * @throws MigrationException when the errand has a decision that someone else wrote, which is then left as it is
 	 */
-	boolean ensureDecision(final Candidate candidate, final String municipalityId, final String errandId, final String legalBasis, final List<String> documentIds,
+	DecisionWrite ensureDecision(final Candidate candidate, final String municipalityId, final String errandId, final String legalBasis, final List<String> documentIds,
 		final String outcomeText) {
 		final var found = supportManagement.getDecisions(municipalityId, errandId);
-		if (found.stream().anyMatch(decision -> DECISION_COMPLETED.equals(decision.getStatus()))) {
-			return false;
-		}
-		final var other = found.stream().filter(decision -> !DECISION_DRAFT.equals(decision.getStatus())).findFirst();
-		if (other.isPresent()) {
-			throw new MigrationException("Ärendet har redan ett beslut med status %s, som migreringen aldrig ger, och det ändras inte".formatted(other.get().getStatus()));
+		if (!found.stream().allMatch(this::isMigrationsOwn)) {
+			throw new MigrationException("Ärendet har redan ett beslut som någon annan än migreringen har skrivit, och det ändras inte");
 		}
 		final var investigationId = supportManagement.getInvestigations(municipalityId, errandId).stream().map(Investigation::getId).filter(Objects::nonNull).findFirst().orElse(null);
 		final var draft = mapper.toDecisionDraft(candidate, legalBasis, investigationId, outcomeText);
-		final var earlier = found.stream().findFirst();
-		final String decisionId;
-		if (earlier.isPresent()) {
-			decisionId = earlier.get().getId();
-			supportManagement.updateDecision(municipalityId, errandId, decisionId, draft);
-		} else {
-			decisionId = supportManagement.createDecision(municipalityId, errandId, draft);
+		final var completion = mapper.toDecisionCompletion(candidate.decision());
+		final var terms = TargetMapper.toDecisionTerms(candidate.decision());
+		if (found.size() == 1 && TargetMapper.isWritten(found.getFirst(), draft, completion, terms, documentIds)) {
+			return DecisionWrite.KEPT;
 		}
-		ensureTerms(municipalityId, errandId, decisionId, earlier.map(Decision::getTerms).orElse(List.of()), TargetMapper.toDecisionTerms(candidate.decision()));
-		final var linked = earlier.map(Decision::getAttachments).orElse(List.of()).stream().map(ErrandAttachment::getId).collect(Collectors.toSet());
-		documentIds.stream()
-			.filter(attachmentId -> !linked.contains(attachmentId))
-			.forEach(attachmentId -> supportManagement.linkDecisionAttachment(municipalityId, errandId, decisionId, attachmentId));
-		supportManagement.updateDecision(municipalityId, errandId, decisionId, mapper.toDecisionCompletion(candidate.decision()));
-		return true;
+		found.forEach(decision -> supportManagement.deleteDecision(municipalityId, errandId, decision.getId()));
+		final var decisionId = supportManagement.createDecision(municipalityId, errandId, draft);
+		terms.forEach(term -> supportManagement.createDecisionTerm(municipalityId, errandId, decisionId, term));
+		documentIds.forEach(attachmentId -> supportManagement.linkDecisionAttachment(municipalityId, errandId, decisionId, attachmentId));
+		supportManagement.updateDecision(municipalityId, errandId, decisionId, completion);
+		return found.isEmpty() ? DecisionWrite.WRITTEN : DecisionWrite.REPLACED;
 	}
 
 	/**
-	 * Gives the draft the terms, in their order. Terms an earlier run wrote are kept when they are the same, and replaced
-	 * when they are not, as when the answer of one of them was lost.
+	 * What became of the decision of a permit errand.
 	 */
-	private void ensureTerms(final String municipalityId, final String errandId, final String decisionId, final List<DecisionTerm> there, final List<DecisionTerm> wanted) {
-		final var thereInOrder = Optional.ofNullable(there).orElse(List.of()).stream()
-			.sorted(Comparator.comparing(DecisionTerm::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
-			.toList();
-		if (texts(thereInOrder).equals(texts(wanted))) {
-			return;
-		}
-		thereInOrder.forEach(term -> supportManagement.deleteDecisionTerm(municipalityId, errandId, decisionId, term.getId()));
-		wanted.forEach(term -> supportManagement.createDecisionTerm(municipalityId, errandId, decisionId, term));
+	enum DecisionWrite {
+		/** The errand had no decision and got it. */
+		WRITTEN,
+		/** The errand had the decision from an earlier run, as the source gives it now. */
+		KEPT,
+		/** The errand had a decision from an earlier run that was not as the source gives it now, and it was written again. */
+		REPLACED
 	}
 
-	private static List<String> texts(final List<DecisionTerm> terms) {
-		return terms.stream().map(DecisionTerm::getText).toList();
+	private boolean isMigrationsOwn(final Decision decision) {
+		return Optional.ofNullable(Texts.trimToNull(properties.decisionAdAccount())).map(account -> account.equalsIgnoreCase(Texts.trimToNull(decision.getCreatedBy()))).orElse(false);
 	}
 
 	private Optional<Errand> findByMigrationId(final String municipalityId, final ItemKey key) {

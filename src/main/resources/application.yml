@@ -108,6 +108,10 @@ aot-loader:
   # environment, e.g. with AOT_LOADER_CLEANUP_ENABLED=true; never in production.
   cleanup:
     enabled: false
+    # The hosts of the test environment, comma separated, e.g. with AOT_LOADER_CLEANUP_ALLOWED_HOSTS in .env. A cleanup
+    # starts only when SupportManagement, PartyAssets and the relation service are all on one of them, so that one left
+    # turned on is refused in production. Blank refuses every cleanup.
+    allowed-hosts: ${AOT_LOADER_CLEANUP_ALLOWED_HOSTS:}
   # The report of each run is written here as a CSV file for Excel when the run finishes, to be sent to the business
   # (section 9). Blank writes none.
   result-directory: ${AOT_LOADER_RESULT_DIRECTORY:./data/resultat}

@@ -17,6 +17,7 @@ import se.sundsvall.aotloader.source.alkt.AlktRepository.EventTexts;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -24,6 +25,28 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class AlktRepositoryTest {
+
+	@Test
+	void eachServingTimeGetsItsTextAndAGeneralNoteOrATextWithoutATimeIsANote() throws SQLException {
+		final var rs = mock(ResultSet.class);
+		when(rs.getString("ServeringStartTid1")).thenReturn("11:00");
+		when(rs.getString("ServeringSlutTid1")).thenReturn("01:00");
+		when(rs.getString("Noteringar")).thenReturn(" Inomhus ");
+		when(rs.getString("ServeringStartTid2")).thenReturn("11:00");
+		when(rs.getString("ServeringSlutTid2")).thenReturn("22:00");
+		when(rs.getString("Noteringar2")).thenReturn("Uteservering");
+		// A text whose interval has no time, and the general note
+		when(rs.getString("Noteringar4")).thenReturn("Gammal text");
+		when(rs.getString("Noteringar5")).thenReturn("Allmän anteckning");
+		when(rs.getString("ServeringStartTid5")).thenReturn("18:00");
+		when(rs.getString("Noteringar5B")).thenReturn("Femte");
+
+		final var permit = AlktRepository.toPermit(rs);
+
+		assertThat(permit.servingTimes()).hasSize(8).startsWith(new ServingTime("11:00", "01:00", "Inomhus"), new ServingTime("11:00", "22:00", "Uteservering"),
+			new ServingTime(null, null, null), new ServingTime(null, null, "Gammal text"), new ServingTime("18:00", null, "Femte"));
+		assertThat(permit.notes()).containsExactly("Gammal text", "Allmän anteckning");
+	}
 
 	@Test
 	void theFilesOfAnEventOfCommunicationAreMaterialOfTheInvestigation() {

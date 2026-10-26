@@ -233,7 +233,7 @@ final class AlkolNotifications {
 		final var events = index.eventsOfPlace(place.fsId()).stream()
 			.filter(product::concerns)
 			.toList();
-		final var former = FormerHolders.of(errands, snapshot.applicants(), owner, today);
+		final var former = FormerHolders.ofRegistrations(errands, snapshot.applicants(), owner, today);
 		final var errandIds = errands.stream().map(ErrandRow::arendeId).collect(toSet());
 		final var formerEvents = events.stream()
 			.filter(event -> errandIds.contains(event.arendeId()) ? former.errandIds().contains(event.arendeId()) : former.isUpTo(dateOf(event)))

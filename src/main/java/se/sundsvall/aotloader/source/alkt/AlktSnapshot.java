@@ -176,8 +176,22 @@ public record AlktSnapshot(
 
 	/**
 	 * A serving time interval as the source has it.
+	 *
+	 * @param text what the interval is for, as the handler wrote it, such as "Inomhus" or "Uteservering"; null when blank
 	 */
-	public record ServingTime(String start, String end) {
+	public record ServingTime(String start, String end, String text) {
+
+		/**
+		 * @return true when the interval has a start or an end
+		 */
+		public boolean isSet() {
+			return start != null || end != null;
+		}
+
+		@Override
+		public String toString() {
+			return "ServingTime[start=" + start + ", end=" + end + ", text=" + (text != null) + "]";
+		}
 	}
 
 	/**

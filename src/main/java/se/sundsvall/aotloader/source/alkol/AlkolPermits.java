@@ -34,6 +34,7 @@ import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitDecisions;
+import se.sundsvall.aotloader.source.PermitDecisions.PermitDays;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.PermitInvestigations;
 import se.sundsvall.aotloader.source.SourceRules;
@@ -153,20 +154,22 @@ final class AlkolPermits {
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
 			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
-				assetParameters(holder, premises, kinds, diaryNumber), legalBasisDocuments(fsId, grant, files)))
+				assetParameters(holder, premises, kinds, diaryNumber, issued), legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
-			.decision(grantDecision(grant, issued, files))
+			.decision(grantDecision(grant, grantErrand, issued, files))
 			.build();
 	}
 
 	/**
-	 * @return the latest granting decision, which the errand of the permit gets (decision 70); null when there is none
+	 * @return the latest granting decision, which the errand of the permit gets (decision 70); null when there is none, or
+	 *         when it has no time and the permit gives it no day
 	 */
-	private DecisionData grantDecision(final DecisionRow grant, final LocalDate issued, final FileList files) {
+	private DecisionData grantDecision(final DecisionRow grant, final ErrandRow grantErrand, final LocalDate issued, final FileList files) {
 		if (grant == null) {
 			return null;
 		}
-		return PermitDecisions.of(grant, snapshot.codes().decisionType(grant.beslutsTyp()), snapshot.codes().userName(grant.beslutsfattare()), issued, null, List.of(), files, ALKOL);
+		final var days = PermitDays.of(issued, null, grantErrand == null ? null : grantErrand.avslutad(), today);
+		return PermitDecisions.of(grant, snapshot.codes().decisionType(grant.beslutsTyp()), snapshot.codes().userName(grant.beslutsfattare()), days, List.of(), files, ALKOL);
 	}
 
 	/**
@@ -350,13 +353,14 @@ final class AlkolPermits {
 	 * The parameters of the tobacco permit, under the keys of the AoT solution (section 7.4). The kinds of sale are the
 	 * kinds of the permit.
 	 */
-	private static Map<String, String> assetParameters(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber) {
+	private static Map<String, String> assetParameters(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber, final LocalDate issued) {
 		final var parameters = new AssetParameters()
 			.holder(holder)
 			.premises(premises, null);
 		Arrays.stream(PermitKind.values()).forEach(kind -> parameters.flag(kind.salesParameter(), kinds.contains(kind)));
 		return parameters
 			.text(AssetParameters.CASE_NUMBER, diaryNumber)
+			.text(AssetParameters.EXECUTION_DATE, SourceValues.format(issued))
 			.text(AssetParameters.DIARY_NUMBER, diaryNumber)
 			.text(AssetParameters.MIGRATED_FROM, ALKOL.getDisplayName())
 			.build();

@@ -103,7 +103,19 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'validFrom' && @.values[0] == '2019-05-01')]"
 			},
 			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'executionDate' && @.values[0] == '2019-05-01')]"
+			},
+			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'premisesName' && @.values[0] == 'Krogen Ett')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'servingHours' && @.values[0] == '11:00–01:00 Inomhus')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decidedBeverages' && @.group == 'DECIDED' && @.displayName == 'Alkoholdrycker som får serveras' && @.values[0] == 'STARKOL' && @.values[1] == 'VIN')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decidedServingHoursIndoorPublic' && @.group == 'DECIDED' && @.displayName == 'Serveringstid inne (allmänheten)' && @.values[0] == '11:00' && @.values[1] == '01:00')]"
 			}
 		]
 	},

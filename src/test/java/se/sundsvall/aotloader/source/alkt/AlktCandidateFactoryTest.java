@@ -9,6 +9,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -25,6 +26,7 @@ import se.sundsvall.aotloader.service.model.ReaderResult;
 import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.InspectionProtocols;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
@@ -55,6 +57,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSI
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
+import static se.sundsvall.aotloader.service.model.ReviewRule.GRANT_DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
@@ -184,6 +187,7 @@ class AlktCandidateFactoryTest {
 			Map.entry("servingHours", "11:00–01:00"),
 			Map.entry("conditions", "Krav på bordsservering: Bord"),
 			Map.entry("caseNumber", "IAN-2019-1"),
+			Map.entry("executionDate", "2019-05-01"),
 			Map.entry("decisionDateAndCaseNumber", "2019-05-01, IAN-2019-1"),
 			Map.entry("diarienummer", "IAN-2019-1"),
 			Map.entry("migreradFran", "AlkT"));
@@ -212,6 +216,26 @@ class AlktCandidateFactoryTest {
 	}
 
 	@Test
+	void theServingTimesKeepTheirTextsAndTheDecisionHasThemInTheFieldsOfDraken() {
+		final var snapshot = snapshot()
+			.permit(permit(1).noTimes().scope(true, false, false, false).time("11:00", "01:00", "Inomhus").time("11:00", "22:00", "Uteservering").build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "556677-8899"))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(parameters(candidate)).containsEntry("serveringstider", List.of("11:00–01:00 Inomhus", "11:00–22:00 Uteservering"));
+		assertThat(candidate.errand().description()).contains("Serveringstider: 11:00–01:00 Inomhus, 11:00–22:00 Uteservering");
+		assertThat(candidate.asset().parameters()).containsEntry("servingHours", "11:00–01:00 Inomhus\n11:00–22:00 Uteservering");
+		assertThat(candidate.decision().decided()).extracting(Parameter::key, Parameter::values).containsExactly(
+			tuple("decidedBeverages", List.of("STARKOL", "VIN")),
+			tuple("decidedServingHoursIndoorPublic", List.of("11:00", "01:00")),
+			tuple("decidedServingHoursOutdoorPublic", List.of("11:00", "22:00")));
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).doesNotContain(ReviewRule.SERVING_TIME_UNPLACED);
+	}
+
+	@Test
 	void theErrandOfAPermitGetsTheDecisionThePermitPointsTo() {
 		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
 
@@ -236,7 +260,7 @@ class AlktCandidateFactoryTest {
 			.place(place(1, 10, "12345678"))
 			.place(place(2, 10, "12345679"))
 			.owner(owner(10, "556677-8899"))
-			.decision(new DecisionRow(100, 500, "GT", LocalDateTime.of(2019, 4, 20, 14, 0), LocalDate.of(2019, 5, 1), LocalDate.of(2025, 4, 30), null, null, null, "Tillstånd beviljas.",
+			.decision(new DecisionRow(100, 500, "0100", LocalDateTime.of(2019, 4, 20, 14, 0), LocalDate.of(2019, 5, 1), LocalDate.of(2025, 4, 30), null, null, null, "Tillstånd beviljas.",
 				"ABE"))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.build();
@@ -251,8 +275,84 @@ class AlktCandidateFactoryTest {
 		assertThat(decision.validTo()).isEqualTo(LocalDate.of(2025, 4, 30));
 		assertThat(decision.terms()).isEmpty();
 		assertThat(decision.documents()).isEmpty();
-		// A permit that points to no decision gets none
-		assertThat(candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow().decision()).isNull();
+		// A permit that points to no decision gets one built from the permit (decision 75)
+		assertThat(candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow().decision().description())
+			.isEqualTo("Beslutet finns inte i AlkT och bygger på tillståndet");
+	}
+
+	@Test
+	void theErrandOfAPermitGetsTheDecisionThatGrantedItRatherThanALaterOneThatExtendedIt() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(102).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "556677-8899"))
+			// In the errand of the permit's diary number, a temporary permit until the decision, and the decision, a grant in
+			// part
+			.decision(new DecisionRow(100, 500, "0231", LocalDateTime.of(2019, 3, 1, 9, 0), null, LocalDate.of(2019, 4, 30), null, null, null, null, null))
+			.decision(new DecisionRow(101, 500, "0110", LocalDateTime.of(2019, 4, 20, 14, 0), null, null, null, null, null, "Tillstånd beviljas delvis.", "ABE"))
+			// A later temporary permit for a closed company beside it, which is not the grant of the permit
+			.decision(new DecisionRow(103, 500, "0235", LocalDateTime.of(2020, 6, 1, 9, 0), null, LocalDate.of(2020, 6, 2), null, null, null, null, null))
+			// The extension the permit points to, in an errand of its own
+			.decision(new DecisionRow(102, 501, "0200", LocalDateTime.of(2021, 6, 1, 10, 0), null, null, null, null, null, "Utökning beviljas.", "ABE"))
+			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(AlktTestRows.errand(501, 1, "01", "IAN-2021-7", LocalDate.of(2021, 5, 1), LocalDate.of(2021, 6, 2), null))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		final var decision = candidate.decision();
+		assertThat(decision.decidedAt()).isEqualTo(LocalDateTime.of(2019, 4, 20, 14, 0));
+		assertThat(decision.description()).isEqualTo("Tillstånd allmänheten, delvis bifall");
+		assertThat(decision.justification()).isEqualTo("Tillstånd beviljas delvis.");
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).doesNotContain(GRANT_DECISION_MISSING);
+		// The errand still tells the latest decision
+		assertThat(parameters(candidate)).containsEntry("senasteBeslut", List.of("Utökat tillstånd, bifall, 2021-06-01"));
+	}
+
+	@Test
+	void theGrantThePermitPointsToCountsWithoutAnErrandAndATemporaryGrantOnlyWithoutAnother() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).build())
+			.permit(permit(2).beslutsId(200).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "556677-8899"))
+			.decision(new DecisionRow(100, null, "0100", LocalDateTime.of(2018, 3, 1, 9, 0), null, null, null, null, null, null, null))
+			.decision(new DecisionRow(200, 600, "0232", LocalDateTime.of(2026, 5, 1, 9, 0), null, LocalDate.of(2026, 12, 31), null, null, null, null, null))
+			.errand(AlktTestRows.errand(600, 2, "01", "IAN-2019-2", LocalDate.of(2026, 4, 1), LocalDate.of(2026, 5, 2), null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		assertThat(candidates.stream().filter(candidate -> candidate.key().sourceId().equals("1")).findFirst().orElseThrow().decision().decidedAt())
+			.isEqualTo(LocalDateTime.of(2018, 3, 1, 9, 0));
+		final var temporary = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow();
+		assertThat(temporary.decision().decidedAt()).isEqualTo(LocalDateTime.of(2026, 5, 1, 9, 0));
+		assertThat(temporary.decision().validTo()).isEqualTo(LocalDate.of(2026, 12, 31));
+		assertThat(temporary.ruleHits()).extracting(RuleHit::rule).doesNotContain(GRANT_DECISION_MISSING);
+	}
+
+	@Test
+	void aPermitWithoutADecisionThatGrantedItGetsOneBuiltFromThePermit() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(102).build())
+			.permit(permit(2).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "556677-8899"))
+			.decision(new DecisionRow(102, 501, "0200", LocalDateTime.of(2021, 6, 1, 10, 0), null, null, null, null, null, "Utökning beviljas.", "ABE"))
+			.errand(AlktTestRows.errand(501, 1, "01", "IAN-2021-7", LocalDate.of(2021, 5, 1), LocalDate.of(2021, 6, 2), null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		final var extended = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("1")).findFirst().orElseThrow();
+		assertThat(extended.decision()).usingRecursiveComparison().ignoringFields("decided").isEqualTo(new DecisionData("Uppgift saknas i AlkT", LocalDateTime.of(2019, 5, 1, 0, 0),
+			"Beslutet finns inte i AlkT och bygger på tillståndet", null, LocalDate.of(2019, 5, 1), extended.asset().validTo(), List.of(), List.of()));
+		assertThat(extended.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(GRANT_DECISION_MISSING, "tillståndet pekar på Utökat tillstånd, bifall, 2021-06-01"));
+		final var without = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow();
+		assertThat(without.decision().decidedAt()).isEqualTo(LocalDateTime.of(2019, 5, 1, 0, 0));
+		assertThat(without.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(GRANT_DECISION_MISSING, null));
 	}
 
 	/**
@@ -263,7 +363,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
 			.place(place(1, 10, "12345678"))
 			.owner(owner(10, "556677-8899"))
-			.decision(AlktTestRows.decision(100, 500, "GT", LocalDate.of(2019, 4, 20).atStartOfDay(), null, "TDB", "11111111.rtf", "bilaga.pdf"))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, "TDB", "11111111.rtf", "bilaga.pdf"))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(AlktTestRows.errand(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(AlktTestRows.errand(502, 2, "01", "IAN-2019-1", null, null, null))
@@ -292,7 +392,7 @@ class AlktCandidateFactoryTest {
 				.aretRunt(true).period("2026-01-01", "2026-03-31").time("10:00", null).build())
 			.place(place(1, 10, "12345678"))
 			.owner(owner(10, "55667"))
-			.decision(AlktTestRows.decision(100, null, "GT", LocalDate.of(2019, 4, 20).atStartOfDay(), LocalDate.of(2026, 1, 1), null, null, null))
+			.decision(AlktTestRows.decision(100, null, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), LocalDate.of(2026, 1, 1), null, null, null))
 			.condition(new ConditionRow(1, null, "Villkor", "då och då", "tills vidare"))
 			.build();
 
@@ -303,7 +403,7 @@ class AlktCandidateFactoryTest {
 			DIARY_NUMBER_MISSING, ISSUE_DATE_MISSING, SUBTYPE_MISSING, CERTIFICATE_MISSING);
 		assertThat(candidate.ruleHits()).extracting(RuleHit::detail).contains(
 			"AgarID i tillståndet 11, på serveringsstället 10",
-			"beslutstyp GT, giltigt till 2026-01-01",
+			"beslutstyp 0100, giltigt till 2026-01-01",
 			"2026-01-01 – 2026-03-31",
 			"på tillståndet 87654321, på serveringsstället 12345678",
 			"serveringstid 2 '10:00–'",
@@ -322,8 +422,8 @@ class AlktCandidateFactoryTest {
 			.permit(permit(1).beslutsId(100).build())
 			.place(place(1, 10, "12345678"))
 			.owner(owner(10, "5566778899"))
-			.decision(AlktTestRows.decision(100, 500, "GT", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, "beslut.pdf"))
-			.decision(AlktTestRows.decision(200, null, "GT", null, null, null, null, "Beslut.pdf"))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, "beslut.pdf"))
+			.decision(AlktTestRows.decision(200, null, "0100", null, null, null, null, "Beslut.pdf"))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(AlktTestRows.errand(501, 1, "07", "TIL-2020-9", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
 			.errand(AlktTestRows.errand(600, 2, "07", "TIL-2021-7", LocalDate.of(2021, 1, 1), LocalDate.of(2021, 2, 1), null))
@@ -354,8 +454,8 @@ class AlktCandidateFactoryTest {
 			.place(place(1, 10, "12345678"))
 			.place(place(2, 10, "12345679"))
 			.owner(owner(10, "5566778899"))
-			.decision(AlktTestRows.decision(100, 500, "GT", LocalDate.of(2019, 12, 31).atStartOfDay(), null, "TDB", "44444444.rtf", "Planritning.PDF"))
-			.decision(AlktTestRows.decision(101, 600, "GT", LocalDate.of(2015, 1, 31).atStartOfDay(), null, "TDBBS", "55555555.rtf", null))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 12, 31).atStartOfDay(), null, "TDB", "44444444.rtf", "Planritning.PDF"))
+			.decision(AlktTestRows.decision(101, 600, "0100", LocalDate.of(2015, 1, 31).atStartOfDay(), null, "TDBBS", "55555555.rtf", null))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 12, 1), LocalDate.of(2020, 1, 1), null))
 			.errand(AlktTestRows.errand(600, 1, "02", "IAN-2015-6", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
 			.file(new FileRow(500, "situationsritning.pdf", false, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
@@ -441,7 +541,7 @@ class AlktCandidateFactoryTest {
 			.place(place(2, 10, "12345679"))
 			.owner(owner(10, "5566778899"))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
-			.decision(AlktTestRows.decision(100, 500, "GT", LocalDate.of(2015, 2, 1).atStartOfDay(), null, "TDB", "33333333.rtf", null))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2015, 2, 1).atStartOfDay(), null, "TDB", "33333333.rtf", null))
 			// The certificate of the former holder is also a decision document, which would otherwise go on the post
 			.document(new DocumentRow(10, 500, null, "TDBV2", LocalDate.of(2015, 2, 1).atStartOfDay(), "33333333.rtf"))
 			.document(new DocumentRow(11, null, 2, "TDBV2", null, "44444444.rtf"))
@@ -488,7 +588,7 @@ class AlktCandidateFactoryTest {
 
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
-		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, NO_ISSUING_ERRAND, CERTIFICATE_MISSING);
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, NO_ISSUING_ERRAND, GRANT_DECISION_MISSING, CERTIFICATE_MISSING);
 		assertThat(candidate.holder()).isNull();
 		assertThat(candidate.place()).isNull();
 		assertThat(candidate.errand().title()).isEqualTo("Serveringstillstånd – okänt serveringsställe");
@@ -536,7 +636,7 @@ class AlktCandidateFactoryTest {
 			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
 			.place(place(1, 10, "12345678"))
 			.owner(owner(10, "556677-8899"))
-			.decision(AlktTestRows.decision(100, 500, "GT", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, null))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, null))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
 			.errand(AlktTestRows.errand(501, 1, "01", "ian 2019 1", LocalDate.of(2019, 1, 1), null, null))
 			.errand(AlktTestRows.errand(502, 2, "01", "IAN-2019-1", null, null, null))
@@ -802,7 +902,22 @@ class AlktCandidateFactoryTest {
 					2020-01-15 Bild: Fasaden
 					2020-01-20 Anteckning (sekretess): Ringde bolaget.
 					2020-01-22 HAND (diarienummer TIL-2019-9): Från annat ärende
-					2020-01-25 REMP"""), new Part("Beslut", "2020-02-01 Erinran, beslutsfattare Anna Berg: Erinran meddelas."))));
+					2020-01-25 REMP"""), new Part("Beslut", "2020-02-01 Erinran, beslutsfattare Anna Berg: Erinran meddelas.")))
+				// Draken shows it as the protocol of an internal inspection (decision 77)
+				.withProtocol(InspectionProtocols.INTERNAL_INSPECTION, List.of(
+					new Parameter("businessName", "Verksamhetens namn", List.of("Sökande 70 AB")),
+					new Parameter("businessOrgNumber", "Organisationsnummer", List.of("556677-8899")),
+					new Parameter("businessAddress", "Adress", List.of("Storgatan 1, 85230 Sundsvall")),
+					new Parameter("inspectionType", "Typ av tillsyn", List.of("Tillsyn, ifrågasatt åtgärd")),
+					new Parameter("inspectionDate", "Datum", List.of("2020-01-01")),
+					new Parameter("inspectorName", "Utförd av", List.of("Anna Berg, ZZ")))));
+		// The protocol has no room for the texts, so the errand also has them, a line each
+		assertThat(parameters(closed))
+			.containsEntry("noteringar", List.of("Klagomål från granne", "Uppföljning i mars"))
+			.containsEntry("handelser", List.of("Anteckning: Utan datum", "2020-01-10 UTSKR: Brev om tillsyn", "2020-01-15 Bild: Fasaden", "2020-01-20 Anteckning (sekretess): Ringde bolaget.",
+				"2020-01-22 HAND (diarienummer TIL-2019-9): Från annat ärende", "2020-01-25 REMP"))
+			.containsEntry("beslutstexter", List.of("2020-02-01 Erinran, beslutsfattare Anna Berg: Erinran meddelas."));
+		assertThat(closed.errand().parameters()).filteredOn(parameter -> parameter.key().equals("handelser")).extracting(Parameter::displayName).containsExactly("Händelser i AlkT");
 
 		final var open = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("701")).findFirst().orElseThrow();
 		// The applicant is not the owner, so the errand concerned a former holder and is not migrated (decision 72)
@@ -848,7 +963,7 @@ class AlktCandidateFactoryTest {
 			// The errand has the note AlkT copied to the permit, which the permit shows as a parameter already
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 2, 1), LocalDate.of(2019, 5, 10), null, List.of("Ansökan komplett", "En notering"),
 				List.of("abe", "KLM")))
-			.decision(AlktTestRows.decision(900, 501, "GT", LocalDateTime.of(2019, 5, 1, 13, 0), null, null, null, null, "Tillstånd beviljas."))
+			.decision(AlktTestRows.decision(900, 501, "0100", LocalDateTime.of(2019, 5, 1, 13, 0), null, null, null, null, "Tillstånd beviljas."))
 			.errandText(500, AlktTestRows.text(LocalDateTime.of(2019, 3, 1, 10, 0), "ANT", false, "Remiss skickad"))
 			.placeEvent(1, new PlaceEventRow(31020, new TextRow(LocalDateTime.of(2021, 6, 1, 8, 0), "ANT", false, "Ny serveringsansvarig", false, "IAN-2021-1"),
 				List.of(new FileRow(null, "bilaga.pdf", false, new FileDetails(null, LocalDateTime.of(2021, 6, 1, 8, 0))))))
@@ -975,7 +1090,27 @@ class AlktCandidateFactoryTest {
 		// The texts of the investigation are the round of inspection, the note of the visit and the remarks
 		assertThat(visit.investigation()).isEqualTo(new InvestigationData("Tillsynsbesök – Restaurang 1", LocalDateTime.of(2023, 11, 4, 21, 30), LocalDateTime.of(2023, 11, 4, 21, 30),
 			InvestigationTexts.of(new Part("Tillsynsomgång", "Krogrunda, 2023-11-04 – 2023-11-05\nTillsammans med polisen."), new Part("Anteckning", "Mycket folk i baren."),
-				new Part("Anmärkningar", "Servering till minderårig: Ungdomar i baren\n77"))));
+				new Part("Anmärkningar", "Servering till minderårig: Ungdomar i baren\n77")))
+			// Draken shows it as the protocol of an inspection of a serving permit (decision 77), without the end time that
+			// cannot be read
+			.withProtocol(InspectionProtocols.SERVING_PERMIT, List.of(
+				new Parameter("premisesName", "Restaurang", List.of("Restaurang 1")),
+				new Parameter("premisesAddress", "Adress", List.of("Storgatan 1, 85230 Sundsvall")),
+				new Parameter("inspectionDate", "Tillsynsdatum", List.of("2023-11-04")),
+				new Parameter("visitStartTime", "Inleds kl.", List.of("21:30")),
+				new Parameter("additionalRemarks", "Beskrivning", List.of("""
+					Tillsynsomgång:
+					Krogrunda, 2023-11-04 – 2023-11-05
+					Tillsammans med polisen.
+
+					Anteckning:
+					Mycket folk i baren.
+
+					Anmärkningar:
+					Servering till minderårig: Ungdomar i baren
+					77""")),
+				new Parameter("inspector1NameAndTitle", "Namn, befattning", List.of("Anna Berg")),
+				new Parameter("inspector2NameAndTitle", "Namn, befattning", List.of("XYZ")))));
 		assertThat(visit.errand().labelPaths()).containsExactly(TestData.EXTERNAL_INSPECTION, "TAGROOT/ALCOHOL_INSPECTION");
 		assertThat(visit.errand().externalTags()).isEmpty();
 		assertThat(visit.asset()).isNull();
@@ -1024,6 +1159,8 @@ class AlktCandidateFactoryTest {
 		assertThat(parameters(withoutPlace)).containsEntry("tillsynsart", List.of("99")).containsEntry("besokstid", List.of("09:15–10:00"))
 			.doesNotContainKeys("anmarkningar", "anteckning", "tillsynsomgang");
 		assertThat(withoutPlace.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Tillsynsomgång");
+		assertThat(withoutPlace.investigation().protocolParameters()).extracting(Parameter::key, parameter -> parameter.values().getFirst())
+			.containsExactly(tuple("inspectionDate", "2022-03-01"), tuple("visitStartTime", "09:15"), tuple("visitEndTime", "10:00"));
 	}
 
 	@Test

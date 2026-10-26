@@ -30,6 +30,21 @@
 					"expression": "$.conclusion",
 					"contains": "<p><strong>Händelser</strong></p><p>2021-01-15 Anteckning (sekretess): Samtal med bolaget</p><p>2021-01-18 Remiss till polisen (diarienummer TIL-2020-3)</p><p>2021-01-20 Bild: Fasaden mot torget</p>"
 				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "internal_inspection"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'businessName' && @.displayName == 'Verksamhetens namn' && @.values[0] == 'Testbolaget AB')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'businessOrgNumber' && @.values[0] == '556677-8899')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspectionDate' && @.values[0] == '2021-01-01')]"
 			}
 		]
 	},

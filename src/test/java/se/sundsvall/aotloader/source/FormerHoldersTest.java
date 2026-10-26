@@ -54,6 +54,21 @@ class FormerHoldersTest {
 	}
 
 	@Test
+	void aFormerHolderWhoseErrandsHaveNoDatesLastedUntilTheFirstErrandOfTheOwner() {
+		final var errands = List.of(
+			errand(10, 3, null, null, null),
+			errand(11, 1, LocalDate.of(2018, 1, 1), null, null),
+			errand(12, null, LocalDate.of(2017, 6, 1), null, null));
+
+		final var former = FormerHolders.of(errands, APPLICANTS, OWNER, TODAY);
+
+		assertThat(former).isEqualTo(new FormerHolders(Set.of(10, 12), LocalDate.of(2017, 12, 31)));
+		// Without an errand of the owner either, the days of the former holder are unknown
+		assertThat(FormerHolders.of(List.of(errand(10, 3, null, null, null), errand(12, null, LocalDate.of(2017, 6, 1), null, null)), APPLICANTS, OWNER, TODAY))
+			.isEqualTo(new FormerHolders(Set.of(10), null));
+	}
+
+	@Test
 	void aPlaceWithoutAnErrandOfAFormerHolderHasNothingOfOne() {
 		final var errands = List.of(
 			errand(10, 1, LocalDate.of(2018, 1, 1), null, null),
@@ -77,6 +92,31 @@ class FormerHoldersTest {
 		assertThat(PartyRows.sameHolder(WITHOUT_NUMBER, WITHOUT_NUMBER, TODAY)).isFalse();
 		assertThat(PartyRows.otherHolder(OWNER, WITHOUT_NUMBER, TODAY)).isFalse();
 		assertThat(PartyRows.otherHolder(null, OWNER, TODAY)).isFalse();
+	}
+
+	@Test
+	void aNumberThatCannotBeNormalizedIsAnUnknownHolder() {
+		// The owner's number written in part
+		final var unreadable = contact(5, "556677-88");
+
+		assertThat(PartyRows.otherHolder(unreadable, OWNER, TODAY)).isFalse();
+		assertThat(PartyRows.otherHolder(OWNER, unreadable, TODAY)).isFalse();
+		assertThat(PartyRows.sameHolder(unreadable, OWNER, TODAY)).isFalse();
+		// A rule that has the item reviewed takes it as perhaps another holder
+		assertThat(PartyRows.mayBeOtherHolder(unreadable, OWNER, TODAY)).isTrue();
+		assertThat(PartyRows.mayBeOtherHolder(OWNER, OWNER_AGAIN, TODAY)).isFalse();
+		assertThat(PartyRows.mayBeOtherHolder(OWNER, WITHOUT_NUMBER, TODAY)).isFalse();
+
+		final var errands = List.of(
+			errand(10, 5, LocalDate.of(2019, 1, 1), null, null),
+			errand(11, 1, LocalDate.of(2018, 1, 1), null, null),
+			errand(12, 3, LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null));
+
+		final var applicants = Map.of(1, OWNER, 3, FORMER, 5, unreadable);
+		// The errand of the unknown applicant came after the owner's first errand, so it is not a former holder's
+		assertThat(FormerHolders.of(errands, applicants, OWNER, TODAY)).isEqualTo(new FormerHolders(Set.of(12), LocalDate.of(2017, 12, 31)));
+		// Among the registrations of a notification it is, since its files may name another holder (G31)
+		assertThat(FormerHolders.ofRegistrations(errands, applicants, OWNER, TODAY)).isEqualTo(new FormerHolders(Set.of(10, 12), LocalDate.of(2017, 12, 31)));
 	}
 
 	private static ErrandRow errand(final Integer arendeId, final Integer sokandeId, final LocalDate oppnad, final LocalDate avslutad, final LocalDate upplagd) {

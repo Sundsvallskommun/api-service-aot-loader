@@ -16,8 +16,8 @@
 		"placeNumber": "12345679",
 		"placeName": "Krogen Två",
 		"outcome": "GRANSKAS",
-		"rules": "G2,G13,G29",
-		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
+		"rules": "G2,G13,G33,G29",
+		"detail": "G2 Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare: AgarID i tillståndet 11, på serveringsstället 10; G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G33 Källsystemet har inget beslut som beviljade tillståndet, så ärendet får ett beslut som bygger på tillståndet (beslut 75); G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets"
 	},
 	{
 		"source": "ALKT",
@@ -36,8 +36,8 @@
 		"placeNumber": "12345681",
 		"placeName": "Timråkrogen",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": "G13,G29",
-		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Inget beslut: AlkT har inget beslut med tidpunkt för tillståndet"
+		"rules": "G13,G33,G29",
+		"detail": "Stället hör till kommun 2262 (område Timrå); G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G33 Källsystemet har inget beslut som beviljade tillståndet, så ärendet får ett beslut som bygger på tillståndet (beslut 75); G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Beslut: Bifall, fattat 2022-03-01, 0 villkor, 0 dokument"
 	},
 	{
 		"source": "ALKT",

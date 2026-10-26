@@ -89,6 +89,8 @@ public final class Constants {
 	public static final String DECISION_PARAMETER_DECISION_DATE = "decisionDate";
 	/** The parameter of a decision with its first day, as Draken writes it for the certificate. */
 	public static final String DECISION_PARAMETER_VALID_FROM = "validFrom";
+	/** The group of the parameters of a decision with what the permit was granted with, as Draken writes and reads them. */
+	public static final String DECISION_PARAMETER_GROUP_DECIDED = "DECIDED";
 
 	/** The longest value of an errand parameter in SupportManagement. */
 	public static final int ERRAND_PARAMETER_MAX_LENGTH = 3000;

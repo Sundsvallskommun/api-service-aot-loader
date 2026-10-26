@@ -141,7 +141,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.additionalParameters.servingHours",
-					"equalTo": "11:00–01:00"
+					"equalTo": "11:00–01:00 Inomhus"
 				}
 			},
 			{
@@ -160,6 +160,12 @@
 				"matchesJsonPath": {
 					"expression": "$.additionalParameters.decisionDateAndCaseNumber",
 					"equalTo": "2019-05-01, IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters.executionDate",
+					"equalTo": "2019-05-01"
 				}
 			},
 			{

@@ -46,6 +46,8 @@ class PersonalDataTest {
 		assertHidden(new Candidate.CandidateFiles(List.of(file), List.of(new AssetFile(file, null)), Map.of(file, FileDetails.NONE)));
 		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
 		assertHidden(new InvestigationData("Tillsyn", null, null, InvestigationTexts.of(new InvestigationTexts.Part("Noteringar", NAME), new InvestigationTexts.Part("Händelser", NAME + " " + NUMBER))));
+		assertHidden(new InvestigationData("Tillsyn – " + NAME, null, null, InvestigationTexts.NONE)
+			.withProtocol("internal_inspection", List.of(new Parameter("businessName", "Verksamhetens namn", List.of(NAME)), new Parameter("businessOrgNumber", "Organisationsnummer", List.of(NUMBER)))));
 		assertHidden(new InvestigationTexts.Part("Beslut", NUMBER));
 		assertHidden(new Journal.Entry(null, "Anteckning", NAME + " " + NUMBER));
 	}
@@ -80,6 +82,7 @@ class PersonalDataTest {
 			new AlktSnapshot.Scope(false, false, false, false, false, false, false, false, false), true, false, List.of(), new AlktSnapshot.ServingArea("100", "50", NAME + " " + NUMBER),
 			List.of(NAME + " " + NUMBER), null, null, null, null, null, 1));
 		assertHidden(new AlktSnapshot.ServingArea("100", "50", NAME + " " + NUMBER));
+		assertHidden(new AlktSnapshot.ServingTime("11:00", "01:00", NAME + " " + NUMBER));
 		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", "REST", NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
 		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
 		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", List.of(new Parameter("restaurantNumber", null, List.of(NAME)))));

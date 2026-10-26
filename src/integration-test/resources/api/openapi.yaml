@@ -864,6 +864,7 @@ paths:
           - RELATION_KLAR
           - KLAR
           - FEL
+          - RENSAS
       responses:
         "200":
           description: OK
@@ -1097,8 +1098,8 @@ components:
           items:
             type: string
             minLength: 1
-            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/\\d{1,10}(-[A-Z_]{1,30})?\\\
-              s*$"
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/(\\d{1,10}(-[A-Z_]{1,30})?|utan-id-\\\
+              d{1,10})\\s*$"
           maxItems: 2147483647
           minItems: 1
     Run:
@@ -1243,8 +1244,8 @@ components:
           items:
             type: string
             minLength: 1
-            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/\\d{1,10}(-[A-Z_]{1,30})?\\\
-              s*$"
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/(\\d{1,10}(-[A-Z_]{1,30})?|utan-id-\\\
+              d{1,10})\\s*$"
           maxItems: 2147483647
           minItems: 1
     MigrationItem:
@@ -1295,6 +1296,7 @@ components:
           - RELATION_KLAR
           - KLAR
           - FEL
+          - RENSAS
         failedStep:
           type: string
           enum:

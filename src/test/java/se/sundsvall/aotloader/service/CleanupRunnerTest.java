@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -53,6 +54,9 @@ class CleanupRunnerTest {
 	private ItemCleaner cleaner;
 
 	@Mock
+	private CleanupGuard cleanupGuard;
+
+	@Mock
 	private TargetGuard targetGuard;
 
 	@Mock
@@ -69,16 +73,17 @@ class CleanupRunnerTest {
 
 	@BeforeEach
 	void setUp() {
+		lenient().when(cleanupGuard.check()).thenReturn(Optional.empty());
 		lenient().when(targetGuard.check()).thenReturn(Optional.empty());
 		lenient().when(runItemRepository.save(any())).thenAnswer(invocation -> {
 			lines.add(invocation.getArgument(0));
 			return invocation.getArgument(0);
 		});
-		lenient().when(cleaner.clean(any(), anyString(), anyBoolean())).thenAnswer(invocation -> {
+		lenient().when(cleaner.clean(any(), anyString(), anyBoolean(), any())).thenAnswer(invocation -> {
 			final MigrationItemEntity item = invocation.getArgument(0);
 			return new ItemResult(Outcome.RENSAD, List.of(), "Borttaget: ärendet i SupportManagement och raden i statustabellen", item.getErrandNumber());
 		});
-		runner = new CleanupRunner(cleaner, targetGuard, itemRepository, new RunRecords(runRepository, runItemRepository, new ResultFiles(runItemRepository, null, CLOCK), CLOCK));
+		runner = new CleanupRunner(cleaner, cleanupGuard, targetGuard, itemRepository, new RunRecords(runRepository, runItemRepository, new ResultFiles(runItemRepository, null, CLOCK), CLOCK));
 	}
 
 	@Test
@@ -101,7 +106,7 @@ class CleanupRunnerTest {
 				tuple("5-FOLKOL", Outcome.RENSAD, "", "Ställe 5-FOLKOL"),
 				tuple("1", Outcome.RENSAD, "", "Ställe 1"),
 				tuple("2", Outcome.RENSAD, "", "Ställe 2"));
-		verify(cleaner, never()).clean(elsewhere, "2281", false);
+		verify(cleaner, never()).clean(eq(elsewhere), eq("2281"), eq(false), any());
 		assertThat(run.getStatus()).isEqualTo(RunStatus.COMPLETED);
 		assertThat(run.getFinished()).isEqualTo(OffsetDateTime.now(CLOCK));
 		verify(runRepository).save(run);
@@ -119,7 +124,7 @@ class CleanupRunnerTest {
 		assertThat(runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN)), Optional.empty())).isEmpty();
 
 		assertThat(lines).extracting(RunItemEntity::getSourceId).containsExactly("700", "1");
-		verify(cleaner, never()).clean(other, "2281", false);
+		verify(cleaner, never()).clean(eq(other), eq("2281"), eq(false), any());
 		assertThat(run.getStatus()).isEqualTo(RunStatus.COMPLETED);
 		assertThat(run.getMessage()).isEqualTo("1 av ärendena i urvalet finns inte i statustabellen: ALKT/TILLSYN/999");
 	}
@@ -132,8 +137,8 @@ class CleanupRunnerTest {
 
 		runner.execute(run(true, null), Map.of(Source.ALKT, Set.of(TILLSYN)), Optional.empty());
 
-		verify(cleaner).clean(inspection, "2281", true);
-		verify(cleaner, never()).clean(permit, "2281", true);
+		verify(cleaner).clean(eq(inspection), eq("2281"), eq(true), any());
+		verify(cleaner, never()).clean(eq(permit), eq("2281"), eq(true), any());
 	}
 
 	@Test
@@ -186,13 +191,27 @@ class CleanupRunnerTest {
 	}
 
 	@Test
+	void aCleanupAgainstAHostThatIsNotAllowedDoesNotStart() {
+		when(cleanupGuard.check()).thenReturn(Optional.of("Rensningen tillåts bara mot värdarna i inställningen"));
+		final var run = run(false, null);
+
+		runner.execute(run, EVERYTHING, Optional.empty());
+
+		verify(itemRepository, never()).findAllByOrderBySourceAscKindAscSourceIdAsc();
+		// Nor is the local database bound to an environment the cleanup does not run against
+		verify(targetGuard, never()).check();
+		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+		assertThat(run.getMessage()).isEqualTo("Rensningen startade inte. Rensningen tillåts bara mot värdarna i inställningen");
+	}
+
+	@Test
 	void aStopTakesEffectBeforeTheNextItem() {
 		final var run = run(false, null);
 		when(itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenReturn(List.of(item(Source.ALKT, TILLSTAND, "1", "2281"), item(Source.ALKT, TILLSTAND, "2", "2281")));
 		doAnswer(_ -> {
 			assertThat(runner.requestStop(run.getId())).isTrue();
 			return new ItemResult(Outcome.RENSAD, List.of(), null, null);
-		}).when(cleaner).clean(any(), anyString(), anyBoolean());
+		}).when(cleaner).clean(any(), anyString(), anyBoolean(), any());
 
 		runner.execute(run, EVERYTHING, Optional.empty());
 

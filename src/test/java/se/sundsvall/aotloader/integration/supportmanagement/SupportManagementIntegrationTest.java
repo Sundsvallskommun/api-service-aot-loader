@@ -205,13 +205,23 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.createDecision(MUNICIPALITY_ID, "a", decision)).isEqualTo("d-1");
 		integration.updateDecision(MUNICIPALITY_ID, "a", "d-1", decision);
 		integration.createDecisionTerm(MUNICIPALITY_ID, "a", "d-1", term);
-		integration.deleteDecisionTerm(MUNICIPALITY_ID, "a", "d-1", "t-1");
 		assertThat(integration.getDecisionOutcomes(MUNICIPALITY_ID)).extracting(DecisionOutcome::getName).containsExactly("APPROVAL");
 		assertThat(integration.getDecisionOutcomes(MUNICIPALITY_ID)).isEmpty();
 
 		verify(decisionClient).updateDecision(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", decision);
 		verify(decisionClient).createDecisionTerm(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", term);
-		verify(decisionClient).deleteDecisionTerm(MUNICIPALITY_ID, NAMESPACE, "a", "d-1", "t-1");
+	}
+
+	@Test
+	void aDecisionThatIsGoneAlreadyIsNoErrorWhenItIsRemoved() {
+		when(decisionClient.deleteDecision(MUNICIPALITY_ID, NAMESPACE, "a", "d"))
+			.thenReturn(ResponseEntity.noContent().build())
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"))
+			.thenThrow(Problem.valueOf(CONFLICT, "Låst"));
+
+		assertThat(integration.deleteDecision(MUNICIPALITY_ID, "a", "d")).isTrue();
+		assertThat(integration.deleteDecision(MUNICIPALITY_ID, "a", "d")).isFalse();
+		assertThatThrownBy(() -> integration.deleteDecision(MUNICIPALITY_ID, "a", "d")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Låst");
 	}
 
 	@Test

@@ -5,7 +5,9 @@ import java.util.Set;
 
 /**
  * The status of a source item in the status table (section 8). The statuses from TILLSTANDSHAVARE_KLAR to KLAR follow
- * the steps of the flow (section 6), in order.
+ * the steps of the flow (section 6), in order. RENSAS is the status of an item whose cleanup has started but not
+ * finished (section 10.3): what is left of it in the target systems is removed by the next cleanup, and no run
+ * migrates it until then.
  */
 public enum ItemStatus {
 
@@ -19,7 +21,8 @@ public enum ItemStatus {
 	BESLUT_KLART,
 	RELATION_KLAR,
 	KLAR,
-	FEL;
+	FEL,
+	RENSAS;
 
 	private static final Set<ItemStatus> PROGRESS = EnumSet.range(TILLSTANDSHAVARE_KLAR, KLAR);
 

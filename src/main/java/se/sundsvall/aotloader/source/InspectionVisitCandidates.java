@@ -114,7 +114,7 @@ public final class InspectionVisitCandidates {
 			.ruleHits(hits)
 			.place(place)
 			.title(title)
-			.investigation(investigation)
+			.investigation(protocol(investigation, visit, place, content.inspectors()))
 			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows, investigation.completedAt()))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
@@ -203,6 +203,22 @@ public final class InspectionVisitCandidates {
 
 	private static String withoutSeconds(final String value) {
 		return Optional.ofNullable(value).map(written -> SECONDS.matcher(written.strip()).replaceFirst("$1")).orElse(null);
+	}
+
+	/**
+	 * @return the investigation of a visit of AlkT as the inspection protocol of a place with a serving permit (decision
+	 *         77); a visit of AlkOL is of a sales place, which Draken has no protocol for, and keeps the investigation as
+	 *         it is
+	 */
+	private InvestigationData protocol(final InvestigationData investigation, final VisitRow visit, final Place place, final List<String> inspectors) {
+		if (type != ErrandType.ALCOHOL_INSPECTION_VISIT) {
+			return investigation;
+		}
+		final var start = timeOfDay(visit.startTid());
+		final var end = timeOfDay(visit.slutTid());
+		final var noTime = isNoTime(start) && isNoTime(end);
+		return investigation.withProtocol(InspectionProtocols.SERVING_PERMIT,
+			InspectionProtocols.visit(place, visit.datum(), noTime ? null : start, noTime ? null : end, inspectors, investigation.texts()));
 	}
 
 	/**

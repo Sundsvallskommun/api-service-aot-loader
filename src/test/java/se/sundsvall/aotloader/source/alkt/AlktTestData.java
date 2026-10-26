@@ -48,7 +48,7 @@ final class AlktTestData {
 	static Map<String, Map<String, String>> codeTexts() {
 		final var texts = new HashMap<String, Map<String, String>>();
 		texts.put("A", Map.of("07", "Tillsyn, ifrågasatt åtgärd", "08", "Tillsyn, restaurangrapport"));
-		texts.put("B", Map.of("GT", "Serveringstillstånd", "ER", "Erinran"));
+		texts.put("B", Map.of("0100", "Serveringstillstånd", "0110", "Tillstånd allmänheten, delvis bifall", "0200", "Utökat tillstånd, bifall", "ER", "Erinran"));
 		texts.put("D", Map.of("ANT", "Anteckning"));
 		texts.put("G", Map.of("01", "Centrum"));
 		texts.put("O", Map.of("0100", "Krav på bordsservering"));
@@ -217,7 +217,7 @@ final class AlktTestData {
 		private boolean gardsforsaljning;
 		private boolean servingPublic = true;
 		private boolean servingPrivate;
-		private final List<ServingTime> times = new ArrayList<>(List.of(new ServingTime("11:00", "01:00")));
+		private final List<ServingTime> times = new ArrayList<>(List.of(new ServingTime("11:00", "01:00", null)));
 		private LocalDate issued = LocalDate.of(2019, 5, 1);
 		private String diaryNumber;
 		private String gtRestaurantNumber;
@@ -274,7 +274,17 @@ final class AlktTestData {
 		}
 
 		PermitBuilder time(final String start, final String end) {
-			times.add(new ServingTime(start, end));
+			return time(start, end, null);
+		}
+
+		PermitBuilder time(final String start, final String end, final String text) {
+			times.add(new ServingTime(start, end, text));
+			return this;
+		}
+
+		/** Replaces the serving times. */
+		PermitBuilder noTimes() {
+			times.clear();
 			return this;
 		}
 
@@ -301,7 +311,7 @@ final class AlktTestData {
 		PermitRow build() {
 			final var servingTimes = new ArrayList<>(times);
 			while (servingTimes.size() < 8) {
-				servingTimes.add(new ServingTime(null, null));
+				servingTimes.add(new ServingTime(null, null, null));
 			}
 			return new PermitRow(objektId, gtAgarId, new Drinks(starkol, vin, sprit, aja, alp), new Period(aretRunt, arligStart, arligSlut, periodStart, periodSlut),
 				new Scope(false, uteservering, false, false, false, catering, provsmakning, false, gardsforsaljning), servingPublic, servingPrivate, servingTimes, new ServingArea("200", "80", "Matsal"),

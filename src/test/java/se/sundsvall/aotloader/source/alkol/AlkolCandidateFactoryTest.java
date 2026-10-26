@@ -27,6 +27,7 @@ import se.sundsvall.aotloader.service.model.PermitLink.Basis;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.source.InspectionProtocols;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
@@ -136,6 +137,7 @@ class AlkolCandidateFactoryTest {
 			Map.entry("salesWholesale", "false"),
 			Map.entry("salesOnline", "false"),
 			Map.entry("caseNumber", "IAN-2019-100"),
+			Map.entry("executionDate", "2019-07-02"),
 			Map.entry("diarienummer", "IAN-2019-100"),
 			Map.entry("migreradFran", "AlkOL"));
 		assertThat(candidate.files().references()).containsExactly(
@@ -694,6 +696,10 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Klagomål"),
 			new Part("Händelser", "2020-01-10 Anteckningar (sekretess): Kontrollköp gjort\n2020-01-15 017 (diarienummer TIL-0)"),
 			new Part("Beslut", "2020-01-20 Varning, beslutsfattare XY: Varning meddelas.")));
+		// An inspection errand of AlkOL is an internal inspection too, and has the texts as parameters (decision 77)
+		assertThat(external.investigation().protocol()).isEqualTo(InspectionProtocols.INTERNAL_INSPECTION);
+		assertThat(external.investigation().protocolParameters()).extracting(Parameter::key).containsExactly("businessName", "businessOrgNumber", "businessAddress", "inspectionType", "inspectionDate", "inspectorName");
+		assertThat(parameters(external)).containsEntry("noteringar", List.of("Klagomål")).containsEntry("beslutstexter", List.of("2020-01-20 Varning, beslutsfattare XY: Varning meddelas."));
 		final var internal = candidates.get(1);
 		assertThat(internal.investigation().texts()).isEqualTo(InvestigationTexts.NONE);
 		assertThat(parameters(internal)).doesNotContainKey("handlaggare");
@@ -819,6 +825,9 @@ class AlkolCandidateFactoryTest {
 			.containsEntry("migrerad", List.of(TODAY + " från AlkOL"));
 		assertThat(visit.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Tillsynsomgång", "Kontrollköp vecka 18, 2024-05-03"), new Part("Anteckning", "Köpet nekades."),
 			new Part("Anmärkningar", "Påträngande reklam i butik")));
+		// Draken has no protocol for a visit to a sales place
+		assertThat(visit.investigation().protocol()).isNull();
+		assertThat(visit.investigation().protocolParameters()).isEmpty();
 		assertThat(visit.measures()).containsExactly(new MeasureData("Påträngande reklam i butik", null, LocalDateTime.of(2024, 5, 3, 22, 15)));
 		// Every file of the visit is material of its investigation (decision 60)
 		assertThat(visit.files().references()).allSatisfy(file -> assertThat(visit.files().detailsOf(file).investigation()).isTrue());
