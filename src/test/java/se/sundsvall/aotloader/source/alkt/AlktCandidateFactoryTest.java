@@ -215,7 +215,7 @@ class AlktCandidateFactoryTest {
 			new AssetFile(new FileReference("11111111.rtf", DOCUMENTS), "Beslut"));
 		// A decision's file gets the day of the decision, and a drawing the purpose of one
 		assertThat(candidate.files().detailsOf(new FileReference("11111111.rtf", DOCUMENTS))).isEqualTo(new FileDetails(null, LocalDateTime.of(2019, 4, 20, 0, 0)));
-		assertThat(candidate.files().detailsOf(new FileReference("ritning.pdf", ATTACHMENTS))).isEqualTo(new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null));
+		assertThat(candidate.files().detailsOf(new FileReference("ritning.pdf", ATTACHMENTS))).isEqualTo(new FileDetails(FilePurposes.FLOOR_PLAN, null));
 		// The decision the permit points to, then its certificate, may state its legal basis (decision 58)
 		assertThat(candidate.asset().legalBasisDocuments()).containsExactly(new FileReference("11111111.rtf", DOCUMENTS), new FileReference("33333333.rtf", DOCUMENTS));
 	}
@@ -463,7 +463,7 @@ class AlktCandidateFactoryTest {
 			.decision(AlktTestRows.decision(101, 600, "0100", LocalDate.of(2015, 1, 31).atStartOfDay(), null, "TDBBS", "55555555.rtf", null))
 			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 12, 1), LocalDate.of(2020, 1, 1), null))
 			.errand(AlktTestRows.errand(600, 1, "02", "IAN-2015-6", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
-			.file(new FileRow(500, "situationsritning.pdf", false, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
+			.file(new FileRow(500, "situationsritning.pdf", false, new FileDetails(FilePurposes.FLOOR_PLAN, null)))
 			// A referral answer named as a drawing stays on the errand
 			.file(new FileRow(500, "ritning yttrande.pdf", false, new FileDetails(FilePurposes.RESCUE_SERVICE_RESPONSE, null)))
 			.file(AlktTestRows.file(600, "gammal ritning.pdf", false))
@@ -533,6 +533,9 @@ class AlktCandidateFactoryTest {
 		// An investigation, a referral answer, a registration certificate and the basis of a decision go on the errand only
 		assertThat(candidate.files().onPost()).filteredOn(file -> "Beslut".equals(file.category())).extracting(file -> file.reference().name())
 			.containsExactly("11111111.rtf", "Beslut 2019.pdf");
+		assertThat(candidate.files().onPost()).extracting(file -> file.reference().name()).doesNotContain("Registreringsbevis.pdf");
+		// The attachment of a decision gets a purpose by its name as well (decision 86)
+		assertThat(candidate.files().detailsOf(new FileReference("Registreringsbevis.pdf", ATTACHMENTS)).purpose()).isEqualTo(FilePurposes.CERTIFICATE_OF_REGISTRATION);
 		// Only the document made from the template of a permit decision states the legal basis
 		assertThat(candidate.asset().legalBasisDocuments()).containsExactly(new FileReference("11111111.rtf", DOCUMENTS));
 	}

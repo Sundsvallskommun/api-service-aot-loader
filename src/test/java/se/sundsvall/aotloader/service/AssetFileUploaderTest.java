@@ -143,7 +143,7 @@ class AssetFileUploaderTest {
 			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
 			.files(List.of(drawing))
 			.assetFiles(List.of(new AssetFile(drawing, "Ritning")))
-			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.SERVING_AREA_DRAWING, null)))
+			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.FLOOR_PLAN, null)))
 			.build();
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
 		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
@@ -151,8 +151,8 @@ class AssetFileUploaderTest {
 
 		uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, notes);
 
-		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "serving_area_drawing");
-		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 1 av 1 filer: serving_area_drawing 1");
+		verify(partyAssets).createAttachment(MUNICIPALITY_ID, ASSET_ID, "ritning.pdf", "ritning".getBytes(StandardCharsets.UTF_8), "floor_plan");
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isEqualTo("Tillståndet i PartyAssets har 1 av 1 filer: floor_plan 1");
 	}
 
 	@Test

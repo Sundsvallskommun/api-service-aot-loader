@@ -57,11 +57,11 @@ class FilePurposesTest {
 		ALKOL | 038   | program.pdf                    | SELF_MONITORING_PROGRAM
 		ALKT  | 035   | program.pdf                    | -
 		ALKOL | REMS  | svar.pdf                       | -
-		ALKT  | HAND  | Planritning.pdf                | SERVING_AREA_DRAWING
+		ALKT  | HAND  | Planritning.pdf                | FLOOR_PLAN
 		ALKT  | -     | Köksritning.pdf                | KITCHEN_FLOOR_PLAN
 		ALKT  | -     | ritning kok.pdf                | KITCHEN_FLOOR_PLAN
-		ALKT  | -     | ritning kokbok.pdf             | SERVING_AREA_DRAWING
-		ALKT  | -     | ritning skok.pdf               | SERVING_AREA_DRAWING
+		ALKT  | -     | ritning kokbok.pdf             | FLOOR_PLAN
+		ALKT  | -     | ritning skok.pdf               | FLOOR_PLAN
 		ALKT  | -     | ritning kök.pdf                | KITCHEN_FLOOR_PLAN
 		ALKOL | 016   | ritning butik.pdf              | SALES_PREMISES_DRAWING
 		ALKOL | 016   | ansokan.pdf                    | -
@@ -72,17 +72,54 @@ class FilePurposesTest {
 		assertThat(FilePurposes.ofAttachment(source, eventType, name)).isEqualTo(purpose);
 	}
 
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', nullValues = "-", textBlock = """
+		ALKT  | HAND  | Dryckesmeny 2019.pdf                  | DRINKS_MENU
+		ALKT  | HAND  | Mat- och dryckeslista.pdf             | DRINKS_MENU
+		ALKT  | HAND  | Smörgåsmeny.pdf                       | MENU
+		ALKT  | IKOMP | Brandskyddsdokumentation.pdf          | FIRE_SAFETY_DOCUMENTATION
+		ALKT  | HAND  | Egenkontrollprogram.pdf               | SELF_MONITORING_PROGRAM
+		ALKOL | 016   | egentillsyn.pdf                       | SELF_MONITORING_PROGRAM
+		ALKOL | 018   | Fullmakt.pdf                          | POWER_OF_ATTORNEY
+		ALKT  | BILAG | Registreringsbevis.pdf                | CERTIFICATE_OF_REGISTRATION
+		ALKT  | BILAG | Aktiebok.pdf                          | OWNERSHIP_INFORMATION
+		ALKT  | BILAG | uppgift om agarforhallanden.pdf       | OWNERSHIP_INFORMATION
+		ALKT  | BILAG | Kontoutdrag.pdf                       | BANK_STATEMENT
+		ALKT  | BILAG | Resultatbudget.xlsx                   | BUDGET
+		ALKT  | BILAG | Verksamhetsbeskrivning.docx           | BUSINESS_DESCRIPTION
+		ALKT  | BILAG | Köpeavtal.pdf                         | PURCHASE_AGREEMENT
+		ALKT  | BILAG | kopavtal.pdf                          | PURCHASE_AGREEMENT
+		ALKT  | BILAG | Överlåtelseavtal.pdf                  | TRANSFER_AGREEMENT
+		ALKT  | BILAG | Hyresavtal.pdf                        | LEASE_OR_OWNERSHIP_PROOF
+		ALKOL | 016   | hyreskontrakt lokal.pdf               | LEASE_OR_OWNERSHIP_PROOF
+		ALKT  | BILAG | Samarbetsavtal.pdf                    | BUSINESS_AGREEMENT
+		ALKT  | HAND  | Polistillstånd.pdf                    | POLICE_PERMIT
+		ALKT  | -     | Hyresavtal.pdf                        | LEASE_OR_OWNERSHIP_PROOF
+		ALKT  | ANST  | Ansökan alkoholdrycker - 123456.pdf   | -
+		ALKT  | HAND  | avtal.pdf                             | -
+		ALKT  | HAND  | Registerutdrag.pdf                    | -
+		ALKT  | HAND  | Lånebevis.pdf                         | -
+		ALKT  | REMS  | Räddningstjänsten brandskydd.pdf      | REFERRAL_RESCUE_SERVICE_RESPONSE
+		ALKT  | HAND  | Planritning med brandskydd.pdf        | FLOOR_PLAN
+		ALKOL | 035   | budget.pdf                            | SELF_MONITORING_PROGRAM
+		""")
+	void anotherAttachmentGetsAPurposeByAWordOfItsNameAfterTheEventAndTheDrawing(final Source source, final String eventType, final String name, final String purpose) {
+		assertThat(FilePurposes.ofAttachment(source, eventType, name)).isEqualTo(purpose);
+	}
+
 	@Test
 	void aNameWithDecomposedLettersGetsThePurposeOfTheComposedName() {
 		final var kitchen = Normalizer.normalize("Köksritning.pdf", Normalizer.Form.NFD);
 		final var rescueService = Normalizer.normalize("Räddningstjänsten svar.pdf", Normalizer.Form.NFD);
 		final var noEnforcementAuthority = Normalizer.normalize("svar åkfm.pdf", Normalizer.Form.NFD);
+		final var transfer = Normalizer.normalize("Överlåtelseavtal.pdf", Normalizer.Form.NFD);
 
 		assertThat(kitchen).isNotEqualTo("Köksritning.pdf");
 		assertThat(FilePurposes.ofAttachment(ALKT, null, kitchen)).isEqualTo(FilePurposes.KITCHEN_FLOOR_PLAN);
 		assertThat(FilePurposes.ofAttachment(ALKT, "REMS", rescueService)).isEqualTo(FilePurposes.RESCUE_SERVICE_RESPONSE);
 		// The letter before kfm still keeps it from being the abbreviation
 		assertThat(FilePurposes.ofAttachment(ALKT, "REMS", noEnforcementAuthority)).isEqualTo(FilePurposes.STATEMENT_RESPONSE);
+		assertThat(FilePurposes.ofAttachment(ALKT, "HAND", transfer)).isEqualTo(FilePurposes.TRANSFER_AGREEMENT);
 	}
 
 	@ParameterizedTest
@@ -115,7 +152,7 @@ class FilePurposesTest {
 		ALKT  | REMS | svar polisen.pdf | REFERRAL_POLICE_RESPONSE | true
 		ALKT  | REMS | svar.pdf         | STATEMENT_RESPONSE       | true
 		ALKT  | KOMS | svar.pdf         | -                        | true
-		ALKT  | HAND | ritning.pdf      | SERVING_AREA_DRAWING     | false
+		ALKT  | HAND | ritning.pdf      | FLOOR_PLAN     | false
 		ALKOL | 029  | svar.pdf         | STATEMENT_RESPONSE       | true
 		ALKOL | 094  | förslag.pdf      | -                        | true
 		ALKOL | 035  | program.pdf      | SELF_MONITORING_PROGRAM  | false
@@ -130,7 +167,7 @@ class FilePurposesTest {
 	void everyFileOfAVisitIsMaterialOfItsInvestigation() {
 		final var visited = LocalDateTime.of(2023, 11, 4, 0, 0);
 
-		assertThat(FilePurposes.ofVisit(ALKT, ATTACHMENTS, "ritning.pdf", visited)).isEqualTo(new FileDetails(FilePurposes.SERVING_AREA_DRAWING, visited, true));
+		assertThat(FilePurposes.ofVisit(ALKT, ATTACHMENTS, "ritning.pdf", visited)).isEqualTo(new FileDetails(FilePurposes.FLOOR_PLAN, visited, true));
 		assertThat(FilePurposes.ofVisit(ALKOL, DOCUMENTS, "protokoll.rtf", null)).isEqualTo(new FileDetails(null, null, true));
 	}
 
@@ -138,14 +175,17 @@ class FilePurposesTest {
 	void theDetailsOfAFileOnNoEvent() {
 		final var received = LocalDateTime.of(2019, 6, 1, 0, 0);
 
-		assertThat(FilePurposes.detailsOf(ALKT, ATTACHMENTS, "ritning.pdf", received)).isEqualTo(new FileDetails(FilePurposes.SERVING_AREA_DRAWING, received));
+		assertThat(FilePurposes.detailsOf(ALKT, ATTACHMENTS, "ritning.pdf", received)).isEqualTo(new FileDetails(FilePurposes.FLOOR_PLAN, received));
+		assertThat(FilePurposes.detailsOf(ALKOL, ATTACHMENTS, "Fullmakt.pdf", received)).isEqualTo(new FileDetails(FilePurposes.POWER_OF_ATTORNEY, received));
 		assertThat(FilePurposes.detailsOf(ALKOL, DOCUMENTS, "ritning.rtf", null)).isEqualTo(FileDetails.NONE);
+		// A document the source made is known by its template, never by its name
+		assertThat(FilePurposes.detailsOf(ALKT, DOCUMENTS, "budget.rtf", null)).isEqualTo(FileDetails.NONE);
 	}
 
 	@Test
 	void drawingsAndTheDetailsOfAFileAddedTwice() {
 		assertThat(FilePurposes.ALL).allSatisfy(purpose -> assertThat(FilePurposes.isDrawing(purpose))
-			.isEqualTo(purpose.endsWith("_DRAWING") || FilePurposes.KITCHEN_FLOOR_PLAN.equals(purpose)));
+			.isEqualTo(purpose.endsWith("_DRAWING") || purpose.endsWith("FLOOR_PLAN")));
 		assertThat(FilePurposes.isDrawing(null)).isFalse();
 		final var first = new FileDetails(FilePurposes.STATEMENT_RESPONSE, null);
 		assertThat(first.orElse(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2019, 6, 1, 0, 0))))

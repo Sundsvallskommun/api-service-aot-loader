@@ -126,6 +126,90 @@
 				"name": "BUDGET",
 				"displayName": "Budget",
 				"deprecated": false
+			},
+			{
+				"id": "purpose-FLOOR_PLAN",
+				"name": "FLOOR_PLAN",
+				"displayName": "Planritning",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-DRINKS_MENU",
+				"name": "DRINKS_MENU",
+				"displayName": "Dryckesmeny",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-MENU",
+				"name": "MENU",
+				"displayName": "Meny",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-FIRE_SAFETY_DOCUMENTATION",
+				"name": "FIRE_SAFETY_DOCUMENTATION",
+				"displayName": "Brandskyddsdokumentation",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-POWER_OF_ATTORNEY",
+				"name": "POWER_OF_ATTORNEY",
+				"displayName": "Fullmakt",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-CERTIFICATE_OF_REGISTRATION",
+				"name": "CERTIFICATE_OF_REGISTRATION",
+				"displayName": "Registreringsbevis från Bolagsverket",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-OWNERSHIP_INFORMATION",
+				"name": "OWNERSHIP_INFORMATION",
+				"displayName": "Uppgifter om ägarförhållanden",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BANK_STATEMENT",
+				"name": "BANK_STATEMENT",
+				"displayName": "Kontoutdrag för egna medel",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BUSINESS_DESCRIPTION",
+				"name": "BUSINESS_DESCRIPTION",
+				"displayName": "Verksamhetsbeskrivning",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-PURCHASE_AGREEMENT",
+				"name": "PURCHASE_AGREEMENT",
+				"displayName": "Köpavtal",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-TRANSFER_AGREEMENT",
+				"name": "TRANSFER_AGREEMENT",
+				"displayName": "Överlåtelseavtal",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-LEASE_OR_OWNERSHIP_PROOF",
+				"name": "LEASE_OR_OWNERSHIP_PROOF",
+				"displayName": "Hyresavtal eller ägarbevis",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BUSINESS_AGREEMENT",
+				"name": "BUSINESS_AGREEMENT",
+				"displayName": "Avtal gällande verksamheten",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-POLICE_PERMIT",
+				"name": "POLICE_PERMIT",
+				"displayName": "Polistillstånd",
+				"deprecated": false
 			}
 		]
 	}

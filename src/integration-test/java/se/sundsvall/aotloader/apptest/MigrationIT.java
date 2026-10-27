@@ -370,7 +370,7 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/party-assets/2281/assets/asset-internal-6/attachments"))))
 			.as("The drawing and the decision of the issuing errand also go on the permit (decisions 34 and 35), the drawing with the name shown of its purpose (decision 40)")
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
-			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Ritning på lokalen med serveringsytan markerad"), tuple("44444444.rtf", "Beslut"));
+			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Planritning"), tuple("44444444.rtf", "Beslut"));
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
 		decisionOfTheInterruptedPermit = writtenDecision(INTERRUPTED_ERRAND_ID);
 		verifyStubs();

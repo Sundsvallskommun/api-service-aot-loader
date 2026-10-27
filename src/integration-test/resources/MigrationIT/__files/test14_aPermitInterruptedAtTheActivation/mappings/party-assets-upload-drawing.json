@@ -35,7 +35,7 @@
 				},
 				"bodyPatterns": [
 					{
-						"equalTo": "Ritning på lokalen med serveringsytan markerad"
+						"equalTo": "Planritning"
 					}
 				]
 			}

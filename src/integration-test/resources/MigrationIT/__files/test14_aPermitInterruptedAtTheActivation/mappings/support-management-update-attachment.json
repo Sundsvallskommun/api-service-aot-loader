@@ -16,7 +16,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.purpose.id",
-					"equalTo": "purpose-SERVING_AREA_DRAWING"
+					"equalTo": "purpose-FLOOR_PLAN"
 				}
 			}
 		]

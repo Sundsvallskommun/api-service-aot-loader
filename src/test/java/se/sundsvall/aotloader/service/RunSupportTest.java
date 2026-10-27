@@ -46,7 +46,7 @@ class RunSupportTest {
 	void runContext() {
 		final var stop = new AtomicBoolean();
 		final var fileAreas = new AtomicInteger();
-		final var check = new Preflight.Result(List.of(), Map.of("2281", Map.of("A", "1")), Map.of("2281", Map.of("SERVING_AREA_DRAWING", new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"))));
+		final var check = new Preflight.Result(List.of(), Map.of("2281", Map.of("A", "1")), Map.of("2281", Map.of("FLOOR_PLAN", new FilePurpose("p-1", "FLOOR_PLAN", "Ritning"))));
 		final var context = new RunContext("run", "2281", true, check, 2, stop, _ -> {
 			fileAreas.incrementAndGet();
 			return new FileArea(null, 1);
@@ -58,9 +58,9 @@ class RunSupportTest {
 		assertThat(context.dryRun()).isTrue();
 		assertThat(context.labelIds("2281")).containsEntry("A", "1");
 		assertThat(context.labelIds("2262")).isEmpty();
-		assertThat(context.purpose("2281", "SERVING_AREA_DRAWING")).contains(new FilePurpose("p-1", "SERVING_AREA_DRAWING", "Ritning"));
-		assertThat(context.purpose("2281", "BUDGET")).isEmpty();
-		assertThat(context.purpose("2262", "SERVING_AREA_DRAWING")).isEmpty();
+		assertThat(context.purpose("2281", "FLOOR_PLAN")).contains(new FilePurpose("p-1", "FLOOR_PLAN", "Ritning"));
+		assertThat(context.purpose("2281", "GUEST_LIST")).isEmpty();
+		assertThat(context.purpose("2262", "FLOOR_PLAN")).isEmpty();
 		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
 		assertThat(context.partyId("2281", TestData.HOLDER_ID, _ -> Optional.of("p" + lookups.incrementAndGet()))).contains("p1");
 		// Party is asked again for another municipality

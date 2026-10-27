@@ -52,8 +52,8 @@
 				"hash": "7cabe8856505f572864aab340dc3efeebb3f3a54303fc9e1ce80f97dd4b9ae45",
 				"fileSize": 16,
 				"purpose": {
-					"id": "purpose-SERVING_AREA_DRAWING",
-					"name": "SERVING_AREA_DRAWING"
+					"id": "purpose-FLOOR_PLAN",
+					"name": "FLOOR_PLAN"
 				}
 			},
 			{

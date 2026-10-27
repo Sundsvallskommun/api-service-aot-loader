@@ -150,7 +150,7 @@ class PreflightTest {
 				.map(name -> new AttachmentPurpose().id("id-" + name).name(name)),
 			Stream.of(
 				new AttachmentPurpose().id("id-old").name(FilePurposes.POLICE_REQUEST).deprecated(true),
-				new AttachmentPurpose().id("id-budget").name("BUDGET"),
+				new AttachmentPurpose().id("id-guest-list").name("GUEST_LIST"),
 				new AttachmentPurpose().name(FilePurposes.STATEMENT_REQUEST)))
 			.toList());
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
@@ -161,8 +161,8 @@ class PreflightTest {
 			"Syftet REFERRAL_POLICE_REQUEST för bilagor är inaktuellt i namnrymden (beslut 40)",
 			"Syftet STATEMENT_REQUEST för bilagor finns inte i namnrymden (beslut 40)");
 		assertThat(result.purposes().get(MUNICIPALITY_ID)).hasSize(FilePurposes.ALL.size() - 2)
-			.containsEntry(FilePurposes.SERVING_AREA_DRAWING, new FilePurpose("id-SERVING_AREA_DRAWING", FilePurposes.SERVING_AREA_DRAWING, null))
-			.doesNotContainKeys("BUDGET", FilePurposes.POLICE_REQUEST, FilePurposes.STATEMENT_REQUEST);
+			.containsEntry(FilePurposes.FLOOR_PLAN, new FilePurpose("id-FLOOR_PLAN", FilePurposes.FLOOR_PLAN, null))
+			.doesNotContainKeys("GUEST_LIST", FilePurposes.POLICE_REQUEST, FilePurposes.STATEMENT_REQUEST);
 	}
 
 	@Test
@@ -203,7 +203,7 @@ class PreflightTest {
 		assertThat(result.labelIds().get(MUNICIPALITY_ID)).containsEntry("TAGROOT/MIGRATED_ERRAND", "id-TAGROOT/MIGRATED_ERRAND")
 			.containsEntry("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING", "id-CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING");
 		assertThat(result.purposes().get(MUNICIPALITY_ID)).hasSize(FilePurposes.ALL.size())
-			.containsEntry(FilePurposes.SERVING_AREA_DRAWING, new FilePurpose("id-SERVING_AREA_DRAWING", FilePurposes.SERVING_AREA_DRAWING, "serving_area_drawing"));
+			.containsEntry(FilePurposes.FLOOR_PLAN, new FilePurpose("id-FLOOR_PLAN", FilePurposes.FLOOR_PLAN, "floor_plan"));
 	}
 
 	@Test

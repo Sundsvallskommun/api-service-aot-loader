@@ -18,11 +18,12 @@ import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
 
 /**
- * Tells which attachment purpose of the namespace a file of the sources gets on its errand (decision 40): a referral
- * by the template it was made from, a referral answer or a self-monitoring program by the type of its event, and a
- * drawing by its name. Any other file gets none. Also tells which files are material of the investigation of their
- * errand (decision 60): referrals and their answers, investigations, the communication of them and proposed decisions
- * by their template or the type of their event, and the reports of inspections.
+ * Tells which attachment purpose of the namespace a file of the sources gets on its errand (decisions 40 and 86): a
+ * referral by the template it was made from, a referral answer or a self-monitoring program by the type of its event,
+ * and a drawing and other attachments by words in their names. Any other file gets none. Also tells which files are
+ * material of the investigation of their errand (decision 60): referrals and their answers, investigations, the
+ * communication of them and proposed decisions by their template or the type of their event, and the reports of
+ * inspections.
  */
 public final class FilePurposes {
 
@@ -40,16 +41,32 @@ public final class FilePurposes {
 	public static final String STATEMENT_REQUEST = "STATEMENT_REQUEST";
 	public static final String STATEMENT_RESPONSE = "STATEMENT_RESPONSE";
 	public static final String SELF_MONITORING_PROGRAM = "SELF_MONITORING_PROGRAM";
-	public static final String SERVING_AREA_DRAWING = "SERVING_AREA_DRAWING";
+	public static final String FLOOR_PLAN = "FLOOR_PLAN";
 	public static final String SALES_PREMISES_DRAWING = "SALES_PREMISES_DRAWING";
 	public static final String KITCHEN_FLOOR_PLAN = "KITCHEN_FLOOR_PLAN";
+	public static final String DRINKS_MENU = "DRINKS_MENU";
+	public static final String MENU = "MENU";
+	public static final String FIRE_SAFETY_DOCUMENTATION = "FIRE_SAFETY_DOCUMENTATION";
+	public static final String POWER_OF_ATTORNEY = "POWER_OF_ATTORNEY";
+	public static final String CERTIFICATE_OF_REGISTRATION = "CERTIFICATE_OF_REGISTRATION";
+	public static final String OWNERSHIP_INFORMATION = "OWNERSHIP_INFORMATION";
+	public static final String BANK_STATEMENT = "BANK_STATEMENT";
+	public static final String BUDGET = "BUDGET";
+	public static final String BUSINESS_DESCRIPTION = "BUSINESS_DESCRIPTION";
+	public static final String PURCHASE_AGREEMENT = "PURCHASE_AGREEMENT";
+	public static final String TRANSFER_AGREEMENT = "TRANSFER_AGREEMENT";
+	public static final String LEASE_OR_OWNERSHIP_PROOF = "LEASE_OR_OWNERSHIP_PROOF";
+	public static final String BUSINESS_AGREEMENT = "BUSINESS_AGREEMENT";
+	public static final String POLICE_PERMIT = "POLICE_PERMIT";
 
 	/** Every purpose a file can get, which the namespace must have. */
 	public static final Set<String> ALL = Set.of(POLICE_REQUEST, POLICE_RESPONSE, TAX_AGENCY_REQUEST, TAX_AGENCY_RESPONSE, ENFORCEMENT_AUTHORITY_REQUEST,
 		ENFORCEMENT_AUTHORITY_RESPONSE, RESCUE_SERVICE_REQUEST, RESCUE_SERVICE_RESPONSE, ENVIRONMENT_OFFICE_REQUEST, ENVIRONMENT_OFFICE_RESPONSE, CREDIT_REPORT_RESPONSE,
-		STATEMENT_REQUEST, STATEMENT_RESPONSE, SELF_MONITORING_PROGRAM, SERVING_AREA_DRAWING, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN);
+		STATEMENT_REQUEST, STATEMENT_RESPONSE, SELF_MONITORING_PROGRAM, FLOOR_PLAN, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN, DRINKS_MENU, MENU,
+		FIRE_SAFETY_DOCUMENTATION, POWER_OF_ATTORNEY, CERTIFICATE_OF_REGISTRATION, OWNERSHIP_INFORMATION, BANK_STATEMENT, BUDGET, BUSINESS_DESCRIPTION,
+		PURCHASE_AGREEMENT, TRANSFER_AGREEMENT, LEASE_OR_OWNERSHIP_PROOF, BUSINESS_AGREEMENT, POLICE_PERMIT);
 
-	private static final Set<String> DRAWINGS = Set.of(SERVING_AREA_DRAWING, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN);
+	private static final Set<String> DRAWINGS = Set.of(FLOOR_PLAN, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN);
 
 	/** The templates of the referrals, by source, in upper case. */
 	private static final Map<Source, Map<String, String>> REFERRAL_TEMPLATES = Map.of(
@@ -86,6 +103,28 @@ public final class FilePurposes {
 
 	private static final String KITCHEN = "kök";
 	private static final Pattern KITCHEN_ASCII = Pattern.compile("(?<![a-zåäö])kok(?![a-zåäö])");
+
+	/**
+	 * The words of the names of other attachments that tell what they are, in the order they are looked for (decision
+	 * 86). Each word names the document itself: a broader one such as dryck is also in the name of every application from
+	 * the e-service.
+	 */
+	private static final List<Map.Entry<Pattern, String>> NAMED = List.of(
+		entry(Pattern.compile("dryckes(meny|lista)"), DRINKS_MENU),
+		entry(Pattern.compile("meny"), MENU),
+		entry(Pattern.compile("brandskydd"), FIRE_SAFETY_DOCUMENTATION),
+		entry(Pattern.compile("egenkontroll|egentillsyn"), SELF_MONITORING_PROGRAM),
+		entry(Pattern.compile("fullmakt"), POWER_OF_ATTORNEY),
+		entry(Pattern.compile("registreringsbevis"), CERTIFICATE_OF_REGISTRATION),
+		entry(Pattern.compile("aktiebok|[aä]garf[oö]rh[aå]llande"), OWNERSHIP_INFORMATION),
+		entry(Pattern.compile("kontoutdrag"), BANK_STATEMENT),
+		entry(Pattern.compile("budget"), BUDGET),
+		entry(Pattern.compile("verksamhetsbeskrivning"), BUSINESS_DESCRIPTION),
+		entry(Pattern.compile("k[oö]pe?avtal"), PURCHASE_AGREEMENT),
+		entry(Pattern.compile("[oö]verl[aå]telseavtal"), TRANSFER_AGREEMENT),
+		entry(Pattern.compile("hyres(avtal|kontrakt)"), LEASE_OR_OWNERSHIP_PROOF),
+		entry(Pattern.compile("samarbetsavtal"), BUSINESS_AGREEMENT),
+		entry(Pattern.compile("polistillst[aå]nd"), POLICE_PERMIT));
 
 	/** The purposes of referrals and their answers, whose files are material of the investigation. */
 	private static final Set<String> REFERRALS = Set.of(POLICE_REQUEST, POLICE_RESPONSE, TAX_AGENCY_REQUEST, TAX_AGENCY_RESPONSE, ENFORCEMENT_AUTHORITY_REQUEST,
@@ -167,11 +206,7 @@ public final class FilePurposes {
 		// do that in the patterns, but then their lookbehinds no longer stop a match after a letter.
 		final var lowerCase = Optional.ofNullable(FileNames.normalized(name)).orElse("");
 		if (RESPONSE_EVENTS.get(source).contains(type)) {
-			return RESPONDENTS.stream()
-				.filter(respondent -> respondent.getKey().matcher(lowerCase).find())
-				.map(Map.Entry::getValue)
-				.findFirst()
-				.orElse(STATEMENT_RESPONSE);
+			return firstMatch(RESPONDENTS, lowerCase).orElse(STATEMENT_RESPONSE);
 		}
 		if (SELF_MONITORING_EVENTS.get(source).contains(type)) {
 			return SELF_MONITORING_PROGRAM;
@@ -180,14 +215,21 @@ public final class FilePurposes {
 			if (lowerCase.contains(KITCHEN) || KITCHEN_ASCII.matcher(lowerCase).find()) {
 				return KITCHEN_FLOOR_PLAN;
 			}
-			return source == ALKT ? SERVING_AREA_DRAWING : SALES_PREMISES_DRAWING;
+			return source == ALKT ? FLOOR_PLAN : SALES_PREMISES_DRAWING;
 		}
-		return null;
+		return firstMatch(NAMED, lowerCase).orElse(null);
+	}
+
+	private static Optional<String> firstMatch(final List<Map.Entry<Pattern, String>> words, final String lowerCase) {
+		return words.stream()
+			.filter(word -> word.getKey().matcher(lowerCase).find())
+			.map(Map.Entry::getValue)
+			.findFirst();
 	}
 
 	/**
 	 * @param  received when the file came in, null when unknown
-	 * @return          the details of a file that is on no event, whose only purpose can be that of a drawing
+	 * @return          the details of a file that is on no event, whose purpose can only come from its name
 	 */
 	public static FileDetails detailsOf(final Source source, final FileFolder folder, final String name, final LocalDateTime received) {
 		return new FileDetails(folder == FileFolder.ATTACHMENTS ? ofAttachment(source, null, name) : null, received);
