@@ -197,7 +197,8 @@ final class AlkolPermits {
 	}
 
 	/**
-	 * The rules about the granting decision: G15, G18, G9 for a later grant without a date, G16 and G19.
+	 * The rules about the granting decision: G15, G18, G9 for a later grant without a date and for a date after the
+	 * migration, G16 and G19.
 	 */
 	private void grantHits(final Integer fsId, final DecisionRow grant, final ErrandRow grantErrand, final ContactRow owner, final List<RuleHit> hits) {
 		if (grant == null) {
@@ -209,6 +210,7 @@ final class AlkolPermits {
 			.filter(decision -> decision.beslutad() == null && CodeTexts.isOneOf(decision.beslutsTyp(), GRANTING_DECISIONS) && isAfter(decision, grant))
 			.findFirst()
 			.ifPresent(undated -> hits.add(RuleHit.of(UNPARSEABLE, "det beviljande beslutet %d saknar datum och kan vara det senaste".formatted(undated.beslutsId()))));
+		PermitDecisions.futureDateHit(grant, today).ifPresent(hits::add);
 		index.diaryNumberHits(grantErrand, hits);
 		if (index.applicantIsNotOwner(grantErrand, owner)) {
 			hits.add(RuleHit.of(APPLICANT_NOT_OWNER));

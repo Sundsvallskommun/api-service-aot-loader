@@ -4,6 +4,8 @@ import generated.se.sundsvall.relation.PagingAndSortingMetaData;
 import generated.se.sundsvall.relation.Relation;
 import generated.se.sundsvall.relation.RelationPagedResponse;
 import generated.se.sundsvall.relation.ResourceIdentifier;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,8 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 public class RelationIntegration {
 
 	static final int LIMIT = 100;
+	// Far more pages than the relations of an errand fill, so that a search whose pages never end stops
+	static final int MAX_PAGES = 100;
 	private static final String ERRAND_ID = "Ärendets id";
 
 	private final RelationClient client;
@@ -32,11 +36,11 @@ public class RelationIntegration {
 	 * relation, from the target to the source; that one is not returned.
 	 *
 	 * @return                    the relations with exactly that type, source and target
-	 * @throws MigrationException when the relation service has more than {@value #LIMIT} relations that match the search
+	 * @throws MigrationException when the relation service shows fewer relations than it says match the search
 	 */
 	public List<Relation> findRelations(final String municipalityId, final String type, final String sourceResourceId, final String targetResourceId) {
 		final var filter = "source.resourceId:%s and target.resourceId:%s".formatted(FilterValues.quoted(sourceResourceId, ERRAND_ID), FilterValues.quoted(targetResourceId, ERRAND_ID));
-		return relationsOf(client.findRelations(municipalityId, filter, LIMIT)).stream()
+		return relationsOf(municipalityId, filter).stream()
 			// The filter is the relation service's to interpret, so the match is checked here as well
 			.filter(relation -> type.equalsIgnoreCase(relation.getType()))
 			.filter(relation -> resourceIdOf(relation.getSource()).equals(sourceResourceId))
@@ -49,10 +53,10 @@ public class RelationIntegration {
 	 * a relation to the source is among them, as a relation from the source.
 	 *
 	 * @return                    the relations with exactly that source
-	 * @throws MigrationException when the relation service has more than {@value #LIMIT}
+	 * @throws MigrationException when the relation service shows fewer relations than it says match the search
 	 */
 	public List<Relation> findRelationsFrom(final String municipalityId, final String sourceResourceId) {
-		return relationsOf(client.findRelations(municipalityId, "source.resourceId:" + FilterValues.quoted(sourceResourceId, ERRAND_ID), LIMIT)).stream()
+		return relationsOf(municipalityId, "source.resourceId:" + FilterValues.quoted(sourceResourceId, ERRAND_ID)).stream()
 			.filter(relation -> resourceIdOf(relation.getSource()).equals(sourceResourceId))
 			.toList();
 	}
@@ -76,11 +80,21 @@ public class RelationIntegration {
 		});
 	}
 
-	// A search whose hits do not fit in one answer would leave relations out, which the duplicate check and the cleanup
-	// must not miss
-	private static List<Relation> relationsOf(final RelationPagedResponse response) {
-		final var relations = Optional.ofNullable(response).map(RelationPagedResponse::getRelations).orElse(emptyList());
-		final var total = Optional.ofNullable(response).map(RelationPagedResponse::getMeta).map(PagingAndSortingMetaData::getTotalRecords).orElse(0L);
+	// The hits are read page by page. A relation that moves between the pages while they are read leaves fewer relations
+	// than the total, which the duplicate check and the cleanup must not miss, so the search then fails
+	private List<Relation> relationsOf(final String municipalityId, final String filter) {
+		final var relations = new ArrayList<Relation>();
+		final var ids = new HashSet<String>();
+		var total = 0L;
+		for (var page = 1; page <= MAX_PAGES; page++) {
+			final var response = client.findRelations(municipalityId, filter, LIMIT, page);
+			final var hits = Optional.ofNullable(response).map(RelationPagedResponse::getRelations).orElse(emptyList());
+			total = Math.max(total, Optional.ofNullable(response).map(RelationPagedResponse::getMeta).map(PagingAndSortingMetaData::getTotalRecords).orElse(0L));
+			hits.stream().filter(relation -> relation.getId() == null || ids.add(relation.getId())).forEach(relations::add);
+			if (hits.isEmpty() || relations.size() >= total) {
+				break;
+			}
+		}
 		if (total > relations.size()) {
 			throw new MigrationException("Relationstjänsten har %d relationer som matchar sökningen men visar bara %d".formatted(total, relations.size()));
 		}

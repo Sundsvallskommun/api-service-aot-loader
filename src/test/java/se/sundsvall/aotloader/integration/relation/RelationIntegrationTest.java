@@ -6,6 +6,7 @@ import generated.se.sundsvall.relation.RelationPagedResponse;
 import generated.se.sundsvall.relation.ResourceIdentifier;
 import java.net.URI;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -35,7 +36,7 @@ class RelationIntegrationTest {
 		final var integration = new RelationIntegration(client);
 		final var filter = "source.resourceId:'a' and target.resourceId:'b'";
 		final var exact = relation("LINK", "a", "b");
-		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT)).thenReturn(
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 1)).thenReturn(
 			new RelationPagedResponse().relations(List.of(exact, relation("link", "a", "b"), relation("OTHER", "a", "b"), relation("LINK", "b", "a"), new Relation().type("LINK"))),
 			new RelationPagedResponse(),
 			null);
@@ -51,7 +52,7 @@ class RelationIntegrationTest {
 		final var integration = new RelationIntegration(client);
 		final var toPermit = relation("LINK", "a", "asset");
 		final var toInspection = relation("REFERENCE", "a", "c");
-		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a'", RelationIntegration.LIMIT))
+		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a'", RelationIntegration.LIMIT, 1))
 			.thenReturn(new RelationPagedResponse().relations(List.of(toPermit, toInspection, relation("LINK", "b", "a"), new Relation().type("LINK"))), (RelationPagedResponse) null);
 
 		assertThat(integration.findRelationsFrom(MUNICIPALITY_ID, "a")).containsExactly(toPermit, toInspection);
@@ -60,18 +61,49 @@ class RelationIntegrationTest {
 	}
 
 	@Test
-	void aSearchWithMoreHitsThanOneAnswerHoldsFails() {
+	void aSearchWhosePagesShowFewerHitsThanItsTotalFails() {
 		final var integration = new RelationIntegration(client);
 		final var oneOfMany = new RelationPagedResponse().relations(List.of(relation("LINK", "a", "b"))).meta(new PagingAndSortingMetaData().totalRecords(101L));
 		final var all = new RelationPagedResponse().relations(List.of(relation("LINK", "a", "b"))).meta(new PagingAndSortingMetaData().totalRecords(1L));
-		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a' and target.resourceId:'b'", RelationIntegration.LIMIT)).thenReturn(oneOfMany, all);
-		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a'", RelationIntegration.LIMIT)).thenReturn(oneOfMany);
+		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a' and target.resourceId:'b'", RelationIntegration.LIMIT, 1)).thenReturn(oneOfMany, all);
+		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a' and target.resourceId:'b'", RelationIntegration.LIMIT, 2)).thenReturn(new RelationPagedResponse());
+		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a'", RelationIntegration.LIMIT, 1)).thenReturn(oneOfMany);
+		when(client.findRelations(MUNICIPALITY_ID, "source.resourceId:'a'", RelationIntegration.LIMIT, 2)).thenReturn(null);
 
 		assertThatThrownBy(() -> integration.findRelations(MUNICIPALITY_ID, "LINK", "a", "b"))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Relationstjänsten har 101 relationer som matchar sökningen men visar bara 1");
 		assertThat(integration.findRelations(MUNICIPALITY_ID, "LINK", "a", "b")).hasSize(1);
 		assertThatThrownBy(() -> integration.findRelationsFrom(MUNICIPALITY_ID, "a")).isInstanceOf(MigrationException.class);
+	}
+
+	@Test
+	void theRelationsFromAnErrandAreReadPageByPageAndEachOnce() {
+		final var integration = new RelationIntegration(client);
+		final var filter = "source.resourceId:'a'";
+		final var first = IntStream.range(0, RelationIntegration.LIMIT).mapToObj(i -> relation("LINK", "a", "t" + i).id("r" + i)).toList();
+		final var total = new PagingAndSortingMetaData().totalRecords(102L);
+		// The second page repeats the last relation of the first, as a page moved while the pages were read
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 1)).thenReturn(new RelationPagedResponse().relations(first).meta(total));
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 2))
+			.thenReturn(new RelationPagedResponse().relations(List.of(first.getLast(), relation("LINK", "a", "t100").id("r100"), relation("LINK", "a", "t101").id("r101"))).meta(total));
+
+		assertThat(integration.findRelationsFrom(MUNICIPALITY_ID, "a")).hasSize(102).doesNotHaveDuplicates();
+	}
+
+	@Test
+	void aRelationThatMovesOutOfThePagesFailsTheSearch() {
+		final var integration = new RelationIntegration(client);
+		final var filter = "source.resourceId:'a'";
+		final var first = IntStream.range(0, RelationIntegration.LIMIT).mapToObj(i -> relation("LINK", "a", "t" + i).id("r" + i)).toList();
+		final var total = new PagingAndSortingMetaData().totalRecords(101L);
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 1)).thenReturn(new RelationPagedResponse().relations(first).meta(total));
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 2)).thenReturn(new RelationPagedResponse().relations(List.of(first.getLast())).meta(total));
+		when(client.findRelations(MUNICIPALITY_ID, filter, RelationIntegration.LIMIT, 3)).thenReturn(new RelationPagedResponse().meta(total));
+
+		assertThatThrownBy(() -> integration.findRelationsFrom(MUNICIPALITY_ID, "a"))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Relationstjänsten har 101 relationer som matchar sökningen men visar bara 100");
 	}
 
 	@Test

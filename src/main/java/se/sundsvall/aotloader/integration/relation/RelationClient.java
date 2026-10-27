@@ -23,7 +23,8 @@ public interface RelationClient {
 	RelationPagedResponse findRelations(
 		@PathVariable String municipalityId,
 		@RequestParam("filter") String filter,
-		@RequestParam("limit") int limit);
+		@RequestParam("limit") int limit,
+		@RequestParam("page") int page);
 
 	@PostMapping(path = "/{municipalityId}/relations", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
 	ResponseEntity<Void> createRelation(

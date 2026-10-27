@@ -36,6 +36,14 @@ class LegalIdsTest {
 		assertThat(LegalIds.format(null)).isNull();
 	}
 
+	@Test
+	void formatOrganizationNumber() {
+		assertThat(LegalIds.formatOrganizationNumber(new LegalId("5566778899", ENTERPRISE))).isEqualTo("556677-8899");
+		// A personal identity number, such as a sole trader's, is not written out (decision 81)
+		assertThat(LegalIds.formatOrganizationNumber(new LegalId("191212121212", PRIVATE))).isNull();
+		assertThat(LegalIds.formatOrganizationNumber(null)).isNull();
+	}
+
 	@ParameterizedTest
 	@CsvSource({
 		// The date of birth is not after today and the age is below 100

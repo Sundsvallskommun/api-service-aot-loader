@@ -6,11 +6,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.service.model.DecisionData;
+import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
+import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 
 /**
  * Builds the decision a permit was granted by, which the errand of the permit gets as a completed manual decision, the
@@ -39,7 +42,9 @@ public final class PermitDecisions {
 		if (decision == null) {
 			return null;
 		}
-		final var decidedAt = Optional.ofNullable(decision.beslutad()).or(() -> Optional.ofNullable(days.decidedOn()).map(LocalDate::atStartOfDay)).orElse(null);
+		// A time after the migration is no time of the decision, which is then the day the permit gives (G9, see futureDateHit)
+		final var decidedAt = Optional.ofNullable(decision.beslutad()).filter(at -> !at.toLocalDate().isAfter(days.today()))
+			.or(() -> Optional.ofNullable(days.decidedOn()).map(LocalDate::atStartOfDay)).orElse(null);
 		if (decidedAt == null) {
 			return null;
 		}
@@ -75,6 +80,20 @@ public final class PermitDecisions {
 			days.issued(), days.validTo(), terms, List.of());
 	}
 
+	/**
+	 * G9 for a decision whose time is after the day of the migration, as a mistyped year may be: the decision is then given
+	 * the day the permit gives instead (see {@link #of}).
+	 *
+	 * @param  decision the decision the permit was granted by, null when the source has none
+	 * @param  today    the day of the migration
+	 * @return          the hit, empty when the decision has no such time
+	 */
+	public static Optional<RuleHit> futureDateHit(final SourceDecision decision, final LocalDate today) {
+		return Optional.ofNullable(decision)
+			.filter(row -> row.beslutad() != null && row.beslutad().toLocalDate().isAfter(today))
+			.map(row -> RuleHit.of(UNPARSEABLE, "beslutet %d har datumet %s, efter migreringsdagen".formatted(row.beslutsId(), SourceValues.format(row.beslutad().toLocalDate()))));
+	}
+
 	private static String missingIn(final Source source) {
 		return "Uppgift saknas i " + source.getDisplayName();
 	}
@@ -86,8 +105,9 @@ public final class PermitDecisions {
 	 * @param issued    the day the permit was issued, which is the first day of the decision; null when unknown
 	 * @param validTo   the last day of the permit, which is the last day of the decision; null when it is valid until
 	 *                  further notice
+	 * @param today     the day of the migration, after which no decision is made
 	 */
-	public record PermitDays(LocalDate decidedOn, LocalDate issued, LocalDate validTo) {
+	public record PermitDays(LocalDate decidedOn, LocalDate issued, LocalDate validTo, LocalDate today) {
 
 		/**
 		 * A decision is not made after the migration: the day the permit was issued stands in for the time of the decision,
@@ -107,7 +127,7 @@ public final class PermitDecisions {
 				.filter(day -> !day.isAfter(today))
 				.findFirst()
 				.orElse(null);
-			return new PermitDays(decidedOn, issued, validTo);
+			return new PermitDays(decidedOn, issued, validTo, today);
 		}
 	}
 }

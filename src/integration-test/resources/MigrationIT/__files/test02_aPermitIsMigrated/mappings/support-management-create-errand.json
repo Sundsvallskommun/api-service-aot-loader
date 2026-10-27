@@ -142,6 +142,9 @@
 				}
 			},
 			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'serveringsansvariga' && @.displayName == 'Namn|Från' && @.group == 'Serveringsansvariga i AlkT' && @.values.length() == 2 && @.values[0] == 'Lisa Åberg|' && @.values[1] == 'Olle Svensson|2015-03-01')]"
+			},
+			{
 				"matchesJsonPath": {
 					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
 					"equalTo": "2281"

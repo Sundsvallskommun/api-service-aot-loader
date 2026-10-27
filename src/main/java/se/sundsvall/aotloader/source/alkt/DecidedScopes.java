@@ -42,7 +42,9 @@ final class DecidedScopes {
 
 	private static final int FLAGS = CASE_INSENSITIVE | UNICODE_CASE | UNICODE_CHARACTER_CLASS;
 	private static final Pattern OUTDOORS = Pattern.compile("uteserv|utomhus|\\bute\\b|terr?ass|balkong|altan", FLAGS);
-	private static final Pattern INDOORS = Pattern.compile("inomhus|\\binne\\b|restaurang|lokal|matsal", FLAGS);
+	private static final Pattern INDOORS = Pattern.compile("inomhus|\\binne\\b", FLAGS);
+	// A room says indoors only in a text that says nothing of outdoors, as "Uteservering vid restaurangen" is outdoors
+	private static final Pattern ROOMS = Pattern.compile("restaurang|lokal|matsal", FLAGS);
 	private static final Pattern CLOSED_COMPANY = Pattern.compile("slutet sällskap|slutna sällskap", FLAGS);
 	private static final Pattern PUBLIC = Pattern.compile("allmänhet", FLAGS);
 
@@ -178,15 +180,17 @@ final class DecidedScopes {
 	}
 
 	/**
-	 * @return where the text says the time is for, false for indoors and true for outdoors, both when it says both; the
-	 *         first time is indoors when its text says neither, and another one is placed nowhere
+	 * @return where the text says the time is for, false for indoors and true for outdoors, both when it says both; a room
+	 *         such as a restaurant is indoors only when the text says nothing of outdoors, the first time is indoors when
+	 *         the text says neither, and another one is placed nowhere
 	 */
 	private static List<Boolean> places(final String text, final int number) {
 		final var places = new ArrayList<Boolean>();
-		if (INDOORS.matcher(text).find()) {
+		final var outdoors = OUTDOORS.matcher(text).find();
+		if (INDOORS.matcher(text).find() || (!outdoors && ROOMS.matcher(text).find())) {
 			places.add(false);
 		}
-		if (OUTDOORS.matcher(text).find()) {
+		if (outdoors) {
 			places.add(true);
 		}
 		if (places.isEmpty() && number == 1) {

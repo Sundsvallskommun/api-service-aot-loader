@@ -107,7 +107,8 @@ class TargetWriter {
 	 * only when neither finds it. A 409 on the create means it exists after all; it is then read, since the answer has no
 	 * id. A post found, made by an earlier run, is brought up to date with what the item gives now. A post that is to be
 	 * EXPIRED is made, and given its content, while ACTIVE, since an EXPIRED post takes no change of its content and no
-	 * files: the caller gives it its files and then EXPIRED. One that is EXPIRED and already has its content is left so.
+	 * files: the caller gives it its files and then EXPIRED. One that is EXPIRED and already has its content is left so,
+	 * and one whose change fails gets EXPIRED back.
 	 *
 	 * @param  candidate          the item
 	 * @param  municipalityId     the municipality the item belongs to
@@ -133,12 +134,13 @@ class TargetWriter {
 				unchangeable(found.get(), wanted, words).ifPresent(notes::line);
 				return new Post(found.get().getId(), Status.EXPIRED);
 			}
-			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), words, notes), Status.ACTIVE);
+			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), expired, words, notes), Status.ACTIVE);
 		}
 		final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
 		return new Post(partyAssets.createAsset(municipalityId, assetMapper.toSourceReference(errandId), wanted)
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
-				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, words, notes)),
+				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, expired, words,
+				notes)),
 			Status.ACTIVE);
 	}
 
@@ -201,6 +203,26 @@ class TargetWriter {
 	}
 
 	/**
+	 * Gives a post that is to be EXPIRED that status when a step failed while it was ACTIVE, so that it does not stand as
+	 * valid until the next run. PartyAssets takes the status also on a post that already has it. When that fails too, the
+	 * report says the post may be ACTIVE until the next run, and the failure of the step carries the one of the status.
+	 *
+	 * @param failure the failure of the step, which the caller throws on
+	 */
+	void restoreExpired(final String municipalityId, final String partyAssetsId, final AssetWords words, final ReportNotes notes, final RuntimeException failure) {
+		try {
+			partyAssets.updateAsset(municipalityId, partyAssetsId, new AssetUpdateRequest().status(Status.EXPIRED));
+			if (partyAssets.getAsset(municipalityId, partyAssetsId).map(Asset::getStatus).orElse(null) != Status.EXPIRED) {
+				throw new MigrationException("%s %s i PartyAssets fick inte status EXPIRED".formatted(words.capitalized(), partyAssetsId));
+			}
+			notes.line("%s i PartyAssets fick status EXPIRED när steget misslyckades".formatted(words.capitalized()));
+		} catch (final RuntimeException e) {
+			failure.addSuppressed(e);
+			notes.line("%s i PartyAssets kan vara ACTIVE, fast %s ska vara EXPIRED, tills nästa körning".formatted(words.capitalized(), words.pronoun()));
+		}
+	}
+
+	/**
 	 * @return the post of the errand found through the relations from the errand, whatever its party; empty when none
 	 */
 	private Optional<Asset> assetRelatedTo(final String municipalityId, final String errandId) {
@@ -232,14 +254,17 @@ class TargetWriter {
 	/**
 	 * Gives a post an earlier run made the status the item is to have, and the title, last day and parameters it gives
 	 * now. PartyAssets changes those only while the post is ACTIVE, so a post that stays EXPIRED keeps them, and the report
-	 * says so. A post that is to become EXPIRED gets its content first, checked, and its status after.
+	 * says so. A post that is to become EXPIRED gets its content first, checked, and its status after. A post that is to be
+	 * EXPIRED in the end, and is ACTIVE only while it changes, gets EXPIRED back when the change fails.
 	 *
+	 * @param  toBeExpired        true when the item is to be EXPIRED in the end
 	 * @return                    the id of the post
 	 * @throws MigrationException when the post has a status the migration never gives, or belongs to another party than
 	 *                            the item now gives, which is then left as it is; and when PartyAssets does not make the
 	 *                            change
 	 */
-	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final AssetWords words, final ReportNotes notes) {
+	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final boolean toBeExpired, final AssetWords words,
+		final ReportNotes notes) {
 		final var from = asset.getStatus();
 		final var to = wanted.getStatus();
 		if (from != Status.ACTIVE && from != Status.EXPIRED) {
@@ -252,20 +277,27 @@ class TargetWriter {
 		final var content = assetMapper.toContentUpdate(asset, wanted);
 		final var statusChanges = from != to;
 		final var contentChanges = content.isPresent() && (from == Status.ACTIVE || statusChanges);
-		if (from == Status.ACTIVE) {
-			// Checked before the status changes, since an EXPIRED post can no longer get the content
-			if (content.isPresent()) {
-				partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
-				verifyUpdated(municipalityId, asset.getId(), wanted, from, words);
-			}
-			if (statusChanges) {
+		try {
+			if (from == Status.ACTIVE) {
+				// Checked before the status changes, since an EXPIRED post can no longer get the content
+				if (content.isPresent()) {
+					partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
+					verifyUpdated(municipalityId, asset.getId(), wanted, from, words);
+				}
+				if (statusChanges) {
+					partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+					verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
+				}
+			} else if (statusChanges) {
 				partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+				content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
 				verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
 			}
-		} else if (statusChanges) {
-			partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
-			content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
-			verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
+		} catch (final RuntimeException e) {
+			if (toBeExpired) {
+				restoreExpired(municipalityId, asset.getId(), words, notes, e);
+			}
+			throw e;
 		}
 
 		if (statusChanges) {

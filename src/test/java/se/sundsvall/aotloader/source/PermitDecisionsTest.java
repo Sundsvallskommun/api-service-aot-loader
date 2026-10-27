@@ -6,6 +6,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.PermitDecisions.PermitDays;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
@@ -38,6 +39,24 @@ class PermitDecisionsTest {
 		assertThat(data.terms()).containsExactly("Mat ska serveras");
 		assertThat(data.documents()).containsExactly(new FileReference("beslut.rtf", DOCUMENTS), new FileReference("signerat.pdf", ATTACHMENTS));
 		assertThat(data).hasToString("DecisionData[decidedAt=2019-04-30T09:15, terms=1, documents=2, decided=0]");
+	}
+
+	@Test
+	void aTimeAfterTheMigrationIsNoTimeOfTheDecisionAndHitsG9() {
+		final var future = new DecisionRow(100, 500, "0100", LocalDateTime.of(2062, 4, 20, 9, 0), null, null, null, null, null, null, null);
+		final var today = new DecisionRow(101, 500, "0100", TODAY.atTime(23, 59), null, null, null, null, null, null, null);
+
+		// A mistyped year, say: the decision is made the day the permit gives instead
+		assertThat(PermitDecisions.of(future, null, null, days(LocalDate.of(2019, 4, 1), null), List.of(), new FileList(NONE_SHARED), Source.ALKT).decidedAt())
+			.isEqualTo(LocalDateTime.of(2019, 4, 1, 0, 0));
+		assertThat(PermitDecisions.futureDateHit(future, TODAY)).hasValueSatisfying(hit -> {
+			assertThat(hit.rule()).isEqualTo(ReviewRule.UNPARSEABLE);
+			assertThat(hit.detail()).isEqualTo("beslutet 100 har datumet 2062-04-20, efter migreringsdagen");
+		});
+		// The day of the migration is no day after it
+		assertThat(PermitDecisions.of(today, null, null, days(LocalDate.of(2019, 4, 1), null), List.of(), new FileList(NONE_SHARED), Source.ALKT).decidedAt()).isEqualTo(TODAY.atTime(23, 59));
+		assertThat(PermitDecisions.futureDateHit(today, TODAY)).isEmpty();
+		assertThat(PermitDecisions.futureDateHit(null, TODAY)).isEmpty();
 	}
 
 	@Test

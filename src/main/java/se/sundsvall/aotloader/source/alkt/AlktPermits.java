@@ -40,6 +40,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
@@ -139,6 +140,8 @@ final class AlktPermits {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
 		}
 		final var grant = grantOf(decision, issuingErrands);
+		grant.ifPresent(chosen -> undatedGrantHits(chosen, decision, issuingErrands, hits));
+		grant.flatMap(chosen -> PermitDecisions.futureDateHit(chosen, today)).ifPresent(hits::add);
 		final var days = PermitDays.of(permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), grant.map(this::errandClosed).orElse(null), today);
 		if (grant.isEmpty() && days.decidedOn() != null) {
 			hits.add(RuleHit.of(GRANT_DECISION_MISSING, Optional.ofNullable(Texts.trimToNull(index.decisionText(decision, false))).map(text -> "tillståndet pekar på " + text).orElse(null)));
@@ -148,7 +151,7 @@ final class AlktPermits {
 			hits.add(RuleHit.of(SUBTYPE_MISSING));
 		}
 		final var decided = DecidedScopes.of(permit, subtype, hits);
-		final var files = permitFiles(permit, place, issuingErrands, hits);
+		final var files = permitFiles(permit, place, decision, issuingErrands, hits);
 
 		final var placeName = place == null ? null : place.namn();
 		final var restaurantNumber = place == null ? null : place.restaurangBeteckning();
@@ -165,7 +168,7 @@ final class AlktPermits {
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
 			.title(title)
 			.investigation(PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
-				permit.utfardandeDatum(), index.investigationTexts(issuingErrands, permit.notes())))
+				permit.utfardandeDatum(), index.investigationTexts(issuingErrands, shownNotes(permit))))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
@@ -184,8 +187,10 @@ final class AlktPermits {
 				.add("period", "Period", periods.periodText())
 				.add("hogstaAntal", "Högsta antal gäster", permit.servingArea().hogstaAntal())
 				.add("sittplatser", "Sittplatser", permit.servingArea().sittplatser())
-				.add("serveringslokal", "Serveringslokal", permit.servingArea().serveringslokal())
+				// Under the key and label of Draken's examination of the premises, which shows it (decision 82)
+				.add("PREMISES_SERVING_AREA", "Serveringsytor", permit.servingArea().serveringslokal())
 				.add("villkor", "Villkor", content.conditions())
+				.table(ServingStaff.KEY, ServingStaff.GROUP, ServingStaff.COLUMNS, ServingStaff.rows(snapshot.staffOf(permit.objektId())))
 				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", index.decisionText(decision, true))
 				.add(CandidateTexts.migrated(today, ALKT))
@@ -268,10 +273,33 @@ final class AlktPermits {
 	 * @return                the decision, empty when none of them grants a permit
 	 */
 	private Optional<DecisionRow> grantOf(final DecisionRow pointedTo, final Set<Integer> issuingErrands) {
-		final var decisions = Stream.concat(Stream.ofNullable(pointedTo), issuingErrands.stream().flatMap(arendeId -> index.decisionsOf(arendeId).stream()))
+		final var decisions = decisionsOf(pointedTo, issuingErrands);
+		return latestOf(decisions, GRANT_TYPES).or(() -> latestOf(decisions, TEMPORARY_GRANT_TYPES));
+	}
+
+	/**
+	 * G9 for a grant of the same kind without a time that was registered after the chosen one, which has a time, as one
+	 * without a time is never chosen over one with: it may be the latest, as AlkOL tells too.
+	 */
+	private void undatedGrantHits(final DecisionRow chosen, final DecisionRow pointedTo, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
+		if (chosen.beslutad() == null || chosen.beslutsId() == null) {
+			return;
+		}
+		final var types = CodeTexts.isOneOf(chosen.beslutsTyp(), GRANT_TYPES) ? GRANT_TYPES : TEMPORARY_GRANT_TYPES;
+		decisionsOf(pointedTo, issuingErrands).stream()
+			.filter(decision -> decision.beslutad() == null && decision.beslutsId() != null && decision.beslutsId() > chosen.beslutsId())
+			.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), types))
+			.findFirst()
+			.ifPresent(undated -> hits.add(RuleHit.of(UNPARSEABLE, "det beviljande beslutet %d saknar datum och kan vara det senaste".formatted(undated.beslutsId()))));
+	}
+
+	/**
+	 * @return the decision the permit points to and those of the errands that issued it, each once
+	 */
+	private List<DecisionRow> decisionsOf(final DecisionRow pointedTo, final Set<Integer> issuingErrands) {
+		return Stream.concat(Stream.ofNullable(pointedTo), issuingErrands.stream().flatMap(arendeId -> index.decisionsOf(arendeId).stream()))
 			.distinct()
 			.toList();
-		return latestOf(decisions, GRANT_TYPES).or(() -> latestOf(decisions, TEMPORARY_GRANT_TYPES));
 	}
 
 	private static Optional<DecisionRow> latestOf(final List<DecisionRow> decisions, final Set<String> types) {
@@ -376,6 +404,14 @@ final class AlktPermits {
 	}
 
 	/**
+	 * @return the texts the errand already shows that AlkT copies from the issuing errand to the permit: the notes, and the
+	 *         texts of the serving times, which stand at their times (decision 76)
+	 */
+	private static List<String> shownNotes(final PermitRow permit) {
+		return Stream.concat(permit.notes().stream(), permit.servingTimes().stream().filter(ServingTime::isSet).map(ServingTime::text).filter(Objects::nonNull)).toList();
+	}
+
+	/**
 	 * The errands that issued the permit: the errand of the decision the permit points to, and the errands of the place
 	 * with the permit's diary number (section 3.2).
 	 */
@@ -397,16 +433,19 @@ final class AlktPermits {
 	}
 
 	/**
-	 * The files of the permit: those of the errands that issued it and of the place (decision 7). The files of the place's
-	 * events without an errand go to their documentation errands (decision 71). The latest certificate and annexes of the
+	 * The files of the permit: those of the errands that issued it and of the place (decision 7), and those of the decision
+	 * the permit points to when that decision has no errand. The files of the place's events without an errand go to their
+	 * documentation errands (decision 71). The latest certificate and annexes of the
 	 * place, and the drawings and the
 	 * permit decisions of the issuing errands, also go on the post in PartyAssets, in that order of precedence (decisions
 	 * 34, 35 and 39). A certificate older than the permit, or without a date, may be a former holder's: it goes on the
 	 * errand only and hits G29, as does a permit without a certificate. An annex older than the permit, or of catering on a
 	 * permit without catering, is left out.
 	 */
-	private FileList permitFiles(final PermitRow permit, final PlaceRow place, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
+	private FileList permitFiles(final PermitRow permit, final PlaceRow place, final DecisionRow decision, final Set<Integer> issuingErrands, final List<RuleHit> hits) {
 		final var files = index.errandFiles(issuingErrands, index.newFileList());
+		final var withoutErrand = Optional.ofNullable(decision).filter(row -> row.arendeId() == null);
+		withoutErrand.ifPresent(row -> files.addDecisionFiles(ALKT, row));
 		if (place != null) {
 			Stream.of(place.bifogadfil(), place.bifogadfil2()).forEach(name -> files.add(name, ATTACHMENTS, FilePurposes.detailsOf(ALKT, ATTACHMENTS, name, null)));
 		}
@@ -435,12 +474,14 @@ final class AlktPermits {
 				.forEach(file -> files.add(file.name(), ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 			PermitFiles.markDrawings(files, index.decisionsOf(arendeId));
 		}
+		withoutErrand.ifPresent(row -> PermitFiles.markDrawings(files, List.of(row)));
 		if (place != null) {
 			Stream.of(place.bifogadfil(), place.bifogadfil2())
 				.filter(PermitFiles::isDrawing)
 				.forEach(name -> files.add(name, ATTACHMENTS, ASSET_CATEGORY_DRAWING));
 		}
-		issuingErrands.forEach(arendeId -> index.decisionsOf(arendeId).forEach(decision -> PermitFiles.markPermitDecision(files, decision, DECISION_TEMPLATES)));
+		issuingErrands.forEach(arendeId -> index.decisionsOf(arendeId).forEach(row -> PermitFiles.markPermitDecision(files, row, DECISION_TEMPLATES)));
+		withoutErrand.ifPresent(row -> PermitFiles.markPermitDecision(files, row, DECISION_TEMPLATES));
 		return files;
 	}
 

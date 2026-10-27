@@ -30,15 +30,18 @@ public final class InspectionProtocols {
 	private InspectionProtocols() {}
 
 	/**
-	 * @param  place      the place visited, null when unknown
-	 * @param  date       the day of the visit, null when unknown
-	 * @param  start      the time the visit started, "hh:mm", null when unknown
-	 * @param  end        the time it ended, "hh:mm", null when unknown
-	 * @param  inspectors who made the visit, the first two of whom fill the protocol's two fields
-	 * @param  texts      the texts of the visit, written as its description
-	 * @return            the fields of the protocol {@link #SERVING_PERMIT}
+	 * @param  place             the place visited, null when unknown
+	 * @param  date              the day of the visit, null when unknown
+	 * @param  start             the time the visit started, "hh:mm", null when unknown
+	 * @param  end               the time it ended, "hh:mm", null when unknown
+	 * @param  responsibleOnSite whether the owner or someone responsible for the serving was on site, null when unknown
+	 *                           (decision 80)
+	 * @param  inspectors        who made the visit, the first two of whom fill the protocol's two fields
+	 * @param  texts             the texts of the visit, written as its description
+	 * @return                   the fields of the protocol {@link #SERVING_PERMIT}
 	 */
-	public static List<Parameter> visit(final Place place, final LocalDate date, final String start, final String end, final List<String> inspectors, final InvestigationTexts texts) {
+	public static List<Parameter> visit(final Place place, final LocalDate date, final String start, final String end, final Boolean responsibleOnSite, final List<String> inspectors,
+		final InvestigationTexts texts) {
 		final var fields = new ArrayList<Parameter>();
 		if (place != null) {
 			add(fields, "premisesName", "Restaurang", place.name());
@@ -47,6 +50,7 @@ public final class InspectionProtocols {
 		add(fields, "inspectionDate", "Tillsynsdatum", SourceValues.format(date));
 		add(fields, "visitStartTime", "Inleds kl.", clock(start));
 		add(fields, "visitEndTime", "Avslutades kl.", clock(end));
+		add(fields, "responsiblePerson", "Ägare eller serveringsansvarig på plats", responsiblePerson(responsibleOnSite));
 		add(fields, "additionalRemarks", "Beskrivning", plain(texts));
 		add(fields, "inspector1NameAndTitle", "Namn, befattning", inspectors.isEmpty() ? null : inspectors.getFirst());
 		add(fields, "inspector2NameAndTitle", "Namn, befattning", inspectors.size() < 2 ? null : inspectors.get(1));
@@ -65,7 +69,8 @@ public final class InspectionProtocols {
 		final var fields = new ArrayList<Parameter>();
 		if (holder != null) {
 			add(fields, "businessName", "Verksamhetens namn", holder.name());
-			add(fields, "businessOrgNumber", "Organisationsnummer", LegalIds.format(holder.legalId()));
+			// A sole trader's number is a personal identity number, which Draken leaves out of the field (decision 81)
+			add(fields, "businessOrgNumber", "Organisationsnummer", LegalIds.formatOrganizationNumber(holder.legalId()));
 		}
 		if (place != null) {
 			add(fields, "businessAddress", "Adress", address(place));
@@ -81,6 +86,17 @@ public final class InspectionProtocols {
 		if (trimmed != null) {
 			fields.add(new Parameter(key, label, List.of(Texts.truncate(trimmed, ERRAND_PARAMETER_MAX_LENGTH, null))));
 		}
+	}
+
+	/**
+	 * @return the value of the option Draken offers for the field, the one labelled "Ja" or the one labelled "Ingen
+	 *         serveringsansvarig på plats"; null when unknown
+	 */
+	private static String responsiblePerson(final Boolean responsibleOnSite) {
+		if (responsibleOnSite == null) {
+			return null;
+		}
+		return responsibleOnSite ? "present" : "absent";
 	}
 
 	private static String address(final Place place) {

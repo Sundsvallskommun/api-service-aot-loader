@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service.model;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * A person with significant influence over the permit holder (decision 15), which can also be a company, e.g. an owning
@@ -15,6 +16,8 @@ import java.util.List;
  */
 public record Person(String name, LegalId legalId, boolean foreign, List<String> positions) {
 
+	private static final Pattern AUDITOR = Pattern.compile("revisor|revision", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
 	public Person {
 		positions = positions == null ? List.of() : List.copyOf(positions);
 	}
@@ -24,6 +27,14 @@ public record Person(String name, LegalId legalId, boolean foreign, List<String>
 	 */
 	public boolean isCompany() {
 		return legalId != null && legalId.type() == PartyType.ENTERPRISE;
+	}
+
+	/**
+	 * @return true when the person has positions and every one of them is that of an auditor, who has no significant
+	 *         influence over the business they audit; Draken tells an auditor by the same words (decision 84)
+	 */
+	public boolean auditorOnly() {
+		return !positions.isEmpty() && positions.stream().allMatch(position -> position != null && AUDITOR.matcher(position).find());
 	}
 
 	@Override

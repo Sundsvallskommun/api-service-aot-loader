@@ -45,6 +45,9 @@
 			},
 			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'inspector1NameAndTitle' && @.values[0] == 'Anna Berg')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'responsiblePerson' && @.displayName == 'Ägare eller serveringsansvarig på plats' && @.values[0] == 'present')]"
 			}
 		]
 	},

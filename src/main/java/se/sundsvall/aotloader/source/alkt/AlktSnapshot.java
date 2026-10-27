@@ -34,6 +34,7 @@ import static java.util.Collections.emptyMap;
  * @param errandTexts   the events of the errands, also those without a text, and the texts of their pictures, by
  *                      ArendeID
  * @param persons       the active persons with significant influence, by AgarID
+ * @param staff         the active serving staff of the places, by ObjektID (decision 79)
  * @param applicants    the applicants of the inspection errands, by SokandeID
  * @param codeTexts     the texts of the code lists, by code type and code
  * @param visits        the inspection visits, with the code lists of kinds and remarks (code types L and V)
@@ -51,6 +52,7 @@ public record AlktSnapshot(
 	List<DocumentRow> documents,
 	Map<Integer, List<TextRow>> errandTexts,
 	Map<Integer, List<PersonRow>> persons,
+	Map<Integer, List<StaffRow>> staff,
 	Map<Integer, ContactRow> applicants,
 	Map<String, Map<String, String>> codeTexts,
 	InspectionVisitRows visits) {
@@ -98,6 +100,10 @@ public record AlktSnapshot(
 
 	public List<PersonRow> personsOf(final Integer agarId) {
 		return persons.getOrDefault(agarId, emptyList());
+	}
+
+	public List<StaffRow> staffOf(final Integer objektId) {
+		return staff.getOrDefault(objektId, emptyList());
 	}
 
 	/**
@@ -226,6 +232,21 @@ public record AlktSnapshot(
 		@Override
 		public String toString() {
 			return "ConditionRow[objektId=" + objektId + ", code=" + code + ", validFrom=" + validFrom + ", validTo=" + validTo + "]";
+		}
+	}
+
+	/**
+	 * A row of Objektpersonal, a person of the serving staff of a place. The personal identity number is not read, since
+	 * the migration does not pass it on (decision 79).
+	 *
+	 * @param namn      the name, Namn
+	 * @param fromDatum the day the person became serving staff of the place, FROMDatum, null when unknown
+	 */
+	public record StaffRow(Integer objektId, String namn, LocalDate fromDatum) {
+
+		@Override
+		public String toString() {
+			return "StaffRow[objektId=" + objektId + ", fromDatum=" + fromDatum + "]";
 		}
 	}
 

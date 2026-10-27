@@ -66,7 +66,7 @@ class PersonalDataTest {
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
 		assertHidden(new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("KA", NAME)));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1));
@@ -85,13 +85,14 @@ class PersonalDataTest {
 		assertHidden(new AlktSnapshot.ServingTime("11:00", "01:00", NAME + " " + NUMBER));
 		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", "REST", NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
 		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
+		assertHidden(new AlktSnapshot.StaffRow(1, NAME, null));
 		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", List.of(new Parameter("restaurantNumber", null, List.of(NAME)))));
 		assertHidden(new InspectionCandidates.InspectionErrand(Source.ALKT, 1, "07", "Tillsyn", "AOT 2020-1", null, null, List.of(NAME), null, null));
 	}
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");
@@ -99,6 +100,7 @@ class PersonalDataTest {
 		assertThat(alkt.conditionsOf(1)).isEmpty();
 		assertThat(alkt.filesOf(1)).isEmpty();
 		assertThat(alkt.personsOf(1)).isEmpty();
+		assertThat(alkt.staffOf(1)).isEmpty();
 
 		final var visits = VisitTestRows.visits(List.of(), Map.of(), InspectionVisitRows.filesByVisit(List.of(new VisitFileRow(1, "a.pdf"), new VisitFileRow(null, "b.pdf"), new VisitFileRow(2, null),
 			new VisitFileRow(1, "c.pdf"))), Map.of("04", "Rutintillsyn"), Map.of());

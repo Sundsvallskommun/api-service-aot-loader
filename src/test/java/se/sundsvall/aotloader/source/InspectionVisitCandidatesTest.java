@@ -113,7 +113,7 @@ class InspectionVisitCandidatesTest {
 
 	@Test
 	void whoMadeTheInspectionIsTheKontrollantAndAVisitWithoutRemarksSaysSo() {
-		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", null, null, null, List.of("POL"), new StaffMarks(true, false, false));
+		final var visit = VisitTestRows.visit(900, 1, LocalDate.of(2023, 11, 4), null, null, "04", null, null, null, List.of("POL"), new StaffMarks(true, false, false, false));
 		final var rows = VisitTestRows.visits(List.of(visit), Map.of(), Map.of(), Map.of("04", "Rutintillsyn"), Map.of(), Map.of("POL", "Polisen"));
 		final var visits = new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, TestData.properties(), "okänt serveringsställe", "tillsynsbesöket saknar serveringsställe",
 			LocalDate.of(2026, 10, 23));

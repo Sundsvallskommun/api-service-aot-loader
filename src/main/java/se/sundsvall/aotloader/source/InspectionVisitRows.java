@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
@@ -197,18 +198,20 @@ public record InspectionVisitRows(
 	}
 
 	/**
-	 * The marks AlkT keeps about the serving staff at a visit (decision 48).
+	 * The marks AlkT keeps about the serving staff at a visit (decision 48), and whether someone of the staff was recorded
+	 * at it (decision 80).
 	 *
 	 * @param ownerOnSite     ServPersAgarePaPlats, the owner was on site
 	 * @param staffNotChecked ServPersEjKollat, the staff was not checked
 	 * @param staffNotOnSite  ServPersEjpaPlats, the staff was not on site
+	 * @param staffRecorded   someone of the serving staff was recorded at the visit, in Tillsyn_Servpers
 	 */
-	public record StaffMarks(boolean ownerOnSite, boolean staffNotChecked, boolean staffNotOnSite) {
+	public record StaffMarks(boolean ownerOnSite, boolean staffNotChecked, boolean staffNotOnSite, boolean staffRecorded) {
 
 		/**
 		 * No marks.
 		 */
-		public static final StaffMarks NONE = new StaffMarks(false, false, false);
+		public static final StaffMarks NONE = new StaffMarks(false, false, false, false);
 
 		/**
 		 * @return the marks that are set, as the business names them
@@ -224,7 +227,20 @@ public record InspectionVisitRows(
 			if (staffNotOnSite) {
 				texts.add("Personalen inte på plats");
 			}
+			if (staffRecorded) {
+				texts.add("Personal registrerad vid besöket");
+			}
 			return texts;
+		}
+
+		/**
+		 * @return whether the owner or someone responsible for the serving was on site, as the inspection protocol asks
+		 *         (decision 80): true when the owner was on site or someone of the staff was recorded, false when only the
+		 *         staff not being on site is marked, empty when the marks tell neither or contradict each other
+		 */
+		public Optional<Boolean> responsibleOnSite() {
+			final var someoneOnSite = ownerOnSite || staffRecorded;
+			return someoneOnSite == staffNotOnSite ? Optional.empty() : Optional.of(someoneOnSite);
 		}
 	}
 

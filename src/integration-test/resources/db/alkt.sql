@@ -206,3 +206,16 @@ INSERT INTO dbo.[Sökande] VALUES (71, '556677-0001', 'Förra ägaren AB', NULL,
 INSERT INTO dbo.[Ärende] (ArendeID, ObjektID, ArendeTyp, DiarieNr, OppnandeDatum, AvslutsDatum, SokandeID) VALUES (703, 1, '07', 'TIL-2018-7', '2018-03-01', '2018-04-01', 71)
 INSERT INTO dbo.[Ärende_Händelser] (HandelseID, ArendeID, ObjektID, HandelseTyp, HandelseDatumTid, HandelseText) VALUES (13, NULL, 1, 'ANT', '2018-03-15T09:00:00', 'Samtal med förra ägaren')
 GO
+-- The serving staff of place 1, of whom one is written twice and one is passive, and a person of the staff recorded at the
+-- visit, which says that someone responsible was on site (decisions 79 and 80). Personnr is there but not read
+CREATE TABLE dbo.Objektpersonal (ObjPersID int IDENTITY(1, 1) NOT NULL PRIMARY KEY, ObjektID int NULL, Namn varchar(50) NULL, Personnr varchar(20) NULL, FROMDatum datetime NULL, PASSIV bit NULL)
+CREATE TABLE dbo.Tillsyn_Servpers (TFSID int IDENTITY(1, 1) NOT NULL PRIMARY KEY, TillsynsTillfalleNr int NULL, Namn varchar(50) NULL, Personnr varchar(20) NULL)
+GO
+INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VALUES (1, 'Olle Svensson', '800101-1234', '2021-06-01', NULL)
+INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VALUES (1, 'Lisa Åberg', '850505-5555', NULL, 0)
+INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VALUES (1, 'olle svensson', '800101-1234', '2015-03-01', NULL)
+INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VALUES (1, 'Slutat Person', '700101-1111', '2010-01-01', 1)
+INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VALUES (99, 'Annat Ställe', '900101-2222', '2020-01-01', NULL)
+INSERT INTO dbo.Tillsyn_Servpers (TillsynsTillfalleNr, Namn, Personnr) VALUES (900, 'Olle Svensson', '800101-1234')
+UPDATE dbo.[Tillsyn_Tillfälle] SET ServPersEjpaPlats = 0 WHERE TillsynsTillfalleNr = 900
+GO

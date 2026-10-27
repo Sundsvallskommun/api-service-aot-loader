@@ -76,6 +76,14 @@ public final class LegalIds {
 	}
 
 	/**
+	 * @return the number as it is printed when it is an organization number (see {@link #format}); null for a personal
+	 *         identity number, such as that of a sole trader, which is not written out (decision 81), and for null
+	 */
+	public static String formatOrganizationNumber(final LegalId legalId) {
+		return legalId != null && legalId.type() == ENTERPRISE ? format(legalId) : null;
+	}
+
+	/**
 	 * @return the number without dashes, plus signs and blanks, for comparing numbers written in different ways; empty
 	 *         when nothing remains
 	 */

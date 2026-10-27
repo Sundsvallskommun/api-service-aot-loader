@@ -70,6 +70,26 @@ class DecidedScopesTest {
 	}
 
 	@Test
+	void aRoomSaysIndoorsOnlyInATextThatSaysNothingOfOutdoors() {
+		final var hits = new ArrayList<RuleHit>();
+		final var row = permit(1).noTimes().servingTo(true, false)
+			.time("11:00", "01:00", "Restauranglokal")
+			.time("11:00", "22:00", "Uteservering i anslutning till restaurangen")
+			.build();
+		final var both = permit(2).noTimes().servingTo(true, false)
+			.time("12:00", "23:00", "Restaurang inomhus och uteservering")
+			.build();
+
+		assertThat(hours(DecidedScopes.of(row, PERMANENT_SERVING, hits))).containsOnly(
+			entry("decidedServingHoursIndoorPublic", List.of("11:00", "01:00")),
+			entry("decidedServingHoursOutdoorPublic", List.of("11:00", "22:00")));
+		assertThat(hours(DecidedScopes.of(both, PERMANENT_SERVING, hits))).containsOnly(
+			entry("decidedServingHoursIndoorPublic", List.of("12:00", "23:00")),
+			entry("decidedServingHoursOutdoorPublic", List.of("12:00", "23:00")));
+		assertThat(hits).isEmpty();
+	}
+
+	@Test
 	void aTimeThatCannotBePlacedAndAFieldWithTwoTimesAreLeftOut() {
 		final var hits = new ArrayList<RuleHit>();
 		final var row = permit(1).noTimes().servingTo(true, false)

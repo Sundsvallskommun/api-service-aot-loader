@@ -41,6 +41,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.StaffRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -183,6 +184,15 @@ public class AlktRepository {
 		ORDER BY p.AgarID, p.PBIAGID
 		""";
 
+	// Without Personnr, which the migration does not pass on (decision 79)
+	private static final String SELECT_STAFF = """
+		SELECT p.ObjektID, p.Namn, p.FROMDatum
+		FROM dbo.Objektpersonal p
+		WHERE p.ObjektID IS NOT NULL
+		  AND (p.PASSIV IS NULL OR p.PASSIV = 0)
+		ORDER BY p.ObjektID, p.ObjPersID
+		""";
+
 	private static final String SELECT_APPLICANTS = """
 		SELECT s.SokandeID, s.OrganisationsNr, s.Bolagsnamn, s.KontaktPerson, s.GAdress, s.GAdress2, s.PNr, s.POrt,
 		       s.TelefonNr1, s.EMail
@@ -198,7 +208,8 @@ public class AlktRepository {
 	private static final String SELECT_VISITS = """
 		SELECT t.TillsynsTillfalleNr, t.ObjektId, t.StartDatum, t.SlutDatum, t.StartTid, t.SlutTid, t.Tillsynsform, t.Fritext,
 		       t.WordDokument, t.Bifogadfil, t.Handl1, t.Handl2, t.Handl3, t.ServPersAgarePaPlats, t.ServPersEjKollat, t.ServPersEjpaPlats,
-		       t.TillsynsOmgangsNr
+		       t.TillsynsOmgangsNr,
+		       CASE WHEN EXISTS (SELECT 1 FROM dbo.Tillsyn_Servpers s WHERE s.TillsynsTillfalleNr = t.TillsynsTillfalleNr) THEN 1 ELSE 0 END AS ServPersRegistrerad
 		FROM dbo.[Tillsyn_Tillfälle] t
 		ORDER BY t.TillsynsTillfalleNr
 		""";
@@ -266,6 +277,7 @@ public class AlktRepository {
 			eventFiles.documents(),
 			eventTexts.errandTexts(),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
+			jdbc.query(SELECT_STAFF, (rs, _) -> new StaffRow(integer(rs, "ObjektID"), text(rs, "Namn"), date(rs, "FROMDatum"))).stream().collect(groupingBy(StaffRow::objektId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
 			readVisits(jdbc, codeTexts));
@@ -407,7 +419,7 @@ public class AlktRepository {
 			text(rs, "WordDokument"),
 			text(rs, BIFOGADFIL),
 			texts(rs, "Handl1", "Handl2", "Handl3"),
-			new StaffMarks(flag(rs, "ServPersAgarePaPlats"), flag(rs, "ServPersEjKollat"), flag(rs, "ServPersEjpaPlats")),
+			new StaffMarks(flag(rs, "ServPersAgarePaPlats"), flag(rs, "ServPersEjKollat"), flag(rs, "ServPersEjpaPlats"), flag(rs, "ServPersRegistrerad")),
 			integer(rs, "TillsynsOmgangsNr"),
 			List.of(),
 			false);

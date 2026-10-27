@@ -55,6 +55,10 @@ public final class Constants {
 	public static final String PARAMETER_ORGANIZATION_NUMBER = "organizationNumber";
 	/** The display name of {@link #PARAMETER_ORGANIZATION_NUMBER}. */
 	public static final String PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME = "Organisationsnummer";
+	/** The parameter of a contact with its title, which Draken shows on the contact, as Draken writes it. */
+	public static final String PARAMETER_TITLE = "title";
+	/** The display name of {@link #PARAMETER_TITLE}. */
+	public static final String PARAMETER_TITLE_DISPLAY_NAME = "Titel";
 	/** The parameter of the permit that links it to its errand, as pw-alkt writes it. */
 	public static final String ASSET_PARAMETER_ERRAND_ID = "errandId";
 	/** The parameter of the permit with its conditions, as pw-alkt writes it. */

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -204,7 +205,8 @@ class TargetMapperTest {
 			assertThat(holder.getExternalIdType()).isEqualTo("COMPANY");
 			assertThat(holder.getFirstName()).isNull();
 			assertThat(holder.getOrganizationName()).isEqualTo("Förra Bolaget AB");
-			assertThat(holder.getParameters()).isNullOrEmpty();
+			// The organization number all the same, as Draken shows a company without one as lacking it (decision 83)
+			assertThat(holder.getParameters()).extracting("key", "displayName", "values").containsExactly(tuple("organizationNumber", "Organisationsnummer", List.of("556677-8899")));
 		});
 		assertThat(mapper.toNewDraft(withoutNumber, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders()).singleElement().satisfies(holder -> {
 			assertThat(holder.getExternalIdType()).isEqualTo("PRIVATE");
@@ -264,13 +266,53 @@ class TargetMapperTest {
 				tuple("PBI_ROLE", List.of("Ägarbolag")),
 				tuple("organizationNumber", List.of("559988-7766")));
 		});
-		// A company that Party does not know gets neither partyId nor organization number, but is a company
+		// A company that Party does not know gets no partyId, but is a company with its organization number, as Draken
+		// otherwise shows it as lacking one (decision 83)
 		assertThat(stakeholders.get(2)).satisfies(company -> {
 			assertThat(company.getOrganizationName()).isEqualTo("Okänt Bolag AB");
 			assertThat(company.getExternalId()).isNull();
 			assertThat(company.getExternalIdType()).isEqualTo("COMPANY");
-			assertThat(company.getParameters()).extracting("key").containsExactly("PBI", "PBI_SOURCE");
+			assertThat(company.getParameters()).extracting("key", "values").containsExactly(
+				tuple("PBI", List.of("true")),
+				tuple("PBI_SOURCE", List.of("MANUAL")),
+				tuple("organizationNumber", List.of("559988-7700")));
 		});
+	}
+
+	@Test
+	void aSoleTraderWithoutPartyIdGetsNoNumber() {
+		final var soleTrader = Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, "2"), ErrandType.SERVING_PERMIT)
+			.holder(new Holder(new LegalId("191212121212", PartyType.PRIVATE), "Tolvans Krog", null, null, null, null, null, null))
+			.build();
+
+		assertThat(mapper.toNewDraft(soleTrader, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getStakeholders().getFirst()).satisfies(holder -> {
+			assertThat(holder.getExternalIdType()).isEqualTo("PRIVATE");
+			assertThat(holder.getParameters()).isNullOrEmpty();
+		});
+	}
+
+	@Test
+	void aPersonWhoIsOnlyAnAuditorIsAContactWithATitleAndNoPersonWithSignificantInfluence() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
+			.holder(new Holder(new LegalId("5566778899", PartyType.ENTERPRISE), "Bolaget AB", null, null, null, null, null, null))
+			.persons(List.of(
+				new Person("Revisionsbyrån AB", new LegalId("5599887766", PartyType.ENTERPRISE), false, List.of("Revisor", "Revisorssuppleant")),
+				new Person("Anna Berg", new LegalId("198001011234", PartyType.PRIVATE), false, List.of("Revisor", "Ledamot"))))
+			.build();
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds("holder-party-id", Arrays.asList("auditor-party-id", "person-party-id")), TestData.labelIds())
+			.getStakeholders();
+
+		// Draken counts an auditor as having no influence over the business they audit (decision 84)
+		assertThat(stakeholders.get(1)).satisfies(auditor -> {
+			assertThat(auditor.getRole()).isEqualTo("CONTACT");
+			assertThat(auditor.getExternalId()).isEqualTo("auditor-party-id");
+			assertThat(auditor.getParameters()).extracting("key", "displayName", "values").containsExactly(
+				tuple("title", "Titel", List.of("Revisor, Revisorssuppleant")),
+				tuple("organizationNumber", "Organisationsnummer", List.of("559988-7766")));
+		});
+		// One who is also something else than an auditor is a person with significant influence
+		assertThat(stakeholders.get(2).getParameters()).extracting("key").containsExactly("PBI", "PBI_SOURCE", "PBI_ROLE");
 	}
 
 	@Test

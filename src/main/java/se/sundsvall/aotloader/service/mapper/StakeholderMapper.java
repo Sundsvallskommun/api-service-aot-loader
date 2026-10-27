@@ -22,6 +22,8 @@ import static se.sundsvall.aotloader.Constants.PARAMETER_ORGANIZATION_NUMBER_DIS
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_ROLE;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PBI_SOURCE;
+import static se.sundsvall.aotloader.Constants.PARAMETER_TITLE;
+import static se.sundsvall.aotloader.Constants.PARAMETER_TITLE_DISPLAY_NAME;
 import static se.sundsvall.aotloader.Constants.PBI_SOURCE_MANUAL;
 import static se.sundsvall.aotloader.service.mapper.ErrandParameterMapper.toParameters;
 
@@ -45,7 +47,7 @@ final class StakeholderMapper {
 	/**
 	 * @param  parties the partyIds found for the holder and the persons
 	 * @return         the stakeholders of the errand: the holder and its contact person, and the persons with significant
-	 *                 influence that are not the holder
+	 *                 influence that are not the holder, among them the auditors as contacts
 	 */
 	List<Stakeholder> stakeholders(final Candidate candidate, final PartyIds parties) {
 		final var stakeholders = new ArrayList<Stakeholder>();
@@ -95,11 +97,11 @@ final class StakeholderMapper {
 			.country(COUNTRY)
 			.contactChannels(contactChannels(holder.email(), holder.phone()));
 		parties.holderPartyId().ifPresentOrElse(partyId -> identify(stakeholder, partyId, holder.legalId(), List.of()),
-			() -> stakeholder.externalIdType(externalIdTypeOf(holder.legalId())));
+			() -> unidentified(stakeholder, holder.legalId(), List.of()));
 		if (!PartyType.ENTERPRISE.getExternalIdType().equals(stakeholder.getExternalIdType())) {
 			stakeholder.firstName(holder.name());
 		}
-		final var asPerson = candidate.persons().stream().filter(person -> isHolder(holder, person)).toList();
+		final var asPerson = candidate.persons().stream().filter(person -> isHolder(holder, person) && !person.auditorOnly()).toList();
 		if (!asPerson.isEmpty()) {
 			final var parameters = new ArrayList<>(Optional.ofNullable(stakeholder.getParameters()).orElse(List.of()));
 			parameters.addAll(toParameters(pbiParameters(asPerson.stream().flatMap(person -> person.positions().stream()).toList(), null)));
@@ -114,12 +116,15 @@ final class StakeholderMapper {
 
 	/**
 	 * A person with significant influence, which can also be a company. The name is the first name, which Draken shows for
-	 * such a person, and a company has it also as organization name.
+	 * such a person, and a company has it also as organization name. A person who is only an auditor is no person with
+	 * significant influence, as Draken sees it, and is a contact with the position as its title instead (decision 84).
 	 *
 	 * @param partyId the partyId of the person, null when it has none
 	 */
 	private Stakeholder personStakeholder(final Person person, final String partyId) {
-		final var parameters = pbiParameters(person.positions(), PBI_SOURCE_MANUAL);
+		final var parameters = person.auditorOnly()
+			? List.of(new Parameter(PARAMETER_TITLE, PARAMETER_TITLE_DISPLAY_NAME, List.of(String.join(", ", person.positions().stream().distinct().toList()))))
+			: pbiParameters(person.positions(), PBI_SOURCE_MANUAL);
 		final var stakeholder = new Stakeholder()
 			.role(properties.roles().contact())
 			.firstName(person.name())
@@ -129,7 +134,7 @@ final class StakeholderMapper {
 			stakeholder.organizationName(person.name());
 		}
 		if (partyId == null) {
-			stakeholder.externalIdType(externalIdTypeOf(person.legalId()));
+			unidentified(stakeholder, person.legalId(), parameters);
 		} else {
 			identify(stakeholder, partyId, person.legalId(), parameters);
 		}
@@ -150,11 +155,24 @@ final class StakeholderMapper {
 	 */
 	private static void identify(final Stakeholder stakeholder, final String partyId, final LegalId legalId, final List<Parameter> parameters) {
 		stakeholder.externalId(partyId).externalIdType(legalId.type().getExternalIdType());
-		if (legalId.type() == PartyType.ENTERPRISE) {
+		withOrganizationNumber(stakeholder, legalId, parameters);
+	}
+
+	/**
+	 * Gives a stakeholder without partyId the type of its number (see {@link #externalIdTypeOf}), and a company its
+	 * organization number all the same, since Draken shows a company without one as lacking it (decision 83).
+	 */
+	private static void unidentified(final Stakeholder stakeholder, final LegalId legalId, final List<Parameter> parameters) {
+		stakeholder.externalIdType(externalIdTypeOf(legalId));
+		withOrganizationNumber(stakeholder, legalId, parameters);
+	}
+
+	private static void withOrganizationNumber(final Stakeholder stakeholder, final LegalId legalId, final List<Parameter> parameters) {
+		Optional.ofNullable(LegalIds.formatOrganizationNumber(legalId)).ifPresent(number -> {
 			final var withNumber = new ArrayList<>(parameters);
-			withNumber.add(new Parameter(PARAMETER_ORGANIZATION_NUMBER, PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME, List.of(LegalIds.format(legalId))));
+			withNumber.add(new Parameter(PARAMETER_ORGANIZATION_NUMBER, PARAMETER_ORGANIZATION_NUMBER_DISPLAY_NAME, List.of(number)));
 			stakeholder.parameters(toParameters(withNumber));
-		}
+		});
 	}
 
 	/**

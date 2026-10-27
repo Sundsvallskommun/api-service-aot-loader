@@ -24,6 +24,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Scope;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingArea;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.StaffRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
 
 /**
@@ -81,6 +82,7 @@ final class AlktTestData {
 		private final List<DocumentRow> documents = new ArrayList<>();
 		private final Map<Integer, List<TextRow>> errandTexts = new HashMap<>();
 		private final Map<Integer, List<PersonRow>> persons = new HashMap<>();
+		private final Map<Integer, List<StaffRow>> staff = new HashMap<>();
 		private final Map<Integer, ContactRow> applicants = new HashMap<>();
 		private final List<VisitRow> visits = new ArrayList<>();
 		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
@@ -164,6 +166,11 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder staff(final StaffRow row) {
+			staff.computeIfAbsent(row.objektId(), _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
 		SnapshotBuilder applicant(final ContactRow row) {
 			applicants.put(row.id(), row);
 			return this;
@@ -192,7 +199,7 @@ final class AlktTestData {
 		AlktSnapshot build() {
 			final var texts = codeTexts();
 			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeEvents, unplacedFiles, documents, errandTexts, persons,
-				applicants, texts,
+				staff, applicants, texts,
 				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V"), Map.of("ABE", "Anna Berg"), rounds));
 		}
 	}

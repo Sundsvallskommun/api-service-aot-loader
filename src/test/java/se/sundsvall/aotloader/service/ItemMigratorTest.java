@@ -69,7 +69,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -656,7 +658,10 @@ class ItemMigratorTest {
 		final var result = migrator.process(TestData.permitWithCertificate("1", RuleHit.of(PERMIT_ENDED)), context(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
-		assertThat(result.detail()).startsWith("Steg Tillstånd i PartyAssets: Tillståndet asset-internal-id i PartyAssets fick inte status EXPIRED");
+		assertThat(result.detail()).startsWith("Steg Tillstånd i PartyAssets: Tillståndet asset-internal-id i PartyAssets fick inte status EXPIRED")
+			.contains("Tillståndet i PartyAssets kan vara ACTIVE, fast det ska vara EXPIRED, tills nästa körning");
+		// The step tries the status once more before it fails
+		verify(partyAssets, times(2)).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
 	}
 
 	@Test
@@ -691,7 +696,7 @@ class ItemMigratorTest {
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
 		assertThat(result.detail()).startsWith("Steg Tillstånd i PartyAssets: 502 BAD_GATEWAY Tjänsten svarar inte")
-			.contains("Tillståndet i PartyAssets är ACTIVE, fast det ska vara EXPIRED, tills nästa körning ger det sina filer");
+			.contains("Tillståndet i PartyAssets kan vara ACTIVE, fast det ska vara EXPIRED, tills nästa körning");
 		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
 	}
 
@@ -888,7 +893,7 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aContentChangeThatPartyAssetsIgnoresStopsBeforeThePostExpires() {
+	void aContentChangeThatPartyAssetsIgnoresFailsTheStepAndThePostIsExpiredAgain() {
 		final var existing = item(ItemStatus.FEL, ERRAND_ID);
 		existing.setFailedStep(Step.AKTIVERA);
 		existing.setPartyAssetsId("asset-internal-id");
@@ -898,15 +903,18 @@ class ItemMigratorTest {
 		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
 		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
-		// PartyAssets before 6.8 answers the change with 204 and keeps the content
-		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id")).thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)));
+		// PartyAssets before 6.8 answers the change with 204 and keeps the content; the post that is to be EXPIRED then gets
+		// that status, so that it does not stand as valid
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "asset-internal-id"))
+			.thenReturn(Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)), Optional.of(staleAsset("asset-internal-id", Status.ACTIVE)))
+			.thenReturn(Optional.of(staleAsset("asset-internal-id", Status.EXPIRED)));
 
 		final var result = migrator.process(TestData.permitWithoutFiles("1", RuleHit.of(PERMIT_ENDED)), context(false));
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
 		assertThat(result.detail()).isEqualTo("Steg Tillstånd i PartyAssets: PartyAssets gjorde inte hela ändringen av tillståndet asset-internal-id, vilket kräver PartyAssets 6.8 eller senare; "
-			+ "Undantagslistan: MIGRERA_SOM_UTGANGET");
-		verify(partyAssets, never()).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
+			+ "Undantagslistan: MIGRERA_SOM_UTGANGET; Tillståndet i PartyAssets fick status EXPIRED när steget misslyckades");
+		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().status(Status.EXPIRED));
 	}
 
 	@Test
@@ -964,6 +972,30 @@ class ItemMigratorTest {
 		final var order = inOrder(partyAssets);
 		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "stale-asset-id", new AssetUpdateRequest().status(Status.ACTIVE));
 		order.verify(partyAssets).updateAsset(eq(MUNICIPALITY_ID), eq("stale-asset-id"), updateCaptor.capture());
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "stale-asset-id", new AssetUpdateRequest().status(Status.EXPIRED));
+	}
+
+	@Test
+	void anExpiredPermitWhoseContentFailsIsExpiredAgainBeforeTheStepFails() {
+		final var exception = new ReviewExceptionEntity();
+		exception.setOutcome(ExceptionOutcome.MIGRERA_SOM_UTGANGET);
+		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.of(staleAsset("stale-asset-id", Status.EXPIRED)));
+		// The content is refused while the post is ACTIVE, after which the post is EXPIRED again
+		lenient().doThrow(Problem.valueOf(BAD_GATEWAY, "Tjänsten svarar inte")).when(partyAssets)
+			.updateAsset(eq(MUNICIPALITY_ID), eq("stale-asset-id"), argThat(update -> update.getStatus() == null));
+		when(partyAssets.getAsset(MUNICIPALITY_ID, "stale-asset-id")).thenReturn(Optional.of(assetAsCreated("stale-asset-id", Status.EXPIRED)));
+
+		final var result = migrator.process(TestData.permitWithoutFiles("1"), context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.detail()).startsWith("Steg Tillstånd i PartyAssets: 502 BAD_GATEWAY Tjänsten svarar inte")
+			.contains("Tillståndet i PartyAssets fick status EXPIRED när steget misslyckades");
+		final var order = inOrder(partyAssets);
+		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "stale-asset-id", new AssetUpdateRequest().status(Status.ACTIVE));
+		order.verify(partyAssets).updateAsset(eq(MUNICIPALITY_ID), eq("stale-asset-id"), argThat(update -> update.getStatus() == null));
 		order.verify(partyAssets).updateAsset(MUNICIPALITY_ID, "stale-asset-id", new AssetUpdateRequest().status(Status.EXPIRED));
 	}
 

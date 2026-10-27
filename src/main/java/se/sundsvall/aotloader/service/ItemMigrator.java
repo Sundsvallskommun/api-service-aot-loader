@@ -396,20 +396,20 @@ public class ItemMigrator {
 				assetFileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
 				return withLegalBasis;
 			}
-			// An EXPIRED post is ACTIVE while it gets its files, and EXPIRED once at the end
-			if (post.status() == Status.EXPIRED) {
-				if (assetFileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
-					return withLegalBasis;
-				}
-				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
+			// An EXPIRED post is ACTIVE while it gets its files, and EXPIRED once at the end, also when a step fails meanwhile
+			if (post.status() == Status.EXPIRED && assetFileUploader.missingOnAsset(candidate, context, municipalityId, partyAssetsId) == 0) {
+				return withLegalBasis;
 			}
 			try {
+				if (post.status() == Status.EXPIRED) {
+					targets.changeAssetStatus(municipalityId, partyAssetsId, Status.ACTIVE, words(), notes);
+				}
 				assetFileUploader.uploadToAsset(candidate, context, municipalityId, partyAssetsId, notes);
+				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
 			} catch (final RuntimeException e) {
-				restoreExpired(municipalityId, partyAssetsId, e);
+				targets.restoreExpired(municipalityId, partyAssetsId, words(), notes, e);
 				throw e;
 			}
-			targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
 			return withLegalBasis;
 		}
 
@@ -495,19 +495,6 @@ public class ItemMigrator {
 
 		private AssetWords words() {
 			return AssetWords.of(candidate.key().kind());
-		}
-
-		/**
-		 * Gives the post in PartyAssets EXPIRED back after its files failed, so that it does not show as valid until the next
-		 * run. When that fails too, the report says the post is left ACTIVE.
-		 */
-		private void restoreExpired(final String municipalityId, final String partyAssetsId, final RuntimeException failure) {
-			try {
-				targets.changeAssetStatus(municipalityId, partyAssetsId, Status.EXPIRED, words(), notes);
-			} catch (final RuntimeException e) {
-				failure.addSuppressed(e);
-				notes.line("%s i PartyAssets är ACTIVE, fast %s ska vara EXPIRED, tills nästa körning ger %s sina filer".formatted(words().capitalized(), words().pronoun(), words().pronoun()));
-			}
 		}
 
 		/**

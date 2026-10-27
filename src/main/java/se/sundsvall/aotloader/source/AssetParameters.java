@@ -82,14 +82,15 @@ public final class AssetParameters {
 	}
 
 	/**
-	 * Adds the permit holder: its name, number, street, postal address and phone.
+	 * Adds the permit holder: its name, organization number, street, postal address and phone. A sole trader has no
+	 * organization number, as Draken writes none for one either (decision 81).
 	 */
 	public AssetParameters holder(final Holder holder) {
 		if (holder == null) {
 			return this;
 		}
 		return text(PERMIT_HOLDER_NAME, holder.name())
-			.text(PERMIT_HOLDER_ORG_NUMBER, LegalIds.format(holder.legalId()))
+			.text(PERMIT_HOLDER_ORG_NUMBER, LegalIds.formatOrganizationNumber(holder.legalId()))
 			.text(PERMIT_HOLDER_STREET, holder.address())
 			.text(PERMIT_HOLDER_POSTAL_ADDRESS, postalAddress(holder.zipCode(), holder.city()))
 			.text(PERMIT_HOLDER_PHONE, holder.phone());

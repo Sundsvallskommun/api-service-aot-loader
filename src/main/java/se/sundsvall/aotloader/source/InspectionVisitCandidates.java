@@ -218,7 +218,7 @@ public final class InspectionVisitCandidates {
 		final var end = timeOfDay(visit.slutTid());
 		final var noTime = isNoTime(start) && isNoTime(end);
 		return investigation.withProtocol(InspectionProtocols.SERVING_PERMIT,
-			InspectionProtocols.visit(place, visit.datum(), noTime ? null : start, noTime ? null : end, inspectors, investigation.texts()));
+			InspectionProtocols.visit(place, visit.datum(), noTime ? null : start, noTime ? null : end, visit.staff().responsibleOnSite().orElse(null), inspectors, investigation.texts()));
 	}
 
 	/**

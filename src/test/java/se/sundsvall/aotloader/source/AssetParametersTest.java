@@ -8,6 +8,7 @@ import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Place;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 
 class AssetParametersTest {
@@ -38,13 +39,15 @@ class AssetParametersTest {
 
 		final var parameters = new AssetParameters().holder(holder).premises(place, null).build();
 
+		// A sole trader's number is a personal identity number, which is left out as Draken leaves it out (decision 81)
 		assertThat(parameters).containsExactly(
 			Map.entry("permitHolderName", "Tolvans Krog"),
-			Map.entry("permitHolderOrgNumber", "19121212-1212"),
 			Map.entry("permitHolderStreet", "Gatan 1"),
 			Map.entry("permitHolderPostalAddress", "85230"),
 			Map.entry("premisesName", "Krogen"),
 			Map.entry("premisesPostalAddress", "Sundsvall"));
 		assertThat(new AssetParameters().holder(null).premises(null, "12345678").build()).isEmpty();
+		assertThat(new AssetParameters().holder(new Holder(new LegalId("5566778899", ENTERPRISE), "Bolaget AB", null, null, null, null, null, null)).build())
+			.containsEntry("permitHolderOrgNumber", "556677-8899");
 	}
 }

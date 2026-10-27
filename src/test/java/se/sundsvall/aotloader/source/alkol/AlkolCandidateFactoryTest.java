@@ -460,6 +460,8 @@ class AlkolCandidateFactoryTest {
 		assertThat(decision.validTo()).isNull();
 		assertThat(decision.terms()).isEmpty();
 		assertThat(decision.documents()).isEmpty();
+		// A tobacco decision has no beverages and no serving hours, which Draken would show as decided (decision 76)
+		assertThat(decision.decided()).isEmpty();
 		// The place's events without an errand, also the one whose errand is missing, become documentation errands, those
 		// with a text or a file, but the one that registers the folköl of the place (decision 71)
 		final var documentation = data.factory().documentation().candidates();
