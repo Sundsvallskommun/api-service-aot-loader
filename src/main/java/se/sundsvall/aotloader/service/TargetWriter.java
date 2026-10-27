@@ -1,0 +1,434 @@
+package se.sundsvall.aotloader.service;
+
+import generated.se.sundsvall.partyassets.Asset;
+import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetUpdateRequest;
+import generated.se.sundsvall.partyassets.Status;
+import generated.se.sundsvall.relation.Relation;
+import generated.se.sundsvall.relation.ResourceIdentifier;
+import generated.se.sundsvall.supportmanagement.Decision;
+import generated.se.sundsvall.supportmanagement.Errand;
+import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
+import generated.se.sundsvall.supportmanagement.Investigation;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import org.springframework.stereotype.Component;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
+import se.sundsvall.aotloader.integration.relation.RelationIntegration;
+import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.mapper.AssetMapper;
+import se.sundsvall.aotloader.service.mapper.TargetMapper;
+import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.PartyIds;
+import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.Texts;
+
+import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
+import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
+import static se.sundsvall.aotloader.Constants.TAG_MIGRATION_ID;
+
+/**
+ * Writes an item to the target systems. Each method looks for what is already there before it creates anything, so
+ * that a step can be made again without creating a second errand, permit or relation (K3).
+ */
+@Component
+class TargetWriter {
+
+	private final SupportManagementIntegration supportManagement;
+	private final PartyAssetsIntegration partyAssets;
+	private final RelationIntegration relations;
+	private final TargetMapper mapper;
+	private final AssetMapper assetMapper;
+	private final AotLoaderProperties properties;
+
+	TargetWriter(final SupportManagementIntegration supportManagement, final PartyAssetsIntegration partyAssets, final RelationIntegration relations, final TargetMapper mapper,
+		final AssetMapper assetMapper, final AotLoaderProperties properties) {
+		this.supportManagement = supportManagement;
+		this.partyAssets = partyAssets;
+		this.relations = relations;
+		this.mapper = mapper;
+		this.assetMapper = assetMapper;
+		this.properties = properties;
+	}
+
+	/**
+	 * Finds the errand of the item, by its id in the status table or by its external tag with drafts included, and creates
+	 * it as a draft only when neither finds it. A draft found is updated with what the source says now; an active errand
+	 * is left as it is.
+	 *
+	 * @param  candidate      the item
+	 * @param  municipalityId the municipality the item belongs to
+	 * @param  errandId       the id of the errand in the status table, null when it has none
+	 * @param  parties        the partyIds of the holder and the persons
+	 * @param  labelIds       the ids of the labels of the municipality
+	 * @return                the errand, with its life cycle
+	 */
+	Errand ensureErrand(final Candidate candidate, final String municipalityId, final String errandId, final PartyIds parties, final Map<String, String> labelIds) {
+		final var found = Optional.ofNullable(errandId)
+			.flatMap(id -> supportManagement.getErrand(municipalityId, id))
+			.or(() -> findByMigrationId(municipalityId, candidate.key()));
+		final Errand errand;
+		if (found.isEmpty()) {
+			final var createdId = supportManagement.createErrand(municipalityId, mapper.toNewDraft(candidate, municipalityId, parties, labelIds));
+			errand = supportManagement.getErrand(municipalityId, createdId)
+				.orElseThrow(() -> new MigrationException("Ärendet %s som just skapades gick inte att läsa".formatted(createdId)));
+		} else if (found.get().getLifecycle() == LifecycleEnum.DRAFT) {
+			errand = supportManagement.updateErrand(municipalityId, found.get().getId(), mapper.toDraftUpdate(candidate, municipalityId, parties, labelIds));
+		} else {
+			errand = found.get();
+		}
+		if (errand.getLifecycle() == null) {
+			throw new MigrationException("SupportManagement svarade utan livscykel på ärendet, och migreringen kräver utkast");
+		}
+		return errand;
+	}
+
+	/**
+	 * @return true when the errand exists and is active, as when an earlier run activated it but lost the answer
+	 */
+	boolean isActive(final String municipalityId, final String errandId) {
+		return supportManagement.getErrand(municipalityId, errandId).map(errand -> errand.getLifecycle() == LifecycleEnum.ACTIVE).orElse(false);
+	}
+
+	/**
+	 * Makes the draft an active errand, the last step of the flow.
+	 */
+	void activate(final String municipalityId, final String errandId) {
+		supportManagement.updateErrand(municipalityId, errandId, mapper.toActivation());
+	}
+
+	/**
+	 * Finds the post in PartyAssets, by its id in the status table or by the errand id and the partyId, and creates it
+	 * only when neither finds it. A 409 on the create means it exists after all; it is then read, since the answer has no
+	 * id. A post found, made by an earlier run, is brought up to date with what the item gives now. A post that is to be
+	 * EXPIRED is made, and given its content, while ACTIVE, since an EXPIRED post takes no change of its content and no
+	 * files: the caller gives it its files and then EXPIRED. One that is EXPIRED and already has its content is left so,
+	 * and one whose change fails gets EXPIRED back.
+	 *
+	 * @param  candidate          the item
+	 * @param  municipalityId     the municipality the item belongs to
+	 * @param  lookup             where the post is looked for
+	 * @param  parties            the partyIds; the holder's is required unless the post is found by its id
+	 * @param  expired            true when the post is to be EXPIRED, false when ACTIVE
+	 * @param  notes              the report of the item, told what was found and changed
+	 * @return                    the id PartyAssets gave the post, and the status it has now
+	 * @throws MigrationException when the post found has a status the migration never gives, or belongs to another party
+	 *                            than the item now gives; it is then left as it is
+	 */
+	Post ensureAsset(final Candidate candidate, final String municipalityId, final PostLookup lookup, final PartyIds parties, final boolean expired, final ReportNotes notes) {
+		final var words = AssetWords.of(candidate.key().kind());
+		final var errandId = lookup.errandId();
+		final var partyAssetsId = lookup.partyAssetsId();
+		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> assetInStatusTable(municipalityId, id, words, notes))
+			.or(() -> partyAssets.findAsset(municipalityId, holderPartyId(parties), errandId))
+			.or(() -> lookup.earlierErrand() && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
+		if (found.isPresent()) {
+			// The holder may be gone from Party since the post was made; the post keeps its party anyway
+			final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
+			if (expired && found.get().getStatus() == Status.EXPIRED && assetMapper.toContentUpdate(found.get(), wanted).isEmpty() && Objects.equals(found.get().getPartyId(), wanted.getPartyId())) {
+				unchangeable(found.get(), wanted, words).ifPresent(notes::line);
+				return new Post(found.get().getId(), Status.EXPIRED);
+			}
+			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), expired, words, notes), Status.ACTIVE);
+		}
+		final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
+		return new Post(partyAssets.createAsset(municipalityId, assetMapper.toSourceReference(errandId), wanted)
+			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
+				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, expired, words,
+				notes)),
+			Status.ACTIVE);
+	}
+
+	/**
+	 * Where the post of an item is looked for.
+	 *
+	 * @param errandId      the id of the errand, which is the asset id of the post (decision 4)
+	 * @param partyAssetsId the id of the post in the status table, null when it has none
+	 * @param earlierErrand true when the errand is one an earlier run made, which may have made the post for a holder the
+	 *                      source has changed since; the post is then also looked for through the relation PartyAssets
+	 *                      writes from the errand to it
+	 */
+	record PostLookup(String errandId, String partyAssetsId, boolean earlierErrand) {
+	}
+
+	/**
+	 * A post in PartyAssets.
+	 *
+	 * @param id     the id PartyAssets gave it
+	 * @param status its status
+	 */
+	record Post(String id, Status status) {
+	}
+
+	/**
+	 * Finds the post of an item whose errand is active, which an earlier run then made and completed, without changing its
+	 * status, content or files: once the item is migrated the target systems are the facit (decision 11), and the new
+	 * system may have changed the post since.
+	 *
+	 * @param  partyAssetsId      the id of the post in the status table, null when it has none
+	 * @return                    the id PartyAssets gave the post
+	 * @throws MigrationException when the post cannot be found
+	 */
+	String findMigratedAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyAssetsId, final PartyIds parties,
+		final ReportNotes notes) {
+		final var words = AssetWords.of(candidate.key().kind());
+		final var found = Optional.ofNullable(partyAssetsId).flatMap(id -> partyAssets.getAsset(municipalityId, id))
+			.or(() -> parties.holderPartyId().flatMap(partyId -> partyAssets.findAsset(municipalityId, partyId, errandId)))
+			.orElseThrow(() -> new MigrationException("Ärendet är redan aktivt, men %s finns inte i PartyAssets".formatted(words.definite())));
+		notes.line("%s i PartyAssets från en tidigare körning ändras inte, eftersom ärendet redan är aktivt".formatted(words.capitalized()));
+		return found.getId();
+	}
+
+	/**
+	 * Gives an EXPIRED post the status ACTIVE while it gets its files, since an EXPIRED post takes none, and EXPIRED back
+	 * once it has them.
+	 *
+	 * @throws MigrationException when the post does not get the status, or is gone
+	 */
+	void changeAssetStatus(final String municipalityId, final String partyAssetsId, final Status status, final AssetWords words, final ReportNotes notes) {
+		partyAssets.updateAsset(municipalityId, partyAssetsId, new AssetUpdateRequest().status(status));
+		final var updated = partyAssets.getAsset(municipalityId, partyAssetsId)
+			.orElseThrow(() -> new MigrationException("%s %s fanns inte i PartyAssets efter ändringen".formatted(words.capitalized(), partyAssetsId)));
+		if (updated.getStatus() != status) {
+			throw new MigrationException("%s %s i PartyAssets fick inte status %s".formatted(words.capitalized(), partyAssetsId, status));
+		}
+		notes.line(status == Status.ACTIVE
+			? "%s i PartyAssets hade status ACTIVE medan %s fick sina filer, eftersom %s med status EXPIRED inte tar emot filer".formatted(words.capitalized(), words.pronoun(), words.indefinite())
+			: "%s i PartyAssets fick status EXPIRED sist, när %s hade fått sitt innehåll och sina filer".formatted(words.capitalized(), words.pronoun()));
+	}
+
+	/**
+	 * Gives a post that is to be EXPIRED that status when a step failed while it was ACTIVE, so that it does not stand as
+	 * valid until the next run. PartyAssets takes the status also on a post that already has it. When that fails too, the
+	 * report says the post may be ACTIVE until the next run, and the failure of the step carries the one of the status.
+	 *
+	 * @param failure the failure of the step, which the caller throws on
+	 */
+	void restoreExpired(final String municipalityId, final String partyAssetsId, final AssetWords words, final ReportNotes notes, final RuntimeException failure) {
+		try {
+			partyAssets.updateAsset(municipalityId, partyAssetsId, new AssetUpdateRequest().status(Status.EXPIRED));
+			if (partyAssets.getAsset(municipalityId, partyAssetsId).map(Asset::getStatus).orElse(null) != Status.EXPIRED) {
+				throw new MigrationException("%s %s i PartyAssets fick inte status EXPIRED".formatted(words.capitalized(), partyAssetsId));
+			}
+			notes.line("%s i PartyAssets fick status EXPIRED när steget misslyckades".formatted(words.capitalized()));
+		} catch (final RuntimeException e) {
+			failure.addSuppressed(e);
+			notes.line("%s i PartyAssets kan vara ACTIVE, fast %s ska vara EXPIRED, tills nästa körning".formatted(words.capitalized(), words.pronoun()));
+		}
+	}
+
+	/**
+	 * @return the post of the errand found through the relations from the errand, whatever its party; empty when none
+	 */
+	private Optional<Asset> assetRelatedTo(final String municipalityId, final String errandId) {
+		return relations.findRelationsFrom(municipalityId, errandId).stream()
+			.map(Relation::getTarget)
+			.filter(Objects::nonNull)
+			// The relations the migration writes go to errands
+			.filter(target -> !RELATION_SERVICE_SUPPORT_MANAGEMENT.equalsIgnoreCase(target.getService()))
+			.map(ResourceIdentifier::getResourceId)
+			.filter(Objects::nonNull)
+			.map(id -> partyAssets.getAsset(municipalityId, id))
+			.flatMap(Optional::stream)
+			.filter(asset -> errandId.equals(asset.getAssetId()))
+			.findFirst();
+	}
+
+	private static String holderPartyId(final PartyIds parties) {
+		return parties.holderPartyId().orElseThrow(() -> new MigrationException("Tillståndshavaren saknar partyId"));
+	}
+
+	private Optional<Asset> assetInStatusTable(final String municipalityId, final String partyAssetsId, final AssetWords words, final ReportNotes notes) {
+		final var asset = partyAssets.getAsset(municipalityId, partyAssetsId);
+		if (asset.isEmpty()) {
+			notes.line("%s %s fanns inte längre i PartyAssets".formatted(words.capitalized(), partyAssetsId));
+		}
+		return asset;
+	}
+
+	/**
+	 * Gives a post an earlier run made the status the item is to have, and the title, last day and parameters it gives
+	 * now. PartyAssets changes those only while the post is ACTIVE, so a post that stays EXPIRED keeps them, and the report
+	 * says so. A post that is to become EXPIRED gets its content first, checked, and its status after. A post that is to be
+	 * EXPIRED in the end, and is ACTIVE only while it changes, gets EXPIRED back when the change fails.
+	 *
+	 * @param  toBeExpired        true when the item is to be EXPIRED in the end
+	 * @return                    the id of the post
+	 * @throws MigrationException when the post has a status the migration never gives, or belongs to another party than
+	 *                            the item now gives, which is then left as it is; and when PartyAssets does not make the
+	 *                            change
+	 */
+	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final boolean toBeExpired, final AssetWords words,
+		final ReportNotes notes) {
+		final var from = asset.getStatus();
+		final var to = wanted.getStatus();
+		if (from != Status.ACTIVE && from != Status.EXPIRED) {
+			throw new MigrationException("%s %s i PartyAssets har status %s, som migreringen aldrig ger, och ändras inte".formatted(words.capitalized(), asset.getId(), from));
+		}
+		// The content describes the holder, so another party's post must not get it
+		if (!Objects.equals(asset.getPartyId(), wanted.getPartyId())) {
+			throw new MigrationException("%s %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(words.capitalized(), asset.getId()));
+		}
+		final var content = assetMapper.toContentUpdate(asset, wanted);
+		final var statusChanges = from != to;
+		final var contentChanges = content.isPresent() && (from == Status.ACTIVE || statusChanges);
+		try {
+			if (from == Status.ACTIVE) {
+				// Checked before the status changes, since an EXPIRED post can no longer get the content
+				if (content.isPresent()) {
+					partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
+					verifyUpdated(municipalityId, asset.getId(), wanted, from, words);
+				}
+				if (statusChanges) {
+					partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+					verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
+				}
+			} else if (statusChanges) {
+				partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
+				content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
+				verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
+			}
+		} catch (final RuntimeException e) {
+			if (toBeExpired) {
+				restoreExpired(municipalityId, asset.getId(), words, notes, e);
+			}
+			throw e;
+		}
+
+		if (statusChanges) {
+			notes.line("%s i PartyAssets hade status %s från en tidigare körning och fick status %s".formatted(words.capitalized(), from, to));
+		}
+		if (contentChanges) {
+			notes.line("%s i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu".formatted(words.capitalized()));
+		} else if (content.isPresent()) {
+			notes.line("%s i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu".formatted(words.capitalized()));
+		}
+		unchangeable(asset, wanted, words).ifPresent(notes::line);
+		return asset.getId();
+	}
+
+	/**
+	 * Reads the post again and checks that it has the status it was given and the content the item gives.
+	 *
+	 * @throws MigrationException when it does not, or when it is gone
+	 */
+	private void verifyUpdated(final String municipalityId, final String id, final AssetCreateRequest wanted, final Status status, final AssetWords words) {
+		final var updated = partyAssets.getAsset(municipalityId, id)
+			.orElseThrow(() -> new MigrationException("%s %s fanns inte i PartyAssets efter ändringen".formatted(words.capitalized(), id)));
+		// PartyAssets before 6.8 answers a change of the content with 204 and leaves the content as it was
+		if (updated.getStatus() != status || assetMapper.toContentUpdate(updated, wanted).isPresent()) {
+			throw new MigrationException("PartyAssets gjorde inte hela ändringen av %s %s, vilket kräver PartyAssets 6.8 eller senare".formatted(words.definite(), id));
+		}
+	}
+
+	/**
+	 * @return a note on what differs from what the item gives now but cannot be changed in PartyAssets, empty when nothing
+	 *         does
+	 */
+	private static Optional<String> unchangeable(final Asset asset, final AssetCreateRequest wanted, final AssetWords words) {
+		final var differs = new ArrayList<String>();
+		if (!Objects.equals(asset.getType(), wanted.getType())) {
+			differs.add("typ");
+		}
+		if (!Objects.equals(asset.getIssued(), wanted.getIssued())) {
+			differs.add("utfärdandedatum");
+		}
+		if (!Objects.equals(asset.getDescription(), wanted.getDescription())) {
+			differs.add("beskrivning");
+		}
+		return differs.isEmpty() ? Optional.empty()
+			: Optional.of("%s %s i PartyAssets skiljer sig från det källan ger nu och kan inte ändras där (avsnitt 10.3)".formatted(words.capitalizedGenitive(), String.join(", ", differs)));
+	}
+
+	/**
+	 * Finds the relation from the permit errand to the inspection errand, and creates it only when it is not found. When
+	 * more than one is found, none is created and the deviation is reported.
+	 *
+	 * @return the id of the relation, empty when several were found
+	 */
+	Optional<String> ensureRelation(final String municipalityId, final String permitErrandId, final String errandId, final ReportNotes notes) {
+		final var found = relations.findRelations(municipalityId, RELATION_TYPE_LINK, permitErrandId, errandId);
+		if (found.size() > 1) {
+			notes.line("Avvikelse: %d relationer finns redan från tillståndsärendet till ärendet, ingen ny skapas".formatted(found.size()));
+			return Optional.empty();
+		}
+		return Optional.ofNullable(found.isEmpty()
+			? relations.createRelation(municipalityId, mapper.toRelation(permitErrandId, errandId))
+			: found.getFirst().getId());
+	}
+
+	/**
+	 * Gives an inspection errand its investigation (decision 41), unless it has one, which an earlier run then created.
+	 * An errand without an investigation in the candidate gets none.
+	 */
+	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
+		if (candidate.investigation() == null || !supportManagement.getInvestigations(municipalityId, errandId).isEmpty()) {
+			return;
+		}
+		supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(candidate.investigation()));
+	}
+
+	/**
+	 * Gives the errand of a permit the decision its permit was granted by (decision 70), the way Draken writes a decision:
+	 * a draft, then its terms and the documents it links, and last its completion. A decision an earlier run wrote is kept
+	 * when it is completed and is what the source gives now. Otherwise it is removed and the decision written again, since
+	 * SupportManagement leaves a field that a change does not carry as it is, so a change cannot empty one. Only the
+	 * migration's own decisions are removed: those its AD account wrote.
+	 *
+	 * @param  candidate          the permit, with its decision
+	 * @param  legalBasis         the legal basis read from the documents of the permit, null when none was found
+	 * @param  documentIds        the attachments of the errand that are the documents of the decision
+	 * @param  outcomeText        the display name of the outcome in the namespace, null when unknown
+	 * @return                    whether the decision was written now, kept or written again
+	 * @throws MigrationException when the errand has a decision that someone else wrote, which is then left as it is
+	 */
+	DecisionWrite ensureDecision(final Candidate candidate, final String municipalityId, final String errandId, final String legalBasis, final List<String> documentIds,
+		final String outcomeText) {
+		final var found = supportManagement.getDecisions(municipalityId, errandId);
+		if (!found.stream().allMatch(this::isMigrationsOwn)) {
+			throw new MigrationException("Ärendet har redan ett beslut som någon annan än migreringen har skrivit, och det ändras inte");
+		}
+		final var investigationId = supportManagement.getInvestigations(municipalityId, errandId).stream().map(Investigation::getId).filter(Objects::nonNull).findFirst().orElse(null);
+		final var draft = mapper.toDecisionDraft(candidate, legalBasis, investigationId, outcomeText);
+		final var completion = mapper.toDecisionCompletion(candidate.decision());
+		final var terms = TargetMapper.toDecisionTerms(candidate.decision());
+		if (found.size() == 1 && TargetMapper.isWritten(found.getFirst(), draft, completion, terms, documentIds)) {
+			return DecisionWrite.KEPT;
+		}
+		found.forEach(decision -> supportManagement.deleteDecision(municipalityId, errandId, decision.getId()));
+		final var decisionId = supportManagement.createDecision(municipalityId, errandId, draft);
+		terms.forEach(term -> supportManagement.createDecisionTerm(municipalityId, errandId, decisionId, term));
+		documentIds.forEach(attachmentId -> supportManagement.linkDecisionAttachment(municipalityId, errandId, decisionId, attachmentId));
+		supportManagement.updateDecision(municipalityId, errandId, decisionId, completion);
+		return found.isEmpty() ? DecisionWrite.WRITTEN : DecisionWrite.REPLACED;
+	}
+
+	/**
+	 * What became of the decision of a permit errand.
+	 */
+	enum DecisionWrite {
+		/** The errand had no decision and got it. */
+		WRITTEN,
+		/** The errand had the decision from an earlier run, as the source gives it now. */
+		KEPT,
+		/** The errand had a decision from an earlier run that was not as the source gives it now, and it was written again. */
+		REPLACED
+	}
+
+	private boolean isMigrationsOwn(final Decision decision) {
+		return Optional.ofNullable(Texts.trimToNull(properties.decisionAdAccount())).map(account -> account.equalsIgnoreCase(Texts.trimToNull(decision.getCreatedBy()))).orElse(false);
+	}
+
+	private Optional<Errand> findByMigrationId(final String municipalityId, final ItemKey key) {
+		final var found = supportManagement.findErrandsByExternalTag(municipalityId, TAG_MIGRATION_ID, key.migrationId());
+		if (found.size() > 1) {
+			throw new MigrationException("SupportManagement har %d ärenden med migreringsid %s, inget nytt skapas".formatted(found.size(), key.migrationId()));
+		}
+		return found.stream().findFirst();
+	}
+}

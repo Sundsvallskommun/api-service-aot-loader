@@ -3,4 +3,83 @@
 #========================================
 logging:
   level:
-    root: DEBUG
+    root: INFO
+spring:
+  datasource:
+    url: jdbc:h2:mem:it;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ''
+  security:
+    oauth2:
+      client:
+        provider:
+          party:
+            token-uri: http://localhost:${wiremock.server.port:}/api-gateway/token
+          party-assets:
+            token-uri: http://localhost:${wiremock.server.port:}/api-gateway/token
+          relation:
+            token-uri: http://localhost:${wiremock.server.port:}/api-gateway/token
+          support-management:
+            token-uri: http://localhost:${wiremock.server.port:}/api-gateway/token
+        registration:
+          party:
+            client-id: the-client-id
+            client-secret: the-client-secret
+          party-assets:
+            client-id: the-client-id
+            client-secret: the-client-secret
+          relation:
+            client-id: the-client-id
+            client-secret: the-client-secret
+          support-management:
+            client-id: the-client-id
+            client-secret: the-client-secret
+integration:
+  party:
+    url: http://localhost:${wiremock.server.port:}/party
+  party-assets:
+    url: http://localhost:${wiremock.server.port:}/party-assets
+  relation:
+    url: http://localhost:${wiremock.server.port:}/relation
+  support-management:
+    url: http://localhost:${wiremock.server.port:}/support-management
+aot-loader:
+  errand-status: CLOSED
+  decision-ad-account: mig01dec
+  cleanup:
+    enabled: true
+    allowed-hosts: localhost
+  result-directory: target/it-resultat
+  errand-types:
+    serving-permit:
+      category: ALCOHOL
+      type: SERVING_PERMIT_APPLICATION
+    tobacco-permit:
+      category: TOBACCO
+      type: SALES_PERMIT_APPLICATION
+    folkol-sales-notification:
+      category: ALCOHOL
+      type: FOLKOL_SALES_NOTIFICATION
+    folkol-serving-notification:
+      category: ALCOHOL
+      type: FOLKOL_SERVING_NOTIFICATION
+    ecigarette-notification:
+      category: TOBACCO
+      type: ECIGARETTE_SALES_NOTIFICATION
+    tobacco-free-nicotine-notification:
+      category: TOBACCO
+      type: TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
+      asset-type: TobaccoFreeNicotineProductSalesNotification
+    alcohol-inspection:
+      category: INSPECTION
+      type: INTERNAL_INSPECTION
+      source-errand-types:
+        '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    tobacco-inspection:
+      category: INSPECTION
+      type: INTERNAL_INSPECTION
+      source-errand-types:
+        it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        tills: CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION

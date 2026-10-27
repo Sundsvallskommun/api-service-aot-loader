@@ -1,0 +1,19 @@
+{
+	"name": "support-management-link-investigation-attachment",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations/investigation-1/attachments/x",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 201
+	}
+}

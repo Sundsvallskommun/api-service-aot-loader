@@ -1,0 +1,161 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.lifecycle",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "ALCOHOL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "SERVING_PERMIT_APPLICATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.channel",
+					"equalTo": "MIGRATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.resolution",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.reporterUserId",
+					"equalTo": "alkt-migration"
+				}
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-permanent-serving')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKT-TILLSTAND-1')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'diarienummer' && @.value == 'IAN-2019-1')]"
+			},
+			{
+				"doesNotMatch": "(?s).*handelselogg.*"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Anna Berg')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'COMPANY' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan Tolvansson' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person' && @.externalIdType == 'PRIVATE' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000003' && @.externalIdType == 'COMPANY' && @.organizationName == 'Ägarbolaget AB' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.stakeholders.length()",
+					"equalTo": "4"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'premisesName' && @.displayName == 'Serveringsställets namn' && @.values[0] == 'Krogen Ett')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.displayName == 'Valt restaurangnummer')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesStreetAddress')].values[0]",
+					"equalTo": "Storgatan 1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesPostalCode')].values[0]",
+					"equalTo": "85230"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesPostalArea')].values[0]",
+					"equalTo": "Sundsvall"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'restaurantNumber')].values[0]",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'villkor')].values[0]",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'serveringsansvariga' && @.displayName == 'Namn|Från' && @.group == 'Serveringsansvariga i AlkT' && @.values.length() == 2 && @.values[0] == 'Lisa Åberg|' && @.values[1] == 'Olle Svensson|2015-03-01')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
+					"equalTo": "2281"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001"
+		}
+	}
+}

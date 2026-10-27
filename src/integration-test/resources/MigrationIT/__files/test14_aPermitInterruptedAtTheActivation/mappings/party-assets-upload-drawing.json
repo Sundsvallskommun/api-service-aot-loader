@@ -1,0 +1,50 @@
+{
+	"name": "party-assets-upload-drawing",
+	"request": {
+		"method": "POST",
+		"url": "/party-assets/2281/assets/asset-internal-6/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"multipartPatterns": [
+			{
+				"matchingType": "ANY",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "name=\"attachment\""
+					}
+				},
+				"bodyPatterns": [
+					{
+						"equalTo": "%PDF-1.4 ritning"
+					}
+				]
+			},
+			{
+				"matchingType": "ANY",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "name=\"category\""
+					}
+				},
+				"bodyPatterns": [
+					{
+						"equalTo": "Planritning"
+					}
+				]
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-6/attachments/x"
+		}
+	}
+}

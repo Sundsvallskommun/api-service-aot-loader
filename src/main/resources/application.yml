@@ -8,6 +8,253 @@ openapi:
   name: ${spring.application.name}
   title: ${spring.application.name}
   version: '@project.version@'
+server:
+  # The migration runs on a developer computer (decision 10) and must not be reachable from the network
+  address: 127.0.0.1
+  # No proxy stands in front, so X-Forwarded-Host and Forwarded are a caller's own words: dept44 would honour them and
+  # let a page that resolves its own name to the loopback address pass for this computer
+  forward-headers-strategy: none
 spring:
   application:
     name: api-aot-loader
+  datasource:
+    # The status table, the exception list and the reports, kept on the computer that runs the migration
+    url: ${AOT_LOADER_DB_URL:jdbc:h2:file:./data/aot-loader}
+    username: sa
+    password: ${AOT_LOADER_DB_PASSWORD:}
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      jakarta:
+        persistence:
+          schema-generation:
+            database:
+              action: none
+  security:
+    oauth2:
+      client:
+        provider:
+          party:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          party-assets:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          relation:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+          support-management:
+            token-uri: ${AOT_LOADER_TOKEN_URI}
+        registration:
+          party:
+            authorization-grant-type: client_credentials
+            provider: party
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          party-assets:
+            authorization-grant-type: client_credentials
+            provider: party-assets
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          relation:
+            authorization-grant-type: client_credentials
+            provider: relation
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+          support-management:
+            authorization-grant-type: client_credentials
+            provider: support-management
+            client-id: ${AOT_LOADER_CLIENT_ID}
+            client-secret: ${AOT_LOADER_CLIENT_SECRET}
+integration:
+  party:
+    url: ${PARTY_URL}
+    connect-timeout: 10
+    read-timeout: 30
+  party-assets:
+    url: ${PARTY_ASSETS_URL}
+    connect-timeout: 10
+    read-timeout: 60
+  relation:
+    url: ${RELATION_URL}
+    connect-timeout: 10
+    read-timeout: 30
+  support-management:
+    url: ${SUPPORT_MANAGEMENT_URL}
+    connect-timeout: 10
+    # An upload of a file of up to 50 MB must have time to finish
+    read-timeout: 180
+#========================================
+# The migration
+#========================================
+# A setting left blank waits for a decision: a dry run lists it, and a real run refuses to start without it.
+aot-loader:
+  namespace: AOT
+  sent-by: 'alkt-migration; type=migration'
+  reporter-user-id: alkt-migration
+  # The AD account the decisions of the permits are written with (decision 70). SupportManagement takes a manual decision
+  # only from an AD account, so these calls alone are sent by it, with the decision maker of the source in decidedBy.
+  # The account migration-job, decided 23 October 2026. Blank stops a real run that migrates permits.
+  decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
+  # The channel Draken shows as "Migrerat ärende"
+  channel: MIGRATION
+  # The closed status of the migrated errands, the one AOT has (decision 5)
+  errand-status: SOLVED
+  # The resolution Draken closes an errand of AOT with, shown as "Avslutat"
+  errand-resolution: CLOSED
+  # The resource that removes what the migration wrote to the target systems (section 10.3). Turned on only for a test
+  # environment, e.g. with AOT_LOADER_CLEANUP_ENABLED=true; never in production.
+  cleanup:
+    enabled: false
+    # The hosts of the test environment, comma separated, e.g. with AOT_LOADER_CLEANUP_ALLOWED_HOSTS in .env. A cleanup
+    # starts only when SupportManagement, PartyAssets and the relation service are all on one of them, so that one left
+    # turned on is refused in production. Blank refuses every cleanup.
+    allowed-hosts: ${AOT_LOADER_CLEANUP_ALLOWED_HOSTS:}
+  # The report of each run is written here as a CSV file for Excel when the run finishes, to be sent to the business
+  # (section 9). Blank writes none.
+  result-directory: ${AOT_LOADER_RESULT_DIRECTORY:./data/resultat}
+  max-file-size: 50MB
+  # The places in these areas belong to another municipality than the one a run is started for, by the name of the area
+  # in the code lists of AlkT and AlkOL. Their errands are created in the municipality of the run like the others, with
+  # this municipality in the parameter premisesMunicipalityId (decision 19).
+  municipalities:
+    '[Timrå]': '2262'
+  roles:
+    permit-holder: PRIMARY
+    # The persons with significant influence (decision 15), with the parameter PBI = true on each
+    contact: CONTACT
+    # The holder on an inspection errand. Not PRIMARY, which would show the errand on Mina sidor (decision 27)
+    inspection-holder: CONTACT
+    # The role the measures of the inspection visits are added by, the one Draken gives every measure (decision 57)
+    measure-added-by: PRIMARY
+  # Everything each errand type becomes in the target systems: the classification (category and type, decision 5), the
+  # labels by their resource path (section 7.3.4), and the type and title in PartyAssets (decisions 20 and 4). The asset
+  # types are those pw-alkt gives the permits and notifications it creates, a notification ending in Notification. The
+  # category and type are the area and the kind of errand of the label tree, as new errands of the same kind have them.
+  # Every errand also gets the label TAGROOT/MIGRATED_ERRAND,
+  # which blocks every process (decision 17) and is not a setting.
+  errand-types:
+    serving-permit:
+      category: ALCOHOL
+      type: SERVING_PERMIT_APPLICATION
+      # The label of each subtype, decided by the rules of section 7.3.4
+      subtype-labels:
+        temporary-serving-public: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PUBLIC
+        temporary-serving-private: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TEMPORARY_SERVING_PRIVATE
+        permanent-serving: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING
+        permanent-catering: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_CATERING
+        farm-sales: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/FARM_SALES
+        tasting: CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING
+      asset-type: AlcoholServingPermit
+      asset-title: Beslut om serveringstillstånd
+      # The type and heading of the decision the errand gets, as Draken gives a decision on the label of the type (decision 70)
+      decision-type: SERVERINGSTILLSTAND
+      decision-title: Beslut om serveringstillstånd för alkoholdrycker
+    tobacco-permit:
+      category: TOBACCO
+      type: SALES_PERMIT_APPLICATION
+      labels:
+        - CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION
+      asset-type: TobaccoSalesPermit
+      # Followed by the kind of permit, e.g. " – detaljhandel"
+      asset-title: Tillstånd för tobaksförsäljning
+      decision-type: TOBAKSFORSALJNING
+      decision-title: Beslut om ansökan om försäljning av tobaksvaror
+    folkol-sales-notification:
+      category: ALCOHOL
+      type: FOLKOL_SALES_NOTIFICATION
+      labels:
+        - CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION
+      asset-type: LowAlcoholBeerSalesNotification
+      asset-title: Anmälan om försäljning av folköl
+    folkol-serving-notification:
+      category: ALCOHOL
+      type: FOLKOL_SERVING_NOTIFICATION
+      labels:
+        - CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION
+      asset-type: LowAlcoholBeerServingNotification
+      asset-title: Anmälan om servering av folköl
+    ecigarette-notification:
+      category: TOBACCO
+      type: ECIGARETTE_SALES_NOTIFICATION
+      labels:
+        - CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION
+      asset-type: ECigaretteSalesNotification
+      asset-title: Anmälan om försäljning av elektroniska cigaretter och påfyllningsbehållare
+    tobacco-free-nicotine-notification:
+      category: TOBACCO
+      type: TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
+      labels:
+        - CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
+      asset-type: TobaccoFreeNicotineProductSalesNotification
+      asset-title: Anmälan om försäljning av tobaksfria nikotinprodukter
+    # Inspection errands get no post in PartyAssets (section 7.7)
+    alcohol-inspection:
+      category: INSPECTION
+      type: INTERNAL_INSPECTION
+      labels:
+        - TAGROOT/ALCOHOL_INSPECTION
+      # Only the inspection errands of places with a current permit (decision 29)
+      only-places-with-permit: true
+      # The errand types in AlkT that are inspection errands, with the label of each. Blank: not decided.
+      source-errand-types:
+        '07': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '08': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        '09': CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    tobacco-inspection:
+      category: INSPECTION
+      type: INTERNAL_INSPECTION
+      labels:
+        - TAGROOT/TOBACCO_INSPECTION
+      # A sales place that has ceased gets none, whatever this says (decision 31)
+      only-places-with-permit: true
+      # The errand types in AlkOL that are inspection errands, with the label of each. Blank: not decided.
+      source-errand-types:
+        it: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+        tills: CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION
+    # Every inspection visit becomes an errand of its own, without holder (decision 30, section 7.7.2)
+    alcohol-inspection-visit:
+      category: INSPECTION
+      type: EXTERNAL_INSPECTION
+      # The measure type of the measures the remarks become, a deficiency for the holder to put right (decision 57)
+      measure-type: EXTERNAL
+      labels:
+        - CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION
+        - TAGROOT/ALCOHOL_INSPECTION
+      only-places-with-permit: true
+    tobacco-inspection-visit:
+      category: INSPECTION
+      type: EXTERNAL_INSPECTION
+      measure-type: EXTERNAL
+      labels:
+        - CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION
+        - TAGROOT/TOBACCO_INSPECTION
+      only-places-with-permit: true
+    # Every event of a place that belongs to no errand, with a text or a file, becomes a documentation errand of its own,
+    # filed under the permit or notification of its place (decision 71), unless it is from a former holder's time
+    # (decision 72)
+    alcohol-documentation:
+      category: DOCUMENTATION
+      type: DOCUMENTATION
+      labels:
+        - CATEGORYROOT/DOCUMENTATION/DOCUMENTATION
+    tobacco-documentation:
+      category: DOCUMENTATION
+      type: DOCUMENTATION
+      labels:
+        - CATEGORYROOT/DOCUMENTATION/DOCUMENTATION
+  # Windows authentication: the URL has integratedSecurity=true and no user, see README
+  databases:
+    alkt:
+      url: ${ALKT_DB_URL:}
+    alkol:
+      url: ${ALKOL_DB_URL:}
+  file-area:
+    alkt:
+      documents: ${ALKT_DOCUMENTS_DIR:}
+      attachments: ${ALKT_ATTACHMENTS_DIR:}
+    alkol:
+      documents: ${ALKOL_DOCUMENTS_DIR:}
+      attachments: ${ALKOL_ATTACHMENTS_DIR:}

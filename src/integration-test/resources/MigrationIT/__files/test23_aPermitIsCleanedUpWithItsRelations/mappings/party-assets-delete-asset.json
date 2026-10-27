@@ -1,0 +1,19 @@
+{
+	"name": "party-assets-delete-asset",
+	"request": {
+		"method": "DELETE",
+		"url": "/party-assets/2281/assets/asset-internal-1",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 204
+	}
+}

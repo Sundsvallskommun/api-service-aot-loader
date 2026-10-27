@@ -1,0 +1,30 @@
+{
+	"name": "support-management-action-config-2281-active",
+	"priority": 1,
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/namespace-config/action-config",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "action-2281",
+				"name": "SEND_EMAIL",
+				"active": true
+			}
+		]
+	}
+}

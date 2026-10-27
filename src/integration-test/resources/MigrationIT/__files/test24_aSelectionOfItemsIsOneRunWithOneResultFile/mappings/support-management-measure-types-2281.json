@@ -1,0 +1,34 @@
+{
+	"name": "support-management-measure-types-2281",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/metadata/measuretypes",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "measure-type-external",
+				"name": "EXTERNAL",
+				"displayName": "Extern (sökande)"
+			},
+			{
+				"id": "measure-type-internal",
+				"name": "INTERNAL",
+				"displayName": "Intern (handläggare)"
+			}
+		]
+	}
+}

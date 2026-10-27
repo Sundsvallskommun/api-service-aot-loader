@@ -1,0 +1,15 @@
+{
+	"source": "ALKOL",
+	"kind": "ANMALAN",
+	"sourceId": "1-FOLKOL",
+	"errandType": "FOLKOL_SALES_NOTIFICATION",
+	"status": "KLAR",
+	"placeName": "Kiosken",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000009",
+	"errandNumber": "ALKT-2026-9",
+	"assetId": "11111111-aaaa-bbbb-cccc-000000000009",
+	"partyAssetsId": "asset-internal-9",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

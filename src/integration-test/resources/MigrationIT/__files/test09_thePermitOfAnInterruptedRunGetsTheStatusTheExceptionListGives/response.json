@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "2",
+	"placeNumber": "12345679",
+	"placeName": "Krogen Två",
+	"outcome": "MIGRERAD",
+	"rules": "G2,G13,G33,G29",
+	"detail": "G13 Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt; G33 Källsystemet har inget beslut som beviljade tillståndet, så ärendet får ett beslut som bygger på tillståndet (beslut 75); G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Undantagslistan: MIGRERA_SOM_UTGANGET; Tillståndet i PartyAssets fick status EXPIRED sist, när det hade fått sitt innehåll och sina filer; Beslut: Bifall, fattat 2020-01-01, 0 villkor, 0 dokument",
+	"errandNumber": "ALKT-2026-5"
+}

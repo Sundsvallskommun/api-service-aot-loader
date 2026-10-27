@@ -1,0 +1,128 @@
+{
+	"name": "support-management-create-decision",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/decisions",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "SERVERINGSTILLSTAND"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Beslut om serveringstillstånd för alkoholdrycker"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Serveringstillstånd"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.outcome",
+					"equalTo": "APPROVAL_WITH_CONDITIONS"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.method",
+					"equalTo": "MANUAL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.decidedBy",
+					"equalTo": "Anna Berg"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.decidedAt",
+					"matches": "2019-04-30T00:00(:00)?\\+02:00"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.legalBasis",
+					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.justification",
+					"equalTo": "Tillstånd beviljas.\nMed villkor om bordsservering."
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.validFrom",
+					"equalTo": "2019-05-01"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionText' && @.values[0] == 'Bifall med villkor')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionDate' && @.values[0] == '2019-04-30')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'validFrom' && @.values[0] == '2019-05-01')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'executionDate' && @.values[0] == '2019-05-01')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'premisesName' && @.values[0] == 'Krogen Ett')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'servingHours' && @.values[0] == '11:00–01:00 Inomhus')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decidedBeverages' && @.group == 'DECIDED' && @.displayName == 'Alkoholdrycker som får serveras' && @.values[0] == 'STARKOL' && @.values[1] == 'VIN')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decidedServingHoursIndoorPublic' && @.group == 'DECIDED' && @.displayName == 'Serveringstid inne (allmänheten)' && @.values[0] == '11:00' && @.values[1] == '01:00')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/decisions/decision-1"
+		}
+	}
+}

@@ -1,0 +1,14 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSYN",
+	"sourceId": "700",
+	"errandType": "ALCOHOL_INSPECTION",
+	"status": "KLAR",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000002",
+	"errandNumber": "ALKT-2026-2",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

@@ -1,0 +1,104 @@
+{
+	"name": "support-management-create-decision",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/decisions",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "TOBAKSFORSALJNING"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Beslut om ansökan om försäljning av tobaksvaror"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.description",
+					"equalTo": "Tillstånd tobaksförsäljning – detaljhandel"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.outcome",
+					"equalTo": "APPROVAL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.method",
+					"equalTo": "MANUAL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.decidedBy",
+					"equalTo": "Per Eriksson"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.decidedAt",
+					"matches": "2019-07-01T10:00(:00)?\\+02:00"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.justification",
+					"equalTo": "Tillstånd beviljas."
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.validFrom",
+					"equalTo": "2019-07-02"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionText' && @.values[0] == 'Bifall')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'salesRetail' && @.values[0] == 'true')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/decisions/decision-1"
+		}
+	}
+}

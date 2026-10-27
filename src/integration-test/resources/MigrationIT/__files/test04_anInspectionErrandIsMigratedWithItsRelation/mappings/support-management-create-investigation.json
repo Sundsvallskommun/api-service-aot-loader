@@ -1,0 +1,57 @@
+{
+	"name": "support-management-create-investigation",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000002/investigations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "COMPLETED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"contains": "<p><strong>Noteringar</strong></p><p>Klagomål från grannar</p>"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"contains": "<p><strong>Händelser</strong></p><p>2021-01-15 Anteckning (sekretess): Samtal med bolaget</p><p>2021-01-18 Remiss till polisen (diarienummer TIL-2020-3)</p><p>2021-01-20 Bild: Fasaden mot torget</p>"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "internal_inspection"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'businessName' && @.displayName == 'Verksamhetens namn' && @.values[0] == 'Testbolaget AB')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'businessOrgNumber' && @.values[0] == '556677-8899')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspectionDate' && @.values[0] == '2021-01-01')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000002/investigations/investigation-1"
+		}
+	}
+}

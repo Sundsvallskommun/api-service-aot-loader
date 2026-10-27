@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSYNSBESOK",
+	"sourceId": "900",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"outcome": "MIGRERAD",
+	"rules": "",
+	"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-05-01; Underlag till utredningen: 2 filer",
+	"errandNumber": "ALKT-2026-10"
+}

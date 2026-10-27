@@ -1,0 +1,216 @@
+{
+	"name": "support-management-attachment-purposes-2281",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/metadata/attachmentpurposes",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": "purpose-REFERRAL_POLICE_REQUEST",
+				"name": "REFERRAL_POLICE_REQUEST",
+				"displayName": "Remiss Polismyndigheten – underlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_POLICE_RESPONSE",
+				"name": "REFERRAL_POLICE_RESPONSE",
+				"displayName": "Remiss Polismyndigheten – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_TAX_AGENCY_REQUEST",
+				"name": "REFERRAL_TAX_AGENCY_REQUEST",
+				"displayName": "Remiss Skatteverket – underlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_TAX_AGENCY_RESPONSE",
+				"name": "REFERRAL_TAX_AGENCY_RESPONSE",
+				"displayName": "Remiss Skatteverket – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_ENFORCEMENT_AUTHORITY_REQUEST",
+				"name": "REFERRAL_ENFORCEMENT_AUTHORITY_REQUEST",
+				"displayName": "Remiss Kronofogden – underlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_ENFORCEMENT_AUTHORITY_RESPONSE",
+				"name": "REFERRAL_ENFORCEMENT_AUTHORITY_RESPONSE",
+				"displayName": "Remiss Kronofogden – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_RESCUE_SERVICE_REQUEST",
+				"name": "REFERRAL_RESCUE_SERVICE_REQUEST",
+				"displayName": "Remiss Medelpads Räddningstjänstförbund – underlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_RESCUE_SERVICE_RESPONSE",
+				"name": "REFERRAL_RESCUE_SERVICE_RESPONSE",
+				"displayName": "Remiss Medelpads Räddningstjänstförbund – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_ENVIRONMENT_OFFICE_REQUEST",
+				"name": "REFERRAL_ENVIRONMENT_OFFICE_REQUEST",
+				"displayName": "Remiss Miljökontoret – underlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_ENVIRONMENT_OFFICE_RESPONSE",
+				"name": "REFERRAL_ENVIRONMENT_OFFICE_RESPONSE",
+				"displayName": "Remiss Miljökontoret – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-REFERRAL_CREDIT_REPORT_RESPONSE",
+				"name": "REFERRAL_CREDIT_REPORT_RESPONSE",
+				"displayName": "Remiss Kreditupplysning (Syna) – svar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-STATEMENT_REQUEST",
+				"name": "STATEMENT_REQUEST",
+				"displayName": "Remissunderlag",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-STATEMENT_RESPONSE",
+				"name": "STATEMENT_RESPONSE",
+				"displayName": "Remissvar",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-SELF_MONITORING_PROGRAM",
+				"name": "SELF_MONITORING_PROGRAM",
+				"displayName": "Egenkontrollprogram",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-SERVING_AREA_DRAWING",
+				"name": "SERVING_AREA_DRAWING",
+				"displayName": "Ritning på lokalen med serveringsytan markerad",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-SALES_PREMISES_DRAWING",
+				"name": "SALES_PREMISES_DRAWING",
+				"displayName": "Ritning för försäljningslokal",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-KITCHEN_FLOOR_PLAN",
+				"name": "KITCHEN_FLOOR_PLAN",
+				"displayName": "Planritning kök",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BUDGET",
+				"name": "BUDGET",
+				"displayName": "Budget",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-FLOOR_PLAN",
+				"name": "FLOOR_PLAN",
+				"displayName": "Planritning",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-DRINKS_MENU",
+				"name": "DRINKS_MENU",
+				"displayName": "Dryckesmeny",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-MENU",
+				"name": "MENU",
+				"displayName": "Meny",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-FIRE_SAFETY_DOCUMENTATION",
+				"name": "FIRE_SAFETY_DOCUMENTATION",
+				"displayName": "Brandskyddsdokumentation",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-POWER_OF_ATTORNEY",
+				"name": "POWER_OF_ATTORNEY",
+				"displayName": "Fullmakt",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-CERTIFICATE_OF_REGISTRATION",
+				"name": "CERTIFICATE_OF_REGISTRATION",
+				"displayName": "Registreringsbevis från Bolagsverket",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-OWNERSHIP_INFORMATION",
+				"name": "OWNERSHIP_INFORMATION",
+				"displayName": "Uppgifter om ägarförhållanden",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BANK_STATEMENT",
+				"name": "BANK_STATEMENT",
+				"displayName": "Kontoutdrag för egna medel",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BUSINESS_DESCRIPTION",
+				"name": "BUSINESS_DESCRIPTION",
+				"displayName": "Verksamhetsbeskrivning",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-PURCHASE_AGREEMENT",
+				"name": "PURCHASE_AGREEMENT",
+				"displayName": "Köpavtal",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-TRANSFER_AGREEMENT",
+				"name": "TRANSFER_AGREEMENT",
+				"displayName": "Överlåtelseavtal",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-LEASE_OR_OWNERSHIP_PROOF",
+				"name": "LEASE_OR_OWNERSHIP_PROOF",
+				"displayName": "Hyresavtal eller ägarbevis",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-BUSINESS_AGREEMENT",
+				"name": "BUSINESS_AGREEMENT",
+				"displayName": "Avtal gällande verksamheten",
+				"deprecated": false
+			},
+			{
+				"id": "purpose-POLICE_PERMIT",
+				"name": "POLICE_PERMIT",
+				"displayName": "Polistillstånd",
+				"deprecated": false
+			}
+		]
+	}
+}

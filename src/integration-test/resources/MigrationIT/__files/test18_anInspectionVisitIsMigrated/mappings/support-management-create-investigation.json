@@ -1,0 +1,60 @@
+{
+	"name": "support-management-create-investigation",
+	"scenarioName": "investigation",
+	"requiredScenarioState": "Started",
+	"newScenarioState": "Created",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "COMPLETED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.conclusion",
+					"equalTo": "<p><strong>Tillsynsomgång</strong></p><p>Krogrunda, 2023-11-04 – 2023-11-05</p><p>Tillsammans med polisen.</p><p><strong>Anteckning</strong></p><p>Mycket folk i baren.</p><p><strong>Anmärkningar</strong></p><p>Servering till minderårig: Ungdomar i baren</p><p>Servering utom tillåten serveringstid</p>"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "serving_permit"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspectionDate' && @.displayName == 'Tillsynsdatum' && @.values[0] == '2023-11-04')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'visitStartTime' && @.values[0] == '21:30')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'visitEndTime' && @.values[0] == '23:00')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'inspector1NameAndTitle' && @.values[0] == 'Anna Berg')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'responsiblePerson' && @.displayName == 'Ägare eller serveringsansvarig på plats' && @.values[0] == 'present')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations/investigation-1"
+		}
+	}
+}

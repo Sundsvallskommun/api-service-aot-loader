@@ -1,0 +1,17 @@
+{
+	"name": "party-2281-191212121212",
+	"request": {
+		"method": "GET",
+		"url": "/party/2281/PRIVATE/191212121212/partyId"
+	},
+	"response": {
+		"status": 404,
+		"headers": {
+			"Content-Type": "application/problem+json"
+		},
+		"jsonBody": {
+			"title": "Not Found",
+			"status": 404
+		}
+	}
+}

@@ -1,0 +1,26 @@
+{
+	"id": "${json-unit.any-string}",
+	"municipalityId": "2281",
+	"dryRun": true,
+	"cleanup": false,
+	"sources": [
+		"ALKT",
+		"ALKOL"
+	],
+	"kinds": [
+		"TILLSTAND",
+		"ANMALAN",
+		"TILLSYN",
+		"TILLSYNSBESOK",
+		"DOKUMENTATION"
+	],
+	"status": "COMPLETED",
+	"message": "${json-unit.regex}^Rapporten finns som CSV i .*rapport-\\d{8}-\\d{6}-torrkorning-[0-9a-f]{8}\\.csv$",
+	"started": "${json-unit.any-string}",
+	"finished": "${json-unit.any-string}",
+	"outcomes": {
+		"SKULLE_MIGRERAS": 15,
+		"GRANSKAS": 1,
+		"MIGRERAS_INTE": 2
+	}
+}
