@@ -100,6 +100,17 @@ aot-loader:
   decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
   # The channel Draken shows as "Migrerat ärende"
   channel: MIGRATION
+  # The JSON parameters the migration writes, by the name of their schema (decision 87): the key each is stored under and
+  # the id of its schema in the json-schema service, which the target system validates it by and which must be registered
+  # for the municipality of the run. Every post in PartyAssets gets the one of the AoT schema of its type. The version is
+  # 0.1 in the test environment.
+  json-parameters:
+    alcohol-party-asset:
+      key: aot_alcohol_party_asset
+      schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_0.1}
+    tobacco-party-asset:
+      key: aot_tobacco_party_asset
+      schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_0.1}
   # The closed status of the migrated errands, the one AOT has (decision 5)
   errand-status: SOLVED
   # The resolution Draken closes an errand of AOT with, shown as "Avslutat"

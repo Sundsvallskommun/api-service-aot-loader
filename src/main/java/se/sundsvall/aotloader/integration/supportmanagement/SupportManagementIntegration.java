@@ -9,6 +9,7 @@ import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -191,6 +192,22 @@ public class SupportManagementIntegration {
 	 */
 	public String createInvestigation(final String municipalityId, final String errandId, final Investigation investigation) {
 		return Locations.idOf(client.createInvestigation(municipalityId, namespace, errandId, investigation), "utredningen");
+	}
+
+	/**
+	 * Creates a section of the investigation.
+	 *
+	 * @throws MigrationException when the response has no id
+	 */
+	public void createInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationSection section) {
+		Locations.idOf(client.createInvestigationSection(municipalityId, namespace, errandId, investigationId, section), "utredningens avsnitt");
+	}
+
+	/**
+	 * Changes a section of the investigation: what the change carries replaces what the section has, and the rest stays.
+	 */
+	public void updateInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final String sectionId, final InvestigationSection section) {
+		client.updateInvestigationSection(municipalityId, namespace, errandId, investigationId, sectionId, section);
 	}
 
 	/**

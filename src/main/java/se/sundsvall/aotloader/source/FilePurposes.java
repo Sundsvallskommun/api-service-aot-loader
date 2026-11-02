@@ -44,6 +44,8 @@ public final class FilePurposes {
 	public static final String FLOOR_PLAN = "FLOOR_PLAN";
 	public static final String SALES_PREMISES_DRAWING = "SALES_PREMISES_DRAWING";
 	public static final String KITCHEN_FLOOR_PLAN = "KITCHEN_FLOOR_PLAN";
+	/** The purposes of the drawings the certificate of a serving permit refers to, as Draken picks them. */
+	public static final Set<String> SERVING_AREA_DRAWINGS = Set.of(FLOOR_PLAN, KITCHEN_FLOOR_PLAN);
 	public static final String DRINKS_MENU = "DRINKS_MENU";
 	public static final String MENU = "MENU";
 	public static final String FIRE_SAFETY_DOCUMENTATION = "FIRE_SAFETY_DOCUMENTATION";

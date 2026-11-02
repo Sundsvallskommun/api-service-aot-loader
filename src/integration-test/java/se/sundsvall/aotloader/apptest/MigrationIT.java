@@ -389,7 +389,7 @@ class MigrationIT extends AbstractAppTest {
 		// The decision as the interrupted run completed it, with the investigation and the attachment by the ids the stubs
 		// of this test give them; the stubs of that test gave every attachment one id and gave back no investigation
 		final Map<String, Object> decision = JsonPath.read(decisionOfTheInterruptedPermit, "$");
-		assertThat(decision.get("attachments")).isEqualTo(List.of(Map.of("id", "x")));
+		assertThat(decision).containsEntry("attachments", List.of(Map.of("id", "x")));
 		decision.put("investigationId", "investigation-1");
 		decision.put("attachments", List.of(Map.of("id", "a1")));
 		wiremock.stubFor(get(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/decisions"))
@@ -526,7 +526,7 @@ class MigrationIT extends AbstractAppTest {
 		try (var files = Files.list(Path.of("target", "it-resultat"))) {
 			final var names = files.map(file -> file.getFileName().toString()).toList();
 			assertThat(names).filteredOn(name -> name.endsWith("-torrkorning-urval-" + runId.substring(0, 8) + ".csv")).hasSize(1);
-			assertThat(names).as("The calls of single items in the tests before wrote no files of their own").noneMatch(name -> name.matches(".*-(ALKT|ALKOL)-.*"));
+			assertThat(names).as("The calls of single items in the tests before wrote no files of their own").noneMatch(name -> name.contains("-ALKT-") || name.contains("-ALKOL-"));
 		} catch (final IOException e) {
 			throw new UncheckedIOException(e);
 		}

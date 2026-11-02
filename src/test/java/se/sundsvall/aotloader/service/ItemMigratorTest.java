@@ -14,6 +14,7 @@ import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -156,13 +157,15 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aDryRunTellsWhichParametersOfThePostAreCut() {
+	void aDryRunTellsWhatTheJsonParameterOfThePostLeavesOut() {
 		final var permit = TestData.permitWithoutFiles("1");
 		final var asset = permit.asset();
-		final var candidate = permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), Map.of("conditions", "x".repeat(300))));
+		final var candidate = permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), asset.schema(), asset.content(),
+			List.of("premises.emailAddress: har inte formen av en e-postadress", "servingArea.seatsIndoor: inte ett heltal")));
 
-		// A certificate the new system renders from the post would show the conditions cut
-		assertThat(migrator.process(candidate, context(true)).detail()).isEqualTo("Parametrar som kortas till 255 tecken i PartyAssets: conditions");
+		assertThat(migrator.process(candidate, context(true)).detail())
+			.isEqualTo("Utelämnat i JSON-parametern i PartyAssets, eftersom det inte följer schemat: premises.emailAddress: har inte formen av en e-postadress; "
+				+ "servingArea.seatsIndoor: inte ett heltal");
 	}
 
 	@Test
@@ -390,7 +393,8 @@ class ItemMigratorTest {
 		assertThat(dryRun.detail()).contains("Lagrum: 1 ur tillståndets beslut eller bevis");
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		assertThat(result.detail()).contains("Lagrum: 1 ur tillståndets beslut eller bevis");
-		assertThat(assetCaptor.getValue().getAdditionalParameters()).containsEntry("legalBasis", "8 kap. 2 § alkohollagen (2010:1622)");
+		// The permit has no decision, so the legal basis gets one of its own
+		assertThat(assetCaptor.getValue().getJsonParameters().getFirst().getValue().get("decision").get("legalBasis").asString()).isEqualTo("8 kap. 2 § alkohollagen (2010:1622)");
 	}
 
 	@Test
@@ -422,12 +426,72 @@ class ItemMigratorTest {
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		assertThat(result.detail()).startsWith("Stället hör till kommun 2262 (område Timrå)");
 		assertThat(errandCaptor.getValue().getParameters()).filteredOn("key", "premisesMunicipalityId").extracting("values").containsExactly(List.of(TIMRA));
-		assertThat(assetCaptor.getValue().getAdditionalParameters()).containsEntry("premisesMunicipalityId", TIMRA);
+		assertThat(assetCaptor.getValue().getJsonParameters().getFirst().getValue().get("premises").get("municipalityId").asString()).isEqualTo(TIMRA);
 		verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
 		verify(itemRepository, times(5)).save(saved.capture());
 		assertThat(saved.getAllValues()).allSatisfy(entity -> assertThat(entity.getMunicipalityId()).isEqualTo(MUNICIPALITY_ID));
 		verify(party, never()).getPartyId(eq(TIMRA), any());
 		verify(supportManagement, never()).createErrand(eq(TIMRA), any());
+	}
+
+	@Test
+	void theInvestigationOfAPermitGetsItsSections() {
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createInvestigation(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("investigation-1");
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+
+		assertThat(migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false)).outcome()).isEqualTo(Outcome.MIGRERAD);
+
+		final var section = ArgumentCaptor.forClass(InvestigationSection.class);
+		verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
+		assertThat(section.getValue().getSectionKey()).isEqualTo("premises");
+		assertThat(section.getValue().getAssessment()).isEqualTo("PENDING");
+		assertThat(section.getValue().getParameters()).extracting("key", "values").containsExactly(tuple("PREMISES_SERVING_AREA", List.of("Matsal")));
+	}
+
+	@Test
+	void theSectionsOfAnInvestigationAnEarlierRunCreatedGetWhatTheSourceGivesNow() {
+		final var written = new InvestigationSection().id("section-1").sectionKey("PREMISES")
+			.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("PREMISES_SERVING_AREA").values(List.of("Matsal"))));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID))
+			.thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))))
+			.thenReturn(List.of(new Investigation().id("investigation-1")));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+
+		// The section of an earlier run is found by its key in any case, and gets the parameters the source gives now
+		migrator.process(TestData.permitWithPremisesSection("1", "Matsal och bar"), context(false));
+		// An investigation that lacks the section gets it
+		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
+
+		final var change = ArgumentCaptor.forClass(InvestigationSection.class);
+		verify(supportManagement).updateInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), eq("section-1"), change.capture());
+		assertThat(change.getValue().getSectionKey()).isNull();
+		assertThat(change.getValue().getParameters()).extracting("key", "values").containsExactly(tuple("PREMISES_SERVING_AREA", List.of("Matsal och bar")));
+		verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any());
+		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
+	}
+
+	@Test
+	void aSectionWithTheParametersTheSourceGivesIsLeftAsItIs() {
+		final var written = new InvestigationSection().id("section-1").sectionKey("premises")
+			.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("PREMISES_SERVING_AREA").displayName("Annan").values(List.of("Matsal"))));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+
+		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
+
+		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).createInvestigationSection(anyString(), anyString(), anyString(), any());
 	}
 
 	@Test
@@ -786,11 +850,12 @@ class ItemMigratorTest {
 
 		final var result = migrator.process(TestData.permitWithoutFiles("1"), context(false));
 
-		final var wanted = new AssetMapper(properties).toAsset(TestData.permitWithoutFiles("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
+		final var wanted = new AssetMapper(properties).toAsset(TestData.permitWithoutFiles("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false, null);
 		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
 		assertThat(result.detail()).isEqualTo("Tillståndet i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu");
 		// The source gives the permit no last day, so the old one is removed
-		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().title(wanted.getTitle()).indefinitely(true).additionalParameters(wanted.getAdditionalParameters()));
+		verify(partyAssets).updateAsset(MUNICIPALITY_ID, "asset-internal-id", new AssetUpdateRequest().title(wanted.getTitle()).indefinitely(true).jsonParameters(wanted.getJsonParameters())
+			.additionalParameters(Map.of()));
 	}
 
 	@Test
@@ -1283,7 +1348,7 @@ class ItemMigratorTest {
 		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-beslut");
 		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
 			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
-		order.verify(supportManagement).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq(new Errand().lifecycle(LifecycleEnum.ACTIVE)));
+		order.verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
 		// The application is no document of the decision
 		verify(supportManagement, never()).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-id");
 	}
@@ -1366,7 +1431,7 @@ class ItemMigratorTest {
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
 		assertThat(result.detail()).isEqualTo("Steg Beslut: Ärendet har redan ett beslut som någon annan än migreringen har skrivit, och det ändras inte");
-		verify(supportManagement, never()).updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq(new Errand().lifecycle(LifecycleEnum.ACTIVE)));
+		verify(supportManagement, never()).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
 		verify(supportManagement, never()).deleteDecision(anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
 	}
@@ -1606,16 +1671,17 @@ class ItemMigratorTest {
 	 * @return the post of permit 1 as the migration creates it
 	 */
 	private Asset assetAsCreated(final String id, final Status status) {
-		final var created = new AssetMapper(properties).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false);
+		final var created = new AssetMapper(properties).toAsset(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, PARTY_ID, false, null);
 		return new Asset().id(id).assetId(created.getAssetId()).partyId(created.getPartyId()).type(created.getType()).title(created.getTitle()).description(created.getDescription())
-			.issued(created.getIssued()).validTo(created.getValidTo()).additionalParameters(created.getAdditionalParameters()).status(status);
+			.issued(created.getIssued()).validTo(created.getValidTo()).jsonParameters(created.getJsonParameters()).status(status);
 	}
 
 	/**
-	 * @return the post of permit 1 as an earlier run created it, from what the source said then
+	 * @return the post of permit 1 as an earlier version of the migration created it, from what the source said then, with
+	 *         additional parameters in place of the JSON parameter
 	 */
 	private Asset staleAsset(final String id, final Status status) {
-		return assetAsCreated(id, status).title("Gammal titel").validTo(LocalDate.of(2020, 12, 31)).additionalParameters(Map.of("errandId", ERRAND_ID));
+		return assetAsCreated(id, status).title("Gammal titel").validTo(LocalDate.of(2020, 12, 31)).jsonParameters(null).additionalParameters(Map.of("errandId", ERRAND_ID));
 	}
 
 	private RunContext context(final boolean dryRun) {

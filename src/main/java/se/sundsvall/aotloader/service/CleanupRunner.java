@@ -33,6 +33,7 @@ import se.sundsvall.aotloader.support.ErrorTexts;
 public class CleanupRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(CleanupRunner.class);
+	private static final String UNEXPECTED_ERROR = "Rensningen avbröts av ett oväntat fel, som står i appens logg";
 	private static final Comparator<MigrationItemEntity> ORDER = Comparator.comparing(MigrationItemEntity::getKind, Comparator.reverseOrder())
 		.thenComparing(MigrationItemEntity::getSource)
 		.thenComparing(MigrationItemEntity::getSourceId);
@@ -87,13 +88,13 @@ public class CleanupRunner {
 	 * @param  scope  the sources and their kinds
 	 * @param  single the one item to clean up, empty for every item of the scope or of the cleanup's selection
 	 * @return        the row of the report of the single item, whatever its outcome, also when it could not be saved; empty
-	 *                for a full cleanup, and when the item is not in the status table or the cleanup stopped or failed
-	 *                before
-	 *                it
+	 *                for a full cleanup, and when the item is not in the status table or the cleanup ended
+	 *                before reaching it
 	 */
 	public Optional<RunItemEntity> execute(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
 		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
+		var ended = false;
 		try {
 			final var selection = single.map(key -> ItemSelection.of(List.of(key))).orElseGet(() -> ItemSelection.parse(run.getItemKeys()));
 			cleanupGuard.check().or(targetGuard::check).ifPresentOrElse(
@@ -102,13 +103,16 @@ public class CleanupRunner {
 			if (single.isPresent() && progress.singleResult == null && progress.status() == RunStatus.COMPLETED) {
 				progress.note("Ärendet %s finns inte i statustabellen".formatted(single.get()));
 			}
+			ended = true;
 		} catch (final RuntimeException e) {
 			LOG.error("Cleanup {} failed: {}", run.getId(), e.getClass().getSimpleName(), ErrorTexts.forLog(e));
 			progress.fail("Rensningen avbröts av ett oväntat fel: " + ErrorTexts.describe(e));
-		} catch (final Error e) {
-			progress.fail("Rensningen avbröts av ett oväntat fel: " + e.getClass().getSimpleName());
-			throw e;
+			ended = true;
 		} finally {
+			// An Error is not caught, and goes on up as it is, but the cleanup is saved as failed first
+			if (!ended) {
+				progress.fail(UNEXPECTED_ERROR);
+			}
 			stopFlags.remove(run.getId());
 			records.finish(run, progress);
 		}

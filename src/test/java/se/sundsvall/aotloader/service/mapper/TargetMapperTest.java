@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,17 @@ class TargetMapperTest {
 	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-15T10:00:00Z"), SWEDISH_TIME);
 
 	private final TargetMapper mapper = new TargetMapper(TestData.properties(), CLOCK);
+
+	@Test
+	void theLegalBasisKeepsTheReferencesThatFitWhole() {
+		final var first = "8 kap. 2 § alkohollagen (2010:1622)";
+		final var many = String.join("; ", Collections.nCopies(10, first));
+
+		assertThat(TargetMapper.legalBasisWithin(null)).isNull();
+		assertThat(TargetMapper.legalBasisWithin(first)).isEqualTo(first);
+		assertThat(TargetMapper.legalBasisWithin(many)).doesNotContain("se ärendet").isEqualTo(String.join("; ", Collections.nCopies(6, first)));
+		assertThat(TargetMapper.legalBasisWithin("x".repeat(300))).hasSize(255).endsWith("…");
+	}
 
 	@Test
 	void toNewDraft() {
@@ -380,7 +392,11 @@ class TargetMapperTest {
 
 	@Test
 	void aLabelThatIsMissingInTheNamespace() {
-		assertThatThrownBy(() -> mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds(null, List.of()), Map.of()))
+		final var permit = TestData.permit("1");
+		final var parties = new PartyIds(null, List.of());
+		final Map<String, String> labelIds = Map.of();
+
+		assertThatThrownBy(() -> mapper.toNewDraft(permit, MUNICIPALITY_ID, parties, labelIds))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Etiketten TAGROOT/MIGRATED_ERRAND finns inte i namespace");
 	}
@@ -455,6 +471,34 @@ class TargetMapperTest {
 	}
 
 	@Test
+	void aSectionOfTheInvestigationIsNotAssessedAsDrakenStartsIt() {
+		final var section = TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5,
+			List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsalen")))));
+
+		assertThat(section.getSectionKey()).isEqualTo("premises");
+		assertThat(section.getHeading()).isEqualTo("Lokal och serveringsställe");
+		assertThat(section.getSortOrder()).isEqualTo(5);
+		assertThat(section.getAssessment()).isEqualTo("PENDING");
+		assertThat(section.getText()).isNull();
+		assertThat(section.getParameters()).extracting(p -> p.getKey(), p -> p.getDisplayName(), p -> p.getValues())
+			.containsExactly(tuple("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsalen")));
+	}
+
+	@Test
+	void parametersAreTheSameByTheirKeysAndValues() {
+		final var one = List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("a").displayName("A").values(List.of("1")),
+			new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2")));
+		final var other = List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2")),
+			new generated.se.sundsvall.supportmanagement.Parameter().key("a").values(List.of("1")));
+
+		assertThat(TargetMapper.sameParameters(one, other)).isTrue();
+		assertThat(TargetMapper.sameParameters(null, List.of())).isTrue();
+		assertThat(TargetMapper.sameParameters(one, other.subList(0, 1))).isFalse();
+		assertThat(TargetMapper.sameParameters(one, List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("a").values(List.of("3")),
+			new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2"))))).isFalse();
+	}
+
+	@Test
 	void anInvestigationThatEndsLaterThanNowIsActiveWithoutAnEnd() {
 		final var now = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 0), InvestigationTexts.NONE));
 		final var later = mapper.toInvestigation(new InvestigationData("Tillsyn", LocalDateTime.of(2026, 10, 15, 9, 0), LocalDateTime.of(2026, 10, 15, 12, 1), InvestigationTexts.NONE));
@@ -469,7 +513,7 @@ class TargetMapperTest {
 	@Test
 	void theDecisionOfAPermitIsADraftAsDrakenWritesAManualDecision() {
 		final var permit = TestData.permitWithDecision("1");
-		final var candidate = permit.withAsset(permit.asset().withParameter("legalBasis", "8 kap. 2 § alkohollagen").withParameter("conditions", "Mat ska serveras"));
+		final var candidate = permit.withAsset(permit.asset().withLegalBasis("8 kap. 2 § alkohollagen"));
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
 
 		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor");
@@ -489,11 +533,10 @@ class TargetMapperTest {
 		assertThat(draft.getValidFrom()).isEqualTo(LocalDate.of(2019, 5, 1));
 		assertThat(draft.getValidTo()).isNull();
 		assertThat(draft.getInvestigationId()).isEqualTo("investigation-1");
-		// The parameters of the permit but its legal basis and conditions, which are a field and terms, and those of the
-		// decision
+		// The parameters of the certificate the source gives the decision, followed by the text of the outcome
 		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey, generated.se.sundsvall.supportmanagement.Parameter::getValues)
-			.containsExactly(tuple("migreradFran", List.of("AlkT")), tuple("decisionText", List.of("Bifall med villkor")), tuple("decisionDate", List.of("2019-04-30")),
-				tuple("validFrom", List.of("2019-05-01")));
+			.containsExactly(tuple("caseNumber", List.of("IAN-2019-1")), tuple("decisionCaseNumber", List.of("IAN-2019-1")), tuple("decisionMaker", List.of("Anna Berg")),
+				tuple("decisionDate", List.of("2019-04-30")), tuple("validFrom", List.of("2019-05-01")), tuple("decisionText", List.of("Bifall med villkor")));
 		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).extracting(DecisionTerm::getSortOrder, DecisionTerm::getText).containsExactly(tuple(1, "Mat ska serveras"));
 		final var completion = decisionMapper.toDecisionCompletion(candidate.decision());
 		assertThat(completion.getStatus()).isEqualTo("COMPLETED");
@@ -506,7 +549,8 @@ class TargetMapperTest {
 		final var permit = TestData.permitWithDecision("1");
 		final var decision = permit.decision();
 		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset())
-			.decision(new DecisionData("N".repeat(300), decision.decidedAt(), null, null, null, LocalDate.of(2024, 12, 31), List.of(), List.of()))
+			.decision(new DecisionData("N".repeat(300), null, decision.decidedAt(), null, null, null, LocalDate.of(2024, 12, 31), List.of(), List.of())
+				.withCertificate(Map.of("decisionDate", "2019-04-30", "validFrom", " ")))
 			.build();
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
 
@@ -519,7 +563,7 @@ class TargetMapperTest {
 		assertThat(draft.getValidTo()).isEqualTo(LocalDate.of(2024, 12, 31));
 		assertThat(draft.getInvestigationId()).isNull();
 		// Without the text of the outcome and a first day, those parameters are left out
-		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).containsExactly("migreradFran", "decisionDate");
+		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).containsExactly("decisionDate");
 		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).isEmpty();
 		assertThat(decisionMapper.toDecisionDraft(candidate, " ", null, null).getLegalBasis()).isNull();
 	}
@@ -527,18 +571,18 @@ class TargetMapperTest {
 	@Test
 	void whatThePermitWasGrantedWithComesLastWithTheLabelsAndTheGroupOfDraken() {
 		final var permit = TestData.permitWithDecision("1");
-		final var decided = List.of(new Parameter("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STARKOL", "VIN")),
+		final var decided = List.of(new Parameter("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STRONG_BEER", "WINE")),
 			new Parameter("decidedServingHoursIndoorPublic", "Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
 		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset()).decision(permit.decision().withDecided(decided)).build();
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
 
 		final var parameters = decisionMapper.toDecisionDraft(candidate, null, null, "Bifall med villkor").getParameters();
 
-		assertThat(parameters).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).endsWith("validFrom", "decidedBeverages", "decidedServingHoursIndoorPublic");
+		assertThat(parameters).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).endsWith("decisionText", "decidedBeverages", "decidedServingHoursIndoorPublic");
 		assertThat(parameters.subList(parameters.size() - 2, parameters.size()))
 			.extracting(generated.se.sundsvall.supportmanagement.Parameter::getDisplayName, generated.se.sundsvall.supportmanagement.Parameter::getGroup,
 				generated.se.sundsvall.supportmanagement.Parameter::getValues)
-			.containsExactly(tuple("Alkoholdrycker som får serveras", "DECIDED", List.of("STARKOL", "VIN")),
+			.containsExactly(tuple("Alkoholdrycker som får serveras", "DECIDED", List.of("STRONG_BEER", "WINE")),
 				tuple("Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
 	}
 

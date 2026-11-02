@@ -10,7 +10,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
-import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -24,8 +23,9 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
-import se.sundsvall.aotloader.source.AssetParameters;
+import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
+import se.sundsvall.aotloader.source.CertificateParameters;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
@@ -42,6 +42,7 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.PermitViewRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
@@ -125,6 +126,11 @@ final class AlkolPermits {
 		final var premises = place == null ? null : index.place(place);
 		final var files = permitFiles(fsId, grant, grantErrand, hits);
 		final var title = Texts.title("Tobakstillstånd", name);
+		final var handlers = grantErrand == null ? List.<String>of() : snapshot.visits().handlerNames(grantErrand.handlaggare());
+		final var granted = Optional.ofNullable(grantDecision(grant, grantErrand, issued, files))
+			.map(data -> data.withCase(diaryNumber, Texts.join(", ", handlers)))
+			.map(data -> data.withCertificate(certificate(holder, premises, kinds, diaryNumber, issued, data)))
+			.orElse(null);
 
 		return Candidate.builder(new ItemKey(ALKOL, TILLSTAND, String.valueOf(fsId)), ErrandType.TOBACCO_PERMIT)
 			.placeName(placeName)
@@ -146,17 +152,17 @@ final class AlkolPermits {
 				.add("tillstandstyp", "Tillståndstyp", kindsText)
 				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(issued))
 				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
-				.add(ErrandParameters.HANDLERS, "Handläggare i AlkOL", grantErrand == null ? List.of() : snapshot.visits().handlerNames(grantErrand.handlaggare()))
+				.add(ErrandParameters.HANDLERS, "Handläggare i AlkOL", handlers)
 				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
 				.add("anmaldaProdukter", NOTIFIED_PRODUCTS, products)
 				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", notes)
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
-			.asset(new AssetData(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null,
-				assetParameters(holder, premises, kinds, diaryNumber, issued), legalBasisDocuments(fsId, grant, files)))
+			.asset(asset(holder, premises, kinds, diaryNumber, issued, granted)
+				.asset(kindsText == null ? null : kindsText.toLowerCase(Locale.ROOT), "Tobakstillstånd för " + name, issued, null, legalBasisDocuments(fsId, grant, files)))
 			.files(files.build(), files.assetFiles(), files.details())
-			.decision(grantDecision(grant, grantErrand, issued, files))
+			.decision(granted)
 			.build();
 	}
 
@@ -352,20 +358,49 @@ final class AlkolPermits {
 	}
 
 	/**
-	 * The parameters of the tobacco permit, under the keys of the AoT solution (section 7.4). The kinds of sale are the
-	 * kinds of the permit.
+	 * The parameters of the decision for the certificate, under the keys Draken gives a decision on a tobacco permit
+	 * (decision 87). The kinds of sale are the kinds of the permit, and it is valid until further notice unless the
+	 * decision has a last day.
 	 */
-	private static Map<String, String> assetParameters(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber, final LocalDate issued) {
-		final var parameters = new AssetParameters()
+	private static Map<String, String> certificate(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber, final LocalDate issued,
+		final DecisionData decision) {
+		final var parameters = new CertificateParameters()
 			.holder(holder)
-			.premises(premises, null);
+			.premises(premises);
 		Arrays.stream(PermitKind.values()).forEach(kind -> parameters.flag(kind.salesParameter(), kinds.contains(kind)));
 		return parameters
-			.text(AssetParameters.CASE_NUMBER, diaryNumber)
-			.text(AssetParameters.EXECUTION_DATE, SourceValues.format(issued))
-			.text(AssetParameters.DIARY_NUMBER, diaryNumber)
-			.text(AssetParameters.MIGRATED_FROM, ALKOL.getDisplayName())
+			.flag(CertificateParameters.VALIDITY_INDEFINITE, decision.validTo() == null)
+			.flag(CertificateParameters.VALIDITY_TEMPORARY, decision.validTo() != null)
+			.text(CertificateParameters.TEMPORARY_PERIOD, decision.validTo() == null ? null : Texts.dateRange(SourceValues.format(decision.validFrom()), SourceValues.format(decision.validTo())))
+			.text(CertificateParameters.CASE_NUMBER, diaryNumber)
+			.text(CertificateParameters.EXECUTION_DATE, SourceValues.format(issued))
+			.text(CertificateParameters.DECISION_OFFICER_AND_CASE_NUMBER, CertificateParameters.decisionOfficerAndCaseNumber(decision))
+			.decision(decision)
 			.build();
+	}
+
+	/**
+	 * The JSON parameter of the tobacco permit by the tobacco schema (decision 87): the kinds of sale are the kinds of the
+	 * permit, and the period of sale that of its decision, until further notice when it has no last day.
+	 *
+	 * @param decision the decision the permit was granted by, null when it has none
+	 */
+	private static AssetContents asset(final Holder holder, final Place premises, final List<PermitKind> kinds, final String diaryNumber, final LocalDate issued,
+		final DecisionData decision) {
+		final var contents = new AssetContents(ErrandType.TOBACCO_PERMIT.getAssetSchema())
+			.caseRegistrationNumber(diaryNumber)
+			.permitHolder(holder)
+			.place(premises, null);
+		final var salesPeriod = JsonFields.object();
+		if (decision == null || decision.validTo() == null) {
+			salesPeriod.text("period", "INDEFINITE").date("from", decision == null ? null : decision.validFrom());
+		} else {
+			salesPeriod.text("period", "TEMPORARY").date("from", decision.validFrom()).date("to", decision.validTo());
+		}
+		contents.fields()
+			.texts("salesTypes", kinds.stream().map(PermitKind::salesType).toList())
+			.object("salesPeriod", salesPeriod);
+		return contents.decision(decision, issued, null).migration(ALKOL, false);
 	}
 
 	/**

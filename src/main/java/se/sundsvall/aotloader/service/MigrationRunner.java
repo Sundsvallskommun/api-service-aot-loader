@@ -38,6 +38,7 @@ import se.sundsvall.aotloader.support.Texts;
 public class MigrationRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(MigrationRunner.class);
+	private static final String UNEXPECTED_ERROR = "Körningen avbröts av ett oväntat fel, som står i appens logg";
 	private static final int MAX_RULES_LENGTH = 255;
 
 	private final Map<Source, SourceReader> readers = new EnumMap<>(Source.class);
@@ -106,18 +107,22 @@ public class MigrationRunner {
 	public Optional<RunItemEntity> execute(final MigrationRunEntity run, final Map<Source, Set<Kind>> scope, final Optional<ItemKey> single) {
 		final var stop = stopFlags.computeIfAbsent(run.getId(), _ -> new AtomicBoolean());
 		final var progress = new Progress();
+		var ended = false;
 		try {
 			checkBeforeRun(run, scope, progress).ifPresent(check -> {
 				final var context = new RunContext(run.getId(), run.getMunicipalityId(), run.isDryRun(), check, run.getItemLimit(), stop, fileAreaFactory());
 				migrate(run, scope, single, context, progress);
 			});
+			ended = true;
 		} catch (final RuntimeException e) {
 			LOG.error("Run {} failed: {}", run.getId(), e.getClass().getSimpleName(), ErrorTexts.forLog(e));
 			progress.fail("Körningen avbröts av ett oväntat fel: " + ErrorTexts.describe(e));
-		} catch (final Error e) {
-			progress.fail("Körningen avbröts av ett oväntat fel: " + e.getClass().getSimpleName());
-			throw e;
+			ended = true;
 		} finally {
+			// An Error is not caught, and goes on up as it is, but the run is saved as failed first
+			if (!ended) {
+				progress.fail(UNEXPECTED_ERROR);
+			}
 			stopFlags.remove(run.getId());
 			records.finish(run, progress);
 		}

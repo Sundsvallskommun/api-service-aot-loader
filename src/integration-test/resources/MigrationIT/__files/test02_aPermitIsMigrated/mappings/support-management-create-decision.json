@@ -112,7 +112,25 @@
 				"matchesJsonPath": "$.parameters[?(@.key == 'servingHours' && @.values[0] == '11:00–01:00 Inomhus')]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'decidedBeverages' && @.group == 'DECIDED' && @.displayName == 'Alkoholdrycker som får serveras' && @.values[0] == 'STARKOL' && @.values[1] == 'VIN')]"
+				"matchesJsonPath": "$.parameters[?(@.key == 'servingAreaDescription' && @.values[0] == 'Matsal och bar')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionCaseNumber' && @.values[0] == 'IAN-2019-1')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionMaker' && @.values[0] == 'Anna Berg')]"
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decisionDateAndCaseNumber' && @.values[0] == '2019-04-30, IAN-2019-1')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesRestaurantNumber' || @.key == 'migreradFran' || @.key == 'diarienummer' || @.key == 'conditions' || @.key == 'legalBasis')]",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'decidedBeverages' && @.group == 'DECIDED' && @.displayName == 'Alkoholdrycker som får serveras' && @.values[0] == 'STRONG_BEER' && @.values[1] == 'WINE')]"
 			},
 			{
 				"matchesJsonPath": "$.parameters[?(@.key == 'decidedServingHoursIndoorPublic' && @.group == 'DECIDED' && @.displayName == 'Serveringstid inne (allmänheten)' && @.values[0] == '11:00' && @.values[1] == '01:00')]"

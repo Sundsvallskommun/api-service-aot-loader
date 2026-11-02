@@ -34,8 +34,8 @@ public final class Constants {
 	/** The parameter of the errand with the email address of the place, named like the key pw-alkt reads. */
 	public static final String ERRAND_PARAMETER_PREMISES_EMAIL = "premisesEmail";
 	/**
-	 * The parameter of the errand and of the permit with the municipality code of the place, e.g. 2262 for Timrå, which
-	 * picks e.g. the document templates (decision 19).
+	 * The parameter of the errand with the municipality code of the place, e.g. 2262 for Timrå, which picks e.g. the
+	 * document templates (decision 19). The permit has it in its JSON parameter (decision 87).
 	 */
 	public static final String PARAMETER_PREMISES_MUNICIPALITY_ID = "premisesMunicipalityId";
 	/**
@@ -59,12 +59,6 @@ public final class Constants {
 	public static final String PARAMETER_TITLE = "title";
 	/** The display name of {@link #PARAMETER_TITLE}. */
 	public static final String PARAMETER_TITLE_DISPLAY_NAME = "Titel";
-	/** The parameter of the permit that links it to its errand, as pw-alkt writes it. */
-	public static final String ASSET_PARAMETER_ERRAND_ID = "errandId";
-	/** The parameter of the permit with its conditions, as pw-alkt writes it. */
-	public static final String ASSET_PARAMETER_CONDITIONS = "conditions";
-	/** The parameter of the permit with its legal basis, as pw-alkt writes it (decision 58). */
-	public static final String ASSET_PARAMETER_LEGAL_BASIS = "legalBasis";
 	/** The origin the permits get in PartyAssets, as pw-alkt gives the permits it creates. */
 	public static final String ASSET_ORIGIN = "SUPPORTMANAGEMENT";
 	/**
@@ -98,7 +92,7 @@ public final class Constants {
 
 	/** The longest value of an errand parameter in SupportManagement. */
 	public static final int ERRAND_PARAMETER_MAX_LENGTH = 3000;
-	/** The longest value of an additional parameter, the title or the description of a permit in PartyAssets. */
+	/** The longest title or description of a permit in PartyAssets. */
 	public static final int ASSET_TEXT_MAX_LENGTH = 255;
 	/** The longest reason, detail and message in the status table and the report, whose columns are varchar(4000). */
 	public static final int REPORT_TEXT_MAX_LENGTH = 4000;

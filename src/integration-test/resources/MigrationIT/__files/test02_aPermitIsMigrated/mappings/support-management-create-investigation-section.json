@@ -1,0 +1,51 @@
+{
+	"name": "support-management-create-investigation-section",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/investigations/investigation-1/sections",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.sectionKey",
+					"equalTo": "premises"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.heading",
+					"equalTo": "Lokal och serveringsställe"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.sortOrder",
+					"equalTo": "5"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.assessment",
+					"equalTo": "PENDING"
+				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'PREMISES_SERVING_AREA' && @.displayName == 'Serveringsytor' && @.values[0] == 'Matsal och bar')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/investigations/investigation-1/sections/section-1"
+		}
+	}
+}

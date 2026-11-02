@@ -10,6 +10,7 @@ import generated.se.sundsvall.supportmanagement.Decision;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -115,12 +116,14 @@ class TargetWriter {
 	 * @param  lookup             where the post is looked for
 	 * @param  parties            the partyIds; the holder's is required unless the post is found by its id
 	 * @param  expired            true when the post is to be EXPIRED, false when ACTIVE
+	 * @param  decisionText       the display name of the outcome of the decision of the permit, null when it has none
 	 * @param  notes              the report of the item, told what was found and changed
 	 * @return                    the id PartyAssets gave the post, and the status it has now
 	 * @throws MigrationException when the post found has a status the migration never gives, or belongs to another party
 	 *                            than the item now gives; it is then left as it is
 	 */
-	Post ensureAsset(final Candidate candidate, final String municipalityId, final PostLookup lookup, final PartyIds parties, final boolean expired, final ReportNotes notes) {
+	Post ensureAsset(final Candidate candidate, final String municipalityId, final PostLookup lookup, final PartyIds parties, final boolean expired, final String decisionText,
+		final ReportNotes notes) {
 		final var words = AssetWords.of(candidate.key().kind());
 		final var errandId = lookup.errandId();
 		final var partyAssetsId = lookup.partyAssetsId();
@@ -129,14 +132,14 @@ class TargetWriter {
 			.or(() -> lookup.earlierErrand() && partyAssetsId == null ? assetRelatedTo(municipalityId, errandId) : Optional.empty());
 		if (found.isPresent()) {
 			// The holder may be gone from Party since the post was made; the post keeps its party anyway
-			final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired);
+			final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, parties.holderPartyId().orElse(found.get().getPartyId()), expired, decisionText);
 			if (expired && found.get().getStatus() == Status.EXPIRED && assetMapper.toContentUpdate(found.get(), wanted).isEmpty() && Objects.equals(found.get().getPartyId(), wanted.getPartyId())) {
 				unchangeable(found.get(), wanted, words).ifPresent(notes::line);
 				return new Post(found.get().getId(), Status.EXPIRED);
 			}
 			return new Post(bringUpToDate(municipalityId, found.get(), wanted.status(Status.ACTIVE), expired, words, notes), Status.ACTIVE);
 		}
-		final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false);
+		final var wanted = assetMapper.toAsset(candidate, municipalityId, errandId, holderPartyId(parties), false, decisionText);
 		return new Post(partyAssets.createAsset(municipalityId, assetMapper.toSourceReference(errandId), wanted)
 			.orElseGet(() -> bringUpToDate(municipalityId, partyAssets.findAsset(municipalityId, wanted.getPartyId(), errandId).or(() -> assetRelatedTo(municipalityId, errandId))
 				.orElseThrow(() -> new MigrationException("PartyAssets svarade att %s redan finns, men %s gick inte att hitta".formatted(words.definite(), words.pronoun()))), wanted, expired, words,
@@ -266,7 +269,6 @@ class TargetWriter {
 	private String bringUpToDate(final String municipalityId, final Asset asset, final AssetCreateRequest wanted, final boolean toBeExpired, final AssetWords words,
 		final ReportNotes notes) {
 		final var from = asset.getStatus();
-		final var to = wanted.getStatus();
 		if (from != Status.ACTIVE && from != Status.EXPIRED) {
 			throw new MigrationException("%s %s i PartyAssets har status %s, som migreringen aldrig ger, och ändras inte".formatted(words.capitalized(), asset.getId(), from));
 		}
@@ -274,42 +276,64 @@ class TargetWriter {
 		if (!Objects.equals(asset.getPartyId(), wanted.getPartyId())) {
 			throw new MigrationException("%s %s i PartyAssets tillhör en annan part än den källan anger nu och ändras inte (avsnitt 10.3)".formatted(words.capitalized(), asset.getId()));
 		}
-		final var content = assetMapper.toContentUpdate(asset, wanted);
-		final var statusChanges = from != to;
-		final var contentChanges = content.isPresent() && (from == Status.ACTIVE || statusChanges);
+		final var content = assetMapper.toContentUpdate(asset, wanted).orElse(null);
 		try {
-			if (from == Status.ACTIVE) {
-				// Checked before the status changes, since an EXPIRED post can no longer get the content
-				if (content.isPresent()) {
-					partyAssets.updateAsset(municipalityId, asset.getId(), content.get());
-					verifyUpdated(municipalityId, asset.getId(), wanted, from, words);
-				}
-				if (statusChanges) {
-					partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
-					verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
-				}
-			} else if (statusChanges) {
-				partyAssets.updateAsset(municipalityId, asset.getId(), new AssetUpdateRequest().status(to));
-				content.ifPresent(update -> partyAssets.updateAsset(municipalityId, asset.getId(), update));
-				verifyUpdated(municipalityId, asset.getId(), wanted, to, words);
-			}
+			change(municipalityId, asset.getId(), wanted, content, from, words);
 		} catch (final RuntimeException e) {
 			if (toBeExpired) {
 				restoreExpired(municipalityId, asset.getId(), words, notes, e);
 			}
 			throw e;
 		}
+		noteChange(asset, wanted, content, words, notes);
+		return asset.getId();
+	}
 
-		if (statusChanges) {
+	/**
+	 * Changes a post to what the item gives: an ACTIVE post gets its content first, checked, and its status after, since
+	 * an EXPIRED post can no longer get the content; an EXPIRED post that is to change gets its status first and its
+	 * content after.
+	 *
+	 * @param content the change of the content, null when the content is what the item gives
+	 * @param from    the status the post has
+	 */
+	private void change(final String municipalityId, final String id, final AssetCreateRequest wanted, final AssetUpdateRequest content, final Status from, final AssetWords words) {
+		final var to = wanted.getStatus();
+		if (from == Status.ACTIVE) {
+			if (content != null) {
+				partyAssets.updateAsset(municipalityId, id, content);
+				verifyUpdated(municipalityId, id, wanted, from, words);
+			}
+			if (from != to) {
+				partyAssets.updateAsset(municipalityId, id, new AssetUpdateRequest().status(to));
+				verifyUpdated(municipalityId, id, wanted, to, words);
+			}
+		} else if (from != to) {
+			partyAssets.updateAsset(municipalityId, id, new AssetUpdateRequest().status(to));
+			if (content != null) {
+				partyAssets.updateAsset(municipalityId, id, content);
+			}
+			verifyUpdated(municipalityId, id, wanted, to, words);
+		}
+	}
+
+	/**
+	 * Tells in the report what of the post changed, and what differs from what the item gives but cannot change.
+	 *
+	 * @param content the change of the content, null when the content is what the item gives
+	 */
+	private static void noteChange(final Asset asset, final AssetCreateRequest wanted, final AssetUpdateRequest content, final AssetWords words, final ReportNotes notes) {
+		final var from = asset.getStatus();
+		final var to = wanted.getStatus();
+		if (from != to) {
 			notes.line("%s i PartyAssets hade status %s från en tidigare körning och fick status %s".formatted(words.capitalized(), from, to));
 		}
-		if (contentChanges) {
+		if (content != null && (from == Status.ACTIVE || from != to)) {
 			notes.line("%s i PartyAssets från en tidigare körning fick titel, giltighet och parametrar som källan ger nu".formatted(words.capitalized()));
-		} else if (content.isPresent()) {
+		} else if (content != null) {
 			notes.line("%s i PartyAssets är EXPIRED, och dess titel, giltighet och parametrar kan därför inte få det källan ger nu".formatted(words.capitalized()));
 		}
 		unchangeable(asset, wanted, words).ifPresent(notes::line);
-		return asset.getId();
 	}
 
 	/**
@@ -363,14 +387,35 @@ class TargetWriter {
 	}
 
 	/**
-	 * Gives an inspection errand its investigation (decision 41), unless it has one, which an earlier run then created.
-	 * An errand without an investigation in the candidate gets none.
+	 * Gives an errand its investigation (decision 41), unless it has one, which an earlier run then created, and the
+	 * investigation the sections the candidate gives it: a section it lacks is created, and one whose parameters differ
+	 * from what the source gives now gets them. An errand without an investigation in the candidate gets none.
 	 */
 	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
-		if (candidate.investigation() == null || !supportManagement.getInvestigations(municipalityId, errandId).isEmpty()) {
+		if (candidate.investigation() == null) {
 			return;
 		}
-		supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(candidate.investigation()));
+		final var investigation = supportManagement.getInvestigations(municipalityId, errandId).stream().findFirst();
+		if (investigation.isEmpty()) {
+			final var investigationId = supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(candidate.investigation()));
+			candidate.investigation().sections()
+				.forEach(section -> supportManagement.createInvestigationSection(municipalityId, errandId, investigationId, TargetMapper.toInvestigationSection(section)));
+			return;
+		}
+		final var investigationId = investigation.get().getId();
+		final var written = Optional.ofNullable(investigation.get().getSections()).orElse(List.of());
+		for (final var section : candidate.investigation().sections()) {
+			final var wanted = TargetMapper.toInvestigationSection(section);
+			written.stream()
+				.filter(found -> section.key().equalsIgnoreCase(Texts.trimToNull(found.getSectionKey())))
+				.findFirst()
+				.ifPresentOrElse(found -> {
+					if (!TargetMapper.sameParameters(found.getParameters(), wanted.getParameters())) {
+						supportManagement.updateInvestigationSection(municipalityId, errandId, investigationId, found.getId(),
+							new InvestigationSection().parameters(wanted.getParameters()));
+					}
+				}, () -> supportManagement.createInvestigationSection(municipalityId, errandId, investigationId, wanted));
+		}
 	}
 
 	/**

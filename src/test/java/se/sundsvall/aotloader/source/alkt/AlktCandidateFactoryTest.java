@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -40,6 +41,7 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.StaffRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.TextRow;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -83,6 +85,7 @@ import static se.sundsvall.aotloader.source.alkt.AlktTestData.snapshot;
 class AlktCandidateFactoryTest {
 
 	private static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
+	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private static final AotLoaderProperties PROPERTIES = TestData.properties(ErrandType.ALCOHOL_INSPECTION, true, Map.of("07", TestData.INTERNAL_INSPECTION, "09", ""));
 
 	@Test
@@ -148,10 +151,16 @@ class AlktCandidateFactoryTest {
 			"serveringstider", List.of("11:00–01:00"),
 			"aretRunt", List.of("Ja"),
 			"villkor", List.of("Krav på bordsservering: Bord")));
-		// The serving area under the key and label of Draken's examination of the premises (decision 82)
-		assertThat(candidate.errand().parameters()).filteredOn(parameter -> parameter.key().equals("PREMISES_SERVING_AREA"))
-			.extracting(Parameter::displayName, Parameter::values).containsExactly(tuple("Serveringsytor", List.of("Matsal")));
-		assertThat(parameters(candidate)).doesNotContainKey("serveringslokal");
+		// The serving area is a parameter of the section of the premises of the investigation, under the key and label of
+		// Draken's examination of the premises (decisions 82 and 87), and the serving staff are on the post only
+		assertThat(parameters(candidate)).doesNotContainKeys("serveringslokal", "PREMISES_SERVING_AREA", "serveringsansvariga");
+		assertThat(candidate.investigation().sections()).singleElement().satisfies(section -> {
+			assertThat(section.key()).isEqualTo("premises");
+			assertThat(section.heading()).isEqualTo("Lokal och serveringsställe");
+			assertThat(section.sortOrder()).isEqualTo(5);
+			assertThat(section.parameters()).extracting(Parameter::key, Parameter::displayName, Parameter::values)
+				.containsExactly(tuple("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsal")));
+		});
 		assertThat(parameters(candidate)).containsEntry("senasteBeslut", List.of("Serveringstillstånd, 2019-04-20"))
 			.containsEntry("noteringar", List.of("En notering"))
 			.containsEntry("migrerad", List.of("2026-10-12 från AlkT"))
@@ -166,7 +175,29 @@ class AlktCandidateFactoryTest {
 		assertThat(candidate.asset().validTo()).isNull();
 		assertThat(candidate.asset().titleSuffix()).isNull();
 		assertThat(candidate.asset().description()).isEqualTo("Serveringstillstånd för Restaurang 1");
-		assertThat(candidate.asset().parameters()).containsExactly(
+		assertThat(candidate.asset().schema()).isEqualTo(AssetSchema.ALCOHOL);
+		assertThat(candidate.asset().omitted()).isEmpty();
+		assertThat(JSON.writeValueAsString(candidate.asset().content())).isEqualTo("""
+			{"caseRegistrationNumber":"IAN-2019-1","externalCaseRegistrationNumber":"IAN-2019-1","servingPermitType":"PERMANENT_SERVING",\
+			"permitHolder":{"name":"Bolaget 10 AB","organizationNumber":"556677-8899","address":{"street":"Box 1 Våning 2","postalCode":"85230","city":"Sundsvall"},\
+			"phoneNumber":"060-654321"},\
+			"premises":{"name":"Restaurang 1","address":{"street":"Storgatan 1","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-123456",\
+			"emailAddress":"info1@example.com","restaurantNumber":"12345678"},\
+			"servingTo":["PUBLIC"],"servingPeriods":[{"period":"ALL_YEAR"}],"servingHours":[{"from":"11:00","to":"01:00"}],"tasting":false,\
+			"additionalScopes":["OUTDOOR_SERVING"],"beverages":["WINE","STRONG_BEER"],\
+			"servingArea":{"description":"Matsal","drawingReference":"ritning.pdf","seatsIndoor":80,"maxPersons":200},"conditions":["Krav på bordsservering: Bord"],\
+			"decision":{"caseRegistrationNumber":"IAN-2019-1","outcome":"APPROVAL_WITH_CONDITIONS","decisionDate":"2019-04-20","executionDate":"2019-05-01",\
+			"validFrom":"2019-05-01","replacesDecision":"2015-01-01, SN 2015-1"},\
+			"migration":{"sourceSystem":"ALKT","issuedDateEstimated":false}}""");
+	}
+
+	@Test
+	void theDecisionOfAPermitHasTheParametersDrakenGivesItForTheCertificate() {
+		final var candidate = permitsWithoutAnyRuleHit().candidates().getFirst();
+
+		// The restaurant number is left to the process that issues the certificate, the day of the decision goes with its
+		// diary number, and the decision maker is left out, since AlkT names nobody
+		assertThat(candidate.decision().certificate()).containsExactly(
 			Map.entry("permitHolderName", "Bolaget 10 AB"),
 			Map.entry("permitHolderOrgNumber", "556677-8899"),
 			Map.entry("permitHolderStreet", "Box 1 Våning 2"),
@@ -176,7 +207,6 @@ class AlktCandidateFactoryTest {
 			Map.entry("premisesStreet", "Storgatan 1"),
 			Map.entry("premisesPostalAddress", "85230 Sundsvall"),
 			Map.entry("premisesPhone", "060-123456"),
-			Map.entry("premisesRestaurantNumber", "12345678"),
 			Map.entry("servingToPublic", "true"),
 			Map.entry("servingToClosedCompany", "false"),
 			Map.entry("scopeAllYear", "true"),
@@ -187,15 +217,40 @@ class AlktCandidateFactoryTest {
 			Map.entry("beverageBeer", "true"),
 			Map.entry("beverageOtherFermented", "false"),
 			Map.entry("servingAreaDescription", "Matsal"),
+			Map.entry("servingAreaDrawingReference", "ritning.pdf"),
 			Map.entry("servingAreaSeats", "80"),
 			Map.entry("servingAreaMaxPersons", "200"),
 			Map.entry("servingHours", "11:00–01:00"),
-			Map.entry("conditions", "Krav på bordsservering: Bord"),
 			Map.entry("caseNumber", "IAN-2019-1"),
 			Map.entry("executionDate", "2019-05-01"),
-			Map.entry("decisionDateAndCaseNumber", "2019-05-01, IAN-2019-1"),
-			Map.entry("diarienummer", "IAN-2019-1"),
-			Map.entry("migreradFran", "AlkT"));
+			Map.entry("decisionDateAndCaseNumber", "2019-04-20, IAN-2019-1"),
+			Map.entry("decisionCaseNumber", "IAN-2019-1"),
+			Map.entry("decisionDate", "2019-04-20"),
+			Map.entry("validFrom", "2019-05-01"));
+	}
+
+	@Test
+	void whatThePostCannotTakeIsLeftOutAndNamed() {
+		final var snapshot = snapshot()
+			.permit(permit(1).servingArea("ca 200", "80 st", "Matsal").build())
+			.place(new AlktSnapshot.PlaceRow(1, 10, "1234567", List.of("REST"), "Restaurang 1", "Storgatan 1", "852 3", "Sundsvall", "060-123456", "info@", "Sundsvall", null, null))
+			.owner(owner(10, "556677-8899"))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		// The errand keeps what the source has
+		assertThat(candidate.asset().omitted()).containsExactly(
+			"premises.address.postalCode: har inte fem siffror",
+			"premises.emailAddress: har inte formen av en e-postadress",
+			"premises.restaurantNumber: har inte åtta siffror",
+			"servingArea.seatsIndoor: inte ett heltal",
+			"servingArea.maxPersons: inte ett heltal");
+		assertThat(JSON.writeValueAsString(candidate.asset().content().get("premises"))).isEqualTo("""
+			{"name":"Restaurang 1","address":{"street":"Storgatan 1","city":"Sundsvall"},"phoneNumber":"060-123456"}""");
+		assertThat(JSON.writeValueAsString(candidate.asset().content().get("servingArea"))).isEqualTo("""
+			{"description":"Matsal"}""");
+		assertThat(parameters(candidate)).containsEntry("sittplatser", List.of("80 st")).containsEntry("hogstaAntal", List.of("ca 200"));
 	}
 
 	@Test
@@ -232,9 +287,12 @@ class AlktCandidateFactoryTest {
 
 		assertThat(parameters(candidate)).containsEntry("serveringstider", List.of("11:00–01:00 Inomhus", "11:00–22:00 Uteservering"));
 		assertThat(candidate.errand().description()).contains("Serveringstider: 11:00–01:00 Inomhus, 11:00–22:00 Uteservering");
-		assertThat(candidate.asset().parameters()).containsEntry("servingHours", "11:00–01:00 Inomhus\n11:00–22:00 Uteservering");
+		assertThat(candidate.decision().certificate()).containsEntry("servingHours", "11:00–01:00 Inomhus\n11:00–22:00 Uteservering");
+		// On the post each time has the place its text names, and its text
+		assertThat(JSON.writeValueAsString(candidate.asset().content().get("servingHours"))).isEqualTo("""
+			[{"location":"INDOOR","from":"11:00","to":"01:00","description":"Inomhus"},{"location":"OUTDOOR","from":"11:00","to":"22:00","description":"Uteservering"}]""");
 		assertThat(candidate.decision().decided()).extracting(Parameter::key, Parameter::values).containsExactly(
-			tuple("decidedBeverages", List.of("STARKOL", "VIN")),
+			tuple("decidedBeverages", List.of("STRONG_BEER", "WINE")),
 			tuple("decidedServingHoursIndoorPublic", List.of("11:00", "01:00")),
 			tuple("decidedServingHoursOutdoorPublic", List.of("11:00", "22:00")));
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).doesNotContain(ReviewRule.SERVING_TIME_UNPLACED);
@@ -352,8 +410,12 @@ class AlktCandidateFactoryTest {
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		final var extended = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("1")).findFirst().orElseThrow();
-		assertThat(extended.decision()).usingRecursiveComparison().ignoringFields("decided").isEqualTo(new DecisionData("Uppgift saknas i AlkT", LocalDateTime.of(2019, 5, 1, 0, 0),
-			"Beslutet finns inte i AlkT och bygger på tillståndet", null, LocalDate.of(2019, 5, 1), extended.asset().validTo(), List.of(), List.of()));
+		// Made in the errands that issued the permit, under the diary number of the permit, by a decision maker AlkT does not
+		// name
+		assertThat(extended.decision()).usingRecursiveComparison().ignoringFields("decided", "certificate").isEqualTo(new DecisionData("Uppgift saknas i AlkT", null,
+			LocalDateTime.of(2019, 5, 1, 0, 0), "Beslutet finns inte i AlkT och bygger på tillståndet", null, LocalDate.of(2019, 5, 1), extended.asset().validTo(), List.of(), List.of())
+			.withCase("IAN-2019-1", null));
+		assertThat(extended.decision().certificate()).doesNotContainKey("decisionMaker").containsEntry("decisionCaseNumber", "IAN-2019-1");
 		assertThat(extended.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(GRANT_DECISION_MISSING, "tillståndet pekar på Utökat tillstånd, bifall, 2021-06-01"));
 		final var without = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow();
 		assertThat(without.decision().decidedAt()).isEqualTo(LocalDateTime.of(2019, 5, 1, 0, 0));
@@ -576,7 +638,10 @@ class AlktCandidateFactoryTest {
 
 			final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
-			assertThat(candidate.ruleHits()).as(written).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS);
+			// Only what the bare permit lacks, the same as for the number written as the place has it
+			assertThat(candidate.ruleHits()).as(written).extracting(RuleHit::rule)
+				.doesNotContain(RESTAURANT_NUMBER_DIFFERS)
+				.containsExactly(NO_ISSUING_ERRAND, GRANT_DECISION_MISSING, CERTIFICATE_MISSING);
 		}
 	}
 
@@ -635,7 +700,7 @@ class AlktCandidateFactoryTest {
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
-		assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL));
+		assertThat(candidates).hasSize(2).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS, DIARY_NUMBER_ON_SEVERAL));
 	}
 
 	@Test
@@ -668,7 +733,7 @@ class AlktCandidateFactoryTest {
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
-		assertThat(candidates).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS));
+		assertThat(candidates).hasSize(2).allSatisfy(candidate -> assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(LEGAL_ID_ON_SEVERAL_OWNERS));
 	}
 
 	@Test
@@ -809,7 +874,14 @@ class AlktCandidateFactoryTest {
 
 		assertThat(parameters(candidates.get(0))).containsEntry("sasong", List.of("05-01 – 09-30"));
 		// A period as Draken writes it on the permit
-		assertThat(candidates.get(0).asset().parameters()).containsEntry("scopePeriodFromTo", "05-01 – 09-30");
+		assertThat(candidates.get(0).decision().certificate()).containsEntry("scopePeriodFromTo", "05-01 – 09-30");
+		// The permit is all year and has a season, and the post has both, as AlkT has them
+		assertThat(JSON.writeValueAsString(candidates.get(0).asset().content().get("servingPeriods"))).isEqualTo("""
+			[{"period":"ALL_YEAR"},{"period":"ANNUAL_PERIOD","from":"05-01","to":"09-30"}]""");
+		assertThat(JSON.writeValueAsString(candidates.get(2).asset().content().get("servingPeriods"))).isEqualTo("""
+			[{"period":"ALL_YEAR"},{"period":"ANNUAL_PERIOD","description":"vår – höst"}]""");
+		assertThat(JSON.writeValueAsString(candidates.get(3).asset().content().get("servingPeriods"))).isEqualTo("""
+			[{"period":"ALL_YEAR"},{"period":"FIXED_PERIOD","description":"maj – 2026-09-30"}]""");
 		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(UNPARSEABLE);
 		assertThat(parameters(candidates.get(1))).containsEntry("sasong", List.of("05-01 – 09-30")).doesNotContainKey("period");
 		assertThat(parameters(candidates.get(2))).containsEntry("sasong", List.of("vår – höst"));
@@ -829,13 +901,27 @@ class AlktCandidateFactoryTest {
 
 	@Test
 	void placeMarking() {
-		final var placeWithMarking = new AlktSnapshot.PlaceRow(1, 10, "12345678", "UNG", "Ungdomsgården", null, null, null, null, null, null, null, null);
+		final var placeWithMarking = new AlktSnapshot.PlaceRow(1, 10, "12345678", List.of("UNG"), "Ungdomsgården", null, null, null, null, null, null, null, null);
 		final var snapshot = snapshot().permit(permit(1).build()).place(placeWithMarking).owner(owner(10, "5566778899")).build();
 
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.place().parameters()).extracting(Parameter::key, Parameter::values).containsExactly(
 			tuple("restaurantNumber", List.of("12345678")),
+			tuple("markering", List.of("Ungdomlig målgrupp")));
+	}
+
+	@Test
+	void allThreeGroupsOfThePlaceGiveItsTypesAndMarkings() {
+		// ObjektGrupp1-3 as the source has them, one written twice, one in lower case, and one missing in code list Q
+		final var place = new AlktSnapshot.PlaceRow(1, 10, "12345678", List.of("12", "ung ", "17", "12"), "Krogen", null, null, null, null, null, null, null, null);
+		final var snapshot = snapshot().permit(permit(1).build()).place(place).owner(owner(10, "5566778899")).build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		assertThat(candidate.place().parameters()).extracting(Parameter::key, Parameter::values).containsExactly(
+			tuple("restaurantNumber", List.of("12345678")),
+			tuple("typAvServeringsstalle", List.of("Kvartersrestaurang", "17")),
 			tuple("markering", List.of("Ungdomlig målgrupp")));
 	}
 
@@ -976,22 +1062,27 @@ class AlktCandidateFactoryTest {
 			.placeEvent(1, new PlaceEventRow(31020, new TextRow(LocalDateTime.of(2021, 6, 1, 8, 0), "ANT", false, "Ny serveringsansvarig", false, "IAN-2021-1"),
 				List.of(new FileRow(null, "bilaga.pdf", false, new FileDetails(null, LocalDateTime.of(2021, 6, 1, 8, 0))))))
 			.placeText(1, AlktTestRows.text(LocalDateTime.of(2020, 1, 1, 8, 0), "HAND", false, "Inkommen ritning"))
-			.staff(new StaffRow(1, "Per Ek", null))
-			.staff(new StaffRow(1, "Anna Berg", LocalDate.of(2021, 6, 1)))
-			.staff(new StaffRow(1, "anna berg", LocalDate.of(2015, 3, 1)))
+			.staff(new StaffRow(1, "Per Ek", null, null))
+			.staff(new StaffRow(1, "Anna Berg", "800101-1234", LocalDate.of(2021, 6, 1)))
+			.staff(new StaffRow(1, "anna berg", "8001011234", LocalDate.of(2015, 3, 1)))
 			.build();
 
 		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
 
 		final var withErrands = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("1")).findFirst().orElseThrow();
-		// The serving staff of the place as a table, each person once (decision 79)
-		assertThat(withErrands.errand().parameters()).filteredOn(parameter -> parameter.key().equals("serveringsansvariga"))
-			.extracting(Parameter::displayName, Parameter::group, Parameter::values)
-			.containsExactly(tuple("Namn|Från", "Serveringsansvariga i AlkT", List.of("Anna Berg|2015-03-01", "Per Ek|")));
+		// The serving staff of the place on the post, each person once, with the date of birth but not the number (decision
+		// 87), and not on the errand
+		assertThat(JSON.writeValueAsString(withErrands.asset().content().get("responsibleServingStaff"))).isEqualTo("""
+			[{"firstName":"Anna","lastName":"Berg","dateOfBirth":"1980-01-01","fromDate":"2015-03-01"},{"firstName":"Per","lastName":"Ek"}]""");
+		assertThat(parameters(withErrands)).doesNotContainKey("serveringsansvariga");
+		// The decision was made in the errand of the grant, by its diary number and handlers
+		assertThat(withErrands.decision().caseNumber()).isEqualTo("IAN-2019-0");
+		assertThat(withErrands.decision().certificate()).containsEntry("decisionCaseNumber", "IAN-2019-0").containsEntry("decisionDateAndCaseNumber", "2019-05-01, IAN-2019-0");
 		// Started when the first issuing errand was opened, completed when the permit was issued
 		assertThat(withErrands.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0),
 			LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.of(new Part("Noteringar", "Ansökan komplett"), new Part("Händelser", "2019-03-01 Anteckning: Remiss skickad"),
-				new Part("Beslut", "2019-05-01 Serveringstillstånd: Tillstånd beviljas."))));
+				new Part("Beslut", "2019-05-01 Serveringstillstånd: Tillstånd beviljas.")))
+			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsal"))))));
 		// The events of the place without an errand become documentation errands filed under its permit, and the permit has
 		// neither their texts nor their files (decision 71)
 		assertThat(parameters(withErrands)).doesNotContainKey("handelselogg");
@@ -1018,7 +1109,8 @@ class AlktCandidateFactoryTest {
 
 		final var withoutErrand = candidates.stream().filter(candidate -> candidate.key().sourceId().equals("2")).findFirst().orElseThrow();
 		assertThat(withoutErrand.ruleHits()).extracting(RuleHit::rule).contains(NO_ISSUING_ERRAND);
-		assertThat(withoutErrand.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 2", null, LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.NONE));
+		assertThat(withoutErrand.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 2", null, LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.NONE)
+			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsal"))))));
 		assertThat(parameters(withoutErrand)).doesNotContainKeys("handelselogg", "handlaggare", "serveringsansvariga");
 	}
 

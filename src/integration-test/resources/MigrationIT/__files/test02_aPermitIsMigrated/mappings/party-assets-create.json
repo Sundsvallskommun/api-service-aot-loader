@@ -62,116 +62,176 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.errandId",
+					"expression": "$.additionalParameters",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_alcohol_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].schemaId",
+					"equalTo": "2281_aot_alcohol_party_asset_0.1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.errandId",
 					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesRestaurantNumber",
-					"equalTo": "12345678"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesMunicipalityId",
-					"equalTo": "2281"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.legalBasis",
-					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesName",
-					"equalTo": "Krogen Ett"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesPostalAddress",
-					"equalTo": "85230 Sundsvall"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.permitHolderName",
-					"equalTo": "Testbolaget AB"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.permitHolderOrgNumber",
-					"equalTo": "556677-8899"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.servingToPublic",
-					"equalTo": "true"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.servingToClosedCompany",
-					"equalTo": "false"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.scopeAllYear",
-					"equalTo": "true"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.beverageBeer",
-					"equalTo": "true"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.beverageSpirits",
-					"equalTo": "false"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.servingHours",
-					"equalTo": "11:00–01:00 Inomhus"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.conditions",
-					"equalTo": "Krav på bordsservering: Mat ska serveras"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.additionalParameters.caseNumber",
+					"expression": "$.jsonParameters[0].value.caseRegistrationNumber",
 					"equalTo": "IAN-2019-1"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.decisionDateAndCaseNumber",
-					"equalTo": "2019-05-01, IAN-2019-1"
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.executionDate",
+					"expression": "$.jsonParameters[0].value.servingPermitType",
+					"equalTo": "PERMANENT_SERVING"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.permitHolder.name",
+					"equalTo": "Testbolaget AB"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.permitHolder.organizationNumber",
+					"equalTo": "556677-8899"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.name",
+					"equalTo": "Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.address.postalCode",
+					"equalTo": "85230"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.restaurantNumber",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.municipalityId",
+					"equalTo": "2281"
+				}
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingTo[?(@ == 'PUBLIC')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingPeriods[?(@.period == 'ALL_YEAR')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingHours[?(@.from == '11:00' && @.to == '01:00')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.additionalScopes[?(@ == 'OUTDOOR_SERVING')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.beverages[?(@ == 'STRONG_BEER')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.beverages[?(@ == 'WINE')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.servingArea.description",
+					"equalTo": "Matsal och bar"
+				}
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.responsibleServingStaff[?(@.firstName == 'Olle' && @.lastName == 'Svensson' && @.dateOfBirth == '1980-01-01' && @.fromDate == '2015-03-01')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.responsibleServingStaff[?(@.firstName == 'Lisa' && @.lastName == 'Åberg' && @.dateOfBirth == '1985-05-05')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.responsibleServingStaff.length()",
+					"equalTo": "2"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.conditions[0]",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.caseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.outcome",
+					"equalTo": "APPROVAL_WITH_CONDITIONS"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionText",
+					"equalTo": "Bifall med villkor"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionMaker",
+					"equalTo": "Anna Berg"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionDate",
+					"equalTo": "2019-04-30"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.executionDate",
 					"equalTo": "2019-05-01"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.migreradFran",
-					"equalTo": "AlkT"
+					"expression": "$.jsonParameters[0].value.decision.legalBasis",
+					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.migration.sourceSystem",
+					"equalTo": "ALKT"
 				}
 			}
 		]

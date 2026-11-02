@@ -28,6 +28,7 @@ import se.sundsvall.aotloader.service.model.RunStatus;
 import se.sundsvall.aotloader.service.model.Source;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -229,6 +230,19 @@ class CleanupRunnerTest {
 
 		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
 		assertThat(run.getMessage()).startsWith("Rensningen avbröts av ett oväntat fel:");
+	}
+
+	@Test
+	void anErrorIsSavedAsAFailedCleanupAndPassedOn() {
+		when(itemRepository.findAllByOrderBySourceAscKindAscSourceIdAsc()).thenThrow(new StackOverflowError());
+		final var run = run(false, null);
+		final Optional<ItemKey> single = Optional.empty();
+
+		assertThatThrownBy(() -> runner.execute(run, EVERYTHING, single)).isInstanceOf(StackOverflowError.class);
+
+		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+		assertThat(run.getMessage()).isEqualTo("Rensningen avbröts av ett oväntat fel, som står i appens logg");
+		assertThat(runner.requestStop(run.getId())).isFalse();
 	}
 
 	private static MigrationRunEntity run(final boolean dryRun, final Integer limit) {

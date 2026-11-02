@@ -36,6 +36,7 @@ import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties.JsonParameterSettings;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -234,7 +235,7 @@ class PreflightTest {
 			serving.subtypeLabels(), serving.sourceErrandTypes(), serving.onlyPlacesWithPermit(), serving.decisionType(), " "));
 		final var properties = new AotLoaderProperties(withoutAccount.namespace(), withoutAccount.sentBy(), withoutAccount.reporterUserId(), withoutAccount.channel(),
 			withoutAccount.errandStatus(), withoutAccount.errandResolution(), withoutAccount.roles(), types, withoutAccount.databases(), withoutAccount.fileArea(), withoutAccount.maxFileSize(),
-			withoutAccount.municipalities(), null);
+			withoutAccount.municipalities(), null, withoutAccount.jsonParameters());
 
 		assertThat(new Preflight(properties, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).containsExactly(
 			"AD-kontot som tillståndens beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70)",
@@ -289,7 +290,7 @@ class PreflightTest {
 			Map.of(ErrandType.ALCOHOL_INSPECTION, inspection, ErrandType.ALCOHOL_INSPECTION_VISIT,
 				new ErrandTypeSettings("INSPECTION", "EXTERNAL_INSPECTION", null, null, null, List.of("CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"), null, Map.of(), true, null, null)),
 			Map.of(), Map.of(Source.ALKT, new FileAreaDirectories(directory.toString(), directory.resolve("saknas").toString())), DataSize.ofMegabytes(50),
-			Map.of("Timrå", "22620"), null);
+			Map.of("Timrå", "22620"), null, null);
 		final var preflight = new Preflight(properties, supportManagement, sourceDatabases);
 
 		final var result = preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND, TILLSYN, TILLSYNSBESOK), Source.ALKOL, Set.of(TILLSTAND, TILLSYN)));
@@ -300,6 +301,8 @@ class PreflightTest {
 			"Klassificering saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Typ i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 20)",
 			"Namn i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 4)",
+			"Nyckel eller schema för JSON-parametern i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.json-parameters.tobacco-party-asset, beslut 87)",
+			"Nyckel eller schema för JSON-parametern i PartyAssets saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87)",
 			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Etikett saknas för TOBACCO_PERMIT (aot-loader.errand-types, avsnitt 7.3.4)",
@@ -340,6 +343,11 @@ class PreflightTest {
 		assertThat(Stream.of(ErrandType.ALCOHOL_INSPECTION_VISIT, ErrandType.TOBACCO_INSPECTION_VISIT).map(type -> properties.errandType(type).measureType())).containsOnly("EXTERNAL");
 		// The holder must not see an inspection errand on Mina sidor (decision 27)
 		assertThat(properties.roles().inspectionHolder()).isEqualTo("CONTACT").isNotEqualTo(properties.roles().permitHolder());
+		// Every post has the JSON parameter of its schema, as the test environment registers it (decision 87)
+		assertThat(result.problems()).filteredOn(problem -> problem.contains("JSON-parametern")).isEmpty();
+		assertThat(properties.jsonParameter("alcohol-party-asset")).isEqualTo(new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"));
+		assertThat(properties.jsonParameter("tobacco-party-asset")).isEqualTo(new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
+		assertThat(properties.jsonParameter("unknown")).isEqualTo(new JsonParameterSettings(null, null));
 	}
 
 	@Test

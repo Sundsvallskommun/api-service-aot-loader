@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
+import java.util.function.IntFunction;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.source.files.SharedFileNames;
 
@@ -98,7 +98,7 @@ public record InspectionVisitRows(
 	 *
 	 * @param placeKey the key of a place of the source, by its id
 	 */
-	public void addFileNames(final SharedFileNames.Builder names, final Function<Integer, String> placeKey) {
+	public void addFileNames(final SharedFileNames.Builder names, final IntFunction<String> placeKey) {
 		visits.forEach(visit -> {
 			final var place = visit.objektId() == null ? "besok:" + visit.tillfalleNr() : placeKey.apply(visit.objektId());
 			forEachFile(visit, (name, folder) -> names.add(place, name, folder));

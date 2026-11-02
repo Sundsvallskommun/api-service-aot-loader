@@ -74,6 +74,7 @@ class ResultFilesTest {
 		selection.setCleanup(true);
 		assertThat(resultFiles.fileName(selection)).isEqualTo("rapport-20261022-140000-rensning-korning-urval-ab.csv");
 		assertThat(resultFiles.fileName(run("../x", false, false, null))).isEqualTo("rapport-20261022-140000-korning-x.csv");
+		assertThat(resultFiles.fileName(run("a b/..\\c:", false, false, null))).isEqualTo("rapport-20261022-140000-korning-a-b-c.csv");
 	}
 
 	@Test

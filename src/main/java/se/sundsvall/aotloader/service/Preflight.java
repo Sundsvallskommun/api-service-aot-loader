@@ -124,17 +124,32 @@ public class Preflight {
 			if (Texts.isBlank(settings.category()) || Texts.isBlank(settings.type())) {
 				problems.add("Klassificering saknas för %s (aot-loader.errand-types, beslut 5)".formatted(type));
 			}
-			if (type.isWithAsset() && Texts.isBlank(settings.assetType())) {
-				problems.add("Typ i PartyAssets saknas för %s (aot-loader.errand-types, beslut 20)".formatted(type));
-			}
-			if (type.isWithAsset() && Texts.isBlank(settings.assetTitle())) {
-				problems.add("Namn i PartyAssets saknas för %s (aot-loader.errand-types, beslut 4)".formatted(type));
+			if (type.isWithAsset()) {
+				checkAsset(type, settings, problems);
 			}
 			if (type.getKind() == TILLSYNSBESOK && Texts.isBlank(settings.measureType())) {
 				problems.add("Åtgärdstyp för anmärkningarna saknas för %s (aot-loader.errand-types, beslut 57)".formatted(type));
 			}
 			checkTypeLabel(type, settings, problems);
 		});
+	}
+
+	/**
+	 * An errand type with a post in PartyAssets is to have the type and the name of the post, and the key and the schema
+	 * of its JSON parameter.
+	 */
+	private void checkAsset(final ErrandType type, final ErrandTypeSettings settings, final List<String> problems) {
+		if (Texts.isBlank(settings.assetType())) {
+			problems.add("Typ i PartyAssets saknas för %s (aot-loader.errand-types, beslut 20)".formatted(type));
+		}
+		if (Texts.isBlank(settings.assetTitle())) {
+			problems.add("Namn i PartyAssets saknas för %s (aot-loader.errand-types, beslut 4)".formatted(type));
+		}
+		final var name = type.getAssetSchema().settingsName();
+		final var jsonParameter = properties.jsonParameter(name);
+		if (Texts.isBlank(jsonParameter.key()) || Texts.isBlank(jsonParameter.schemaId())) {
+			problems.add("Nyckel eller schema för JSON-parametern i PartyAssets saknas för %s (aot-loader.json-parameters.%s, beslut 87)".formatted(type, name));
+		}
 	}
 
 	/**

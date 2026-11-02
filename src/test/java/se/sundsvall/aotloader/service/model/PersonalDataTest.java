@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot;
 import se.sundsvall.aotloader.source.alkol.AlkolTestRows;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot;
 import se.sundsvall.aotloader.source.alkt.AlktTestRows;
+import se.sundsvall.aotloader.support.JsonFields;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
@@ -44,7 +45,11 @@ class PersonalDataTest {
 			List.of(new Parameter("noteringar", "Noteringar", List.of(NAME)))));
 		final var file = new FileReference("Intyg " + NAME + " " + NUMBER + ".pdf", FileReference.FileFolder.ATTACHMENTS);
 		assertHidden(new Candidate.CandidateFiles(List.of(file), List.of(new AssetFile(file, null)), Map.of(file, FileDetails.NONE)));
-		assertHidden(new AssetData(null, "Tillstånd", null, null, Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
+		assertHidden(new AssetData(null, "Tillstånd", null, null, AssetSchema.ALCOHOL, JsonFields.object()
+			.object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode(), List.of()));
+		assertHidden(JsonFields.object().text("firstName", NAME).text("dateOfBirth", NUMBER));
+		assertHidden(new DecisionData(NAME, NAME, LocalDateTime.of(2019, 4, 30, 9, 0), null, NAME, null, null, List.of(NAME), List.of()).withCase(NUMBER, NAME)
+			.withCertificate(Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
 		assertHidden(new InvestigationData("Tillsyn", null, null, InvestigationTexts.of(new InvestigationTexts.Part("Noteringar", NAME), new InvestigationTexts.Part("Händelser", NAME + " " + NUMBER))));
 		assertHidden(new InvestigationData("Tillsyn – " + NAME, null, null, InvestigationTexts.NONE)
 			.withProtocol("internal_inspection", List.of(new Parameter("businessName", "Verksamhetens namn", List.of(NAME)), new Parameter("businessOrgNumber", "Organisationsnummer", List.of(NUMBER)))));
@@ -83,9 +88,9 @@ class PersonalDataTest {
 			List.of(NAME + " " + NUMBER), null, null, null, null, null, 1));
 		assertHidden(new AlktSnapshot.ServingArea("100", "50", NAME + " " + NUMBER));
 		assertHidden(new AlktSnapshot.ServingTime("11:00", "01:00", NAME + " " + NUMBER));
-		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", "REST", NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
+		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", List.of("REST"), NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
 		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
-		assertHidden(new AlktSnapshot.StaffRow(1, NAME, null));
+		assertHidden(new AlktSnapshot.StaffRow(1, NAME, NUMBER, null));
 		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", List.of(new Parameter("restaurantNumber", null, List.of(NAME)))));
 		assertHidden(new InspectionCandidates.InspectionErrand(Source.ALKT, 1, "07", "Tillsyn", "AOT 2020-1", null, null, List.of(NAME), null, null));
 	}

@@ -11,6 +11,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
 import java.time.Clock;
@@ -30,7 +31,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
-import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.InvestigationData;
@@ -41,16 +41,9 @@ import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.support.MigrationException;
-import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_CONDITIONS;
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
-import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL;
-import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS;
-import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_DECISION_DATE;
 import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_TEXT;
-import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_VALID_FROM;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_EMAIL;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_NAME;
@@ -77,6 +70,8 @@ public class TargetMapper {
 	private static final String INVESTIGATION_ACTIVE = "ACTIVE";
 	private static final String INVESTIGATION_COMPLETED = "COMPLETED";
 	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
+	private static final int SECTION_HEADING_MAX_LENGTH = 255;
+	private static final String SECTION_NOT_ASSESSED = "PENDING";
 	private static final String MEASURE_COMPLETED = "COMPLETED";
 	private static final int MEASURE_TITLE_MAX_LENGTH = 255;
 	private static final int MEASURE_DESCRIPTION_MAX_LENGTH = 3000;
@@ -207,6 +202,33 @@ public class TargetMapper {
 	}
 
 	/**
+	 * @return the section of the investigation, not yet assessed, as Draken writes a section when it starts an
+	 *         investigation, since the source has no assessment of it
+	 */
+	public static InvestigationSection toInvestigationSection(final InvestigationData.Section section) {
+		return new InvestigationSection()
+			.sectionKey(section.key())
+			.heading(Texts.truncate(section.heading(), SECTION_HEADING_MAX_LENGTH, null))
+			.sortOrder(section.sortOrder())
+			.assessment(SECTION_NOT_ASSESSED)
+			.parameters(toParameters(section.parameters()));
+	}
+
+	/**
+	 * @return true when the parameters have the same values under the same keys, whatever their order and labels
+	 */
+	public static boolean sameParameters(final List<generated.se.sundsvall.supportmanagement.Parameter> one, final List<generated.se.sundsvall.supportmanagement.Parameter> other) {
+		return parameterValues(one).equals(parameterValues(other));
+	}
+
+	private static List<generated.se.sundsvall.supportmanagement.Parameter> toParameters(final List<Parameter> parameters) {
+		return parameters.stream()
+			.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).group(parameter.group())
+				.values(parameter.values()))
+			.toList();
+	}
+
+	/**
 	 * Maps the decision a permit was granted by to the decision of its errand, as Draken writes a manual decision on a
 	 * permit (decision 70): of the type and with the heading of the errand type, an approval, with conditions when it has
 	 * terms, made by the decision maker of the source, and with the parameters of the permit and of the decision under the
@@ -227,16 +249,35 @@ public class TargetMapper {
 			.status(DECISION_DRAFT)
 			.title(Texts.truncate(settings.decisionTitle(), DECISION_TEXT_MAX_LENGTH, null))
 			.description(decision.description())
-			.outcome(decisionOutcome(decision))
+			.outcome(decision.outcome())
 			.method(DECISION_MANUAL)
 			.decidedBy(Texts.truncate(decision.decidedBy(), DECISION_TEXT_MAX_LENGTH, null))
 			.decidedAt(inSwedishTime(decision.decidedAt()))
-			.legalBasis(AssetMapper.legalBasisWithin(Texts.trimToNull(legalBasis)))
+			.legalBasis(legalBasisWithin(Texts.trimToNull(legalBasis)))
 			.justification(decision.justification())
 			.validFrom(decision.validFrom())
 			.validTo(decision.validTo())
 			.investigationId(investigationId)
 			.parameters(decisionParameters(candidate, outcomeText));
+	}
+
+	/**
+	 * @return the legal basis as long as a decision in SupportManagement takes it: the references that fit whole; a first
+	 *         reference that does not fit is cut
+	 */
+	static String legalBasisWithin(final String value) {
+		if (value == null || value.length() <= DECISION_TEXT_MAX_LENGTH) {
+			return value;
+		}
+		var kept = "";
+		for (final var reference : value.split("; ")) {
+			final var longer = kept.isEmpty() ? reference : kept + "; " + reference;
+			if (longer.length() > DECISION_TEXT_MAX_LENGTH) {
+				break;
+			}
+			kept = longer;
+		}
+		return kept.isEmpty() ? Texts.truncate(value, DECISION_TEXT_MAX_LENGTH, null) : kept;
 	}
 
 	/**
@@ -311,29 +352,15 @@ public class TargetMapper {
 	}
 
 	/**
-	 * @return an approval, with conditions when the decision has terms, as Draken gives it the outcome
-	 */
-	public static String decisionOutcome(final DecisionData decision) {
-		return decision.terms().isEmpty() ? DECISION_OUTCOME_APPROVAL : DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS;
-	}
-
-	/**
-	 * The parameters Draken gives a decision on a permit for its certificate: those of the permit, but its legal basis and
-	 * conditions, which the decision has as fields and terms, followed by the text of the outcome, the day of the decision
-	 * and its first day. A parameter without a value is left out, as Draken leaves it out. Last come the decided ones,
-	 * such as the beverages and the serving hours, with the labels and the group Draken gives them.
+	 * The parameters Draken gives a decision on a permit for its certificate (decision 87): those the source gives the
+	 * decision, and the text of the outcome, as the namespace names it. A parameter without a value is left out, as Draken
+	 * leaves it out. Last come the decided ones, such as the beverages and the serving hours, with the labels and the group
+	 * Draken gives them.
 	 */
 	private static List<generated.se.sundsvall.supportmanagement.Parameter> decisionParameters(final Candidate candidate, final String outcomeText) {
 		final var decision = candidate.decision();
-		final var values = new LinkedHashMap<String, String>();
-		Optional.ofNullable(candidate.asset()).map(AssetData::parameters).orElse(Map.of()).forEach((key, value) -> {
-			if (!ASSET_PARAMETER_LEGAL_BASIS.equals(key) && !ASSET_PARAMETER_CONDITIONS.equals(key)) {
-				values.put(key, value);
-			}
-		});
+		final var values = new LinkedHashMap<>(decision.certificate());
 		values.put(DECISION_PARAMETER_TEXT, outcomeText);
-		values.put(DECISION_PARAMETER_DECISION_DATE, SourceValues.format(decision.decidedAt().toLocalDate()));
-		values.put(DECISION_PARAMETER_VALID_FROM, SourceValues.format(decision.validFrom()));
 		final var certificate = values.entrySet().stream()
 			.filter(entry -> !Texts.isBlank(entry.getValue()))
 			.map(entry -> new generated.se.sundsvall.supportmanagement.Parameter().key(entry.getKey())

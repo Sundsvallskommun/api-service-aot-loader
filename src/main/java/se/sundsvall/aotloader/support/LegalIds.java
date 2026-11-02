@@ -49,6 +49,33 @@ public final class LegalIds {
 	}
 
 	/**
+	 * Reads the date of birth of a personal identity number or coordination number, written with or without century and
+	 * with or without its last four digits: 6, 8, 10 or 12 digits, such as 780601, 19780601 or 780601-1234. Without a
+	 * century, the century is chosen so that the date is not after today and the age is below 100, or at least 100 when the
+	 * number was written with a plus sign. The check digit is not checked, since only the date is read.
+	 *
+	 * @param  raw   the number as the source has it
+	 * @param  today the date the century is chosen from
+	 * @return       the date of birth, empty when the number is missing, is an organization number or has no date that
+	 *               exists
+	 */
+	public static Optional<LocalDate> birthDate(final String raw, final LocalDate today) {
+		if (raw == null) {
+			return Optional.empty();
+		}
+		final var plus = raw.indexOf('+') >= 0;
+		final var digits = SEPARATORS.matcher(raw).replaceAll("");
+		if (!digits.matches("\\d+")) {
+			return Optional.empty();
+		}
+		return switch (digits.length()) {
+			case 6, 10 -> withCentury(digits, plus, today);
+			case 8, 12 -> birthDate(Integer.parseInt(digits.substring(0, 4)), digits.substring(4, 8)).filter(date -> !date.isAfter(today));
+			default -> Optional.empty();
+		};
+	}
+
+	/**
 	 * @return true when the last digit is the check digit of the ten digits the number ends with, by the Luhn algorithm
 	 *         that every Swedish personal identity number and organization number follows
 	 */
@@ -97,6 +124,15 @@ public final class LegalIds {
 		if (digits.charAt(2) >= '2') {
 			return Optional.of(new LegalId(digits, ENTERPRISE));
 		}
+		return withCentury(digits, plus, today)
+			.map(date -> new LegalId("%04d%s".formatted(date.getYear(), digits.substring(2)), PRIVATE));
+	}
+
+	/**
+	 * @return the date of birth of digits that start with the year without its century, the month and the day: the
+	 *         century that makes the age below 100, or at least 100 with a plus sign
+	 */
+	private static Optional<LocalDate> withCentury(final String digits, final boolean plus, final LocalDate today) {
 		final var twoDigitYear = Integer.parseInt(digits.substring(0, 2));
 		var year = today.getYear() / 100 * 100 + twoDigitYear;
 		final var birthDate = birthDate(year, digits.substring(2, 6));
@@ -109,8 +145,7 @@ public final class LegalIds {
 		if (plus) {
 			year -= 100;
 		}
-		return birthDate(year, digits.substring(2, 6))
-			.map(date -> new LegalId("%04d%s".formatted(date.getYear(), digits.substring(2)), PRIVATE));
+		return birthDate(year, digits.substring(2, 6));
 	}
 
 	private static Optional<LegalId> fromTwelveDigits(final String digits, final LocalDate today) {
@@ -133,7 +168,7 @@ public final class LegalIds {
 		}
 		try {
 			return Optional.of(LocalDate.of(year, month, day));
-		} catch (final DateTimeException e) {
+		} catch (final DateTimeException _) {
 			return Optional.empty();
 		}
 	}

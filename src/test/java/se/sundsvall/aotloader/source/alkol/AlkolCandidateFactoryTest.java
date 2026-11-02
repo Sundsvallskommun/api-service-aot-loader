@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
@@ -39,6 +40,7 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.EventRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.PermitViewRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -76,6 +78,7 @@ import static se.sundsvall.aotloader.service.model.Source.ALKOL;
 class AlkolCandidateFactoryTest {
 
 	private static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
+	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private static final AotLoaderProperties PROPERTIES = TestData.properties(ErrandType.TOBACCO_INSPECTION, true, Map.of("tills", "", "it", TestData.INTERNAL_INSPECTION));
 
 	@Test
@@ -124,7 +127,15 @@ class AlkolCandidateFactoryTest {
 			"migrerad", List.of("2026-10-12 från AlkOL")));
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("detaljhandel");
 		assertThat(candidate.asset().issued()).isEqualTo(LocalDate.of(2019, 7, 2));
-		assertThat(candidate.asset().parameters()).containsExactly(
+		assertThat(JSON.writeValueAsString(candidate.asset().content())).isEqualTo("""
+			{"caseRegistrationNumber":"IAN-2019-100","externalCaseRegistrationNumber":"IAN-2019-100",\
+			"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
+			"pointOfSale":{"name":"Butik 1","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
+			"salesTypes":["RETAIL"],"salesPeriod":{"period":"INDEFINITE","from":"2019-07-02"},\
+			"decision":{"caseRegistrationNumber":"IAN-2019-100","outcome":"APPROVAL","decisionDate":"2019-07-01","executionDate":"2019-07-02","validFrom":"2019-07-02"},\
+			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
+		// AlkOL names nobody who made the decision, so the certificate has the diary number of the decision alone
+		assertThat(candidate.decision().certificate()).containsExactly(
 			Map.entry("permitHolderName", "Bolaget 10"),
 			Map.entry("permitHolderOrgNumber", "556677-8899"),
 			Map.entry("permitHolderStreet", "Gatan 1"),
@@ -136,10 +147,14 @@ class AlkolCandidateFactoryTest {
 			Map.entry("salesRetail", "true"),
 			Map.entry("salesWholesale", "false"),
 			Map.entry("salesOnline", "false"),
+			Map.entry("validityIndefinite", "true"),
+			Map.entry("validityTemporary", "false"),
 			Map.entry("caseNumber", "IAN-2019-100"),
 			Map.entry("executionDate", "2019-07-02"),
-			Map.entry("diarienummer", "IAN-2019-100"),
-			Map.entry("migreradFran", "AlkOL"));
+			Map.entry("decisionOfficerAndCaseNumber", "IAN-2019-100"),
+			Map.entry("decisionCaseNumber", "IAN-2019-100"),
+			Map.entry("decisionDate", "2019-07-01"),
+			Map.entry("validFrom", "2019-07-02"));
 		assertThat(candidate.files().references()).containsExactly(
 			new FileReference("22222222.rtf", DOCUMENTS),
 			new FileReference("ansokan.pdf", ATTACHMENTS),
@@ -284,19 +299,21 @@ class AlkolCandidateFactoryTest {
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("folkol-2.pdf", ATTACHMENTS))),
 			tuple(new ItemKey(ALKOL, ANMALAN, "2-ECIGARETTER"), List.of(new FileReference("ecig-2.pdf", ATTACHMENTS), new FileReference("77777777.rtf", DOCUMENTS))));
 		// The place's other events become documentation errands, filed under its current tobacco permit, or else under the
-		// notification of the first product it is marked for (decision 71)
-		assertThat(documentation).extracting(Candidate::key, candidate -> candidate.permitLink().permitKey(), candidate -> candidate.files().references()).containsExactly(
-			tuple(new ItemKey(ALKOL, DOKUMENTATION, "301"), new ItemKey(ALKOL, TILLSTAND, "1"),
-				List.of(new FileReference("22222222.rtf", DOCUMENTS), new FileReference("handling-1.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, DOKUMENTATION, "302"), new ItemKey(ALKOL, TILLSTAND, "1"), List.of(new FileReference("ecig-1.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, DOKUMENTATION, "305"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
-			tuple(new ItemKey(ALKOL, DOKUMENTATION, "306"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("Planritning butik.pdf", ATTACHMENTS))));
-		assertThat(documentation).allSatisfy(candidate -> {
-			assertThat(candidate.type()).isEqualTo(ErrandType.TOBACCO_DOCUMENTATION);
-			assertThat(candidate.permitLink().basis()).isEqualTo(Basis.FILED);
-			assertThat(candidate.files().onPost()).isEmpty();
-			assertThat(candidate.asset()).isNull();
-		});
+		// notification of the first product it is marked for, as decision 71 says
+		assertThat(documentation)
+			.hasSize(4)
+			.allSatisfy(candidate -> {
+				assertThat(candidate.type()).isEqualTo(ErrandType.TOBACCO_DOCUMENTATION);
+				assertThat(candidate.permitLink().basis()).isEqualTo(Basis.FILED);
+				assertThat(candidate.files().onPost()).isEmpty();
+				assertThat(candidate.asset()).isNull();
+			})
+			.extracting(Candidate::key, candidate -> candidate.permitLink().permitKey(), candidate -> candidate.files().references()).containsExactly(
+				tuple(new ItemKey(ALKOL, DOKUMENTATION, "301"), new ItemKey(ALKOL, TILLSTAND, "1"),
+					List.of(new FileReference("22222222.rtf", DOCUMENTS), new FileReference("handling-1.pdf", ATTACHMENTS))),
+				tuple(new ItemKey(ALKOL, DOKUMENTATION, "302"), new ItemKey(ALKOL, TILLSTAND, "1"), List.of(new FileReference("ecig-1.pdf", ATTACHMENTS))),
+				tuple(new ItemKey(ALKOL, DOKUMENTATION, "305"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("egentillsyn-2.pdf", ATTACHMENTS))),
+				tuple(new ItemKey(ALKOL, DOKUMENTATION, "306"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"), List.of(new FileReference("Planritning butik.pdf", ATTACHMENTS))));
 		// The notifications get the attachments of the events that register their product on their post too
 		assertThat(notifications).extracting(Candidate::key, candidate -> candidate.files().onPost()).containsExactly(
 			tuple(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), List.of(new AssetFile(new FileReference("folkol-1.pdf", ATTACHMENTS), null))),
@@ -610,9 +627,13 @@ class AlkolCandidateFactoryTest {
 		assertThat(flagOnlyServingPlace.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
 		assertThat(flagOnlyServingPlace.ruleHits()).extracting(RuleHit::rule).containsExactly(NOTIFICATION_ONLY_FLAG);
 		assertThat(parameters(flagOnlyServingPlace)).containsEntry("anmald", List.of("2009-03-04")).containsEntry("anmaldUppskattat", List.of("Ja")).doesNotContainKey("diarienummer");
-		assertThat(flagOnlyServingPlace.asset().parameters()).containsEntry("anmaldUppskattat", "true")
-			.containsKeys("premisesName", "premisesStreet", "premisesPostalAddress", "premisesPhone", "produkt", "migreradFran")
-			.doesNotContainKeys("premisesRestaurantNumber", "permitHolderName", "permitHolderOrgNumber");
+		// The holder and the place by the alcohol schema, without a diary number or a restaurant number, which AlkOL has none
+		// of, and with the estimated day
+		assertThat(flagOnlyServingPlace.asset().schema()).isEqualTo(AssetSchema.ALCOHOL);
+		assertThat(JSON.writeValueAsString(flagOnlyServingPlace.asset().content())).isEqualTo("""
+			{"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
+			"premises":{"name":"Butik 3","address":{"street":"Gatan 3","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
+			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":true}}""");
 		assertThat(flagOnlyServingPlace.errand().externalTags()).containsOnlyKeys("alkolAnmalan");
 
 		final var withoutAnyDate = candidates.get(3);
@@ -642,6 +663,13 @@ class AlkolCandidateFactoryTest {
 		assertThat(result.candidates().get(0).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().title()).isEqualTo("Anmälan om försäljning av tobaksfria nikotinprodukter – Butik 1");
+		// A notification of tobacco products follows the tobacco schema, with its sales place as the point of sale
+		assertThat(result.candidates()).extracting(candidate -> candidate.asset().schema()).containsOnly(AssetSchema.TOBACCO);
+		assertThat(JSON.writeValueAsString(result.candidates().get(0).asset().content())).isEqualTo("""
+			{"caseRegistrationNumber":"IAN-1","externalCaseRegistrationNumber":"IAN-1",\
+			"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
+			"pointOfSale":{"name":"Butik 1","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
+			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
 		assertThat(result.notices()).singleElement().satisfies(notice -> {
 			assertThat(notice.key()).isEqualTo(new ItemKey(ALKOL, ANMALAN, "2-INGEN"));
 			assertThat(notice.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);

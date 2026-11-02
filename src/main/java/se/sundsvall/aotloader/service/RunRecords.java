@@ -17,9 +17,8 @@ import static se.sundsvall.aotloader.Constants.PLACE_NAME_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.PLACE_NUMBER_MAX_LENGTH;
 
 /**
- * Writes the report rows of a run, and the run when it finishes, with its report as a file in the result directory. A
- * row
- * or a run that cannot be saved is logged and left out, so that the run goes on.
+ * Writes the report rows of a run and, when the run finishes, the run with its report as a file in the result
+ * directory. A row or a run that cannot be saved is logged and left out, so that the run goes on.
  */
 @Component
 class RunRecords {

@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import se.sundsvall.aotloader.service.model.AssetFile;
@@ -121,6 +122,18 @@ public final class FileList {
 	public List<AssetFile> assetFiles() {
 		return assetCategories.entrySet().stream()
 			.map(entry -> new AssetFile(files.get(entry.getKey()), entry.getValue()))
+			.toList();
+	}
+
+	/**
+	 * @return the names of the files whose purpose is one of these, as the errand's attachments are named, in the order the
+	 *         files were found
+	 */
+	public List<String> namesWithPurpose(final Set<String> purposes) {
+		return files.entrySet().stream()
+			.filter(entry -> Optional.ofNullable(details.get(entry.getKey())).map(FileDetails::purpose).filter(purposes::contains).isPresent())
+			.map(entry -> FileNames.nameOf(entry.getValue().name()))
+			.filter(Objects::nonNull)
 			.toList();
 	}
 

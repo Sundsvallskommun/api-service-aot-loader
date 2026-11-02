@@ -42,9 +42,8 @@ import static se.sundsvall.aotloader.source.Rows.texts;
 /**
  * Reads AlkOL, the database of the sales of tobacco, folköl, e-cigarettes and tobacco-free nicotine products. The
  * queries only select. The view FS_GT_Tobak is read as the system's own list of current tobacco permits (sections 7.4
- * and 7.7). Its definition is not visible to the account, but its columns are bits (analysis round 6), and a value that
- * is
- * no bit makes the permit's kinds unreadable rather than set.
+ * and 7.7). Its definition is not visible to the account, but its columns are bits (analysis round 6). A value that
+ * is not a bit makes the kinds of the permit unreadable rather than set.
  */
 @Repository
 public class AlkolRepository {
@@ -142,8 +141,6 @@ public class AlkolRepository {
 		ORDER BY f.ID
 		""";
 
-	// Kod is no key: an active row of a code gives its text before a passive one
-	private static final String SELECT_CODE_TABLE = "SELECT c.Kod, c.Klartext FROM dbo.%s c ORDER BY c.Kod, ISNULL(c.Passiv, 0), c.Klartext";
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String TILLSYNSTILLFALLE_NR = "TillsynsTillfalleNr";
@@ -174,14 +171,14 @@ public class AlkolRepository {
 			jdbc.query(SELECT_EVENTS, (rs, _) -> toEvent(rs)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
-			new CodeLists(codeTable(jdbc, "Beslutskoder"), codeTable(jdbc, "[Händelsetyper]"), codeTable(jdbc, "[Ärendetyper]"), codeTable(jdbc, "Kategorier"), codeTable(jdbc, "[Områden]"),
-				codeTable(jdbc, "PBI_Roller"), users.byCode()),
+			new CodeLists(codeTable(jdbc, CodeTable.BESLUTSKODER), codeTable(jdbc, CodeTable.HANDELSETYPER), codeTable(jdbc, CodeTable.ARENDETYPER), codeTable(jdbc, CodeTable.KATEGORIER),
+				codeTable(jdbc, CodeTable.OMRADEN), codeTable(jdbc, CodeTable.PBI_ROLLER), users.byCode()),
 			new InspectionVisitRows(
 				jdbc.query(SELECT_VISITS, (rs, _) -> toVisit(rs)).stream().filter(row -> row.tillfalleNr() != null).toList(),
 				jdbc.query(SELECT_VISIT_REMARKS, (rs, _) -> toRemark(rs)).stream().filter(row -> row.tillfalleNr() != null).collect(groupingBy(RemarkRow::tillfalleNr)),
 				InspectionVisitRows.filesByVisit(jdbc.query(SELECT_VISIT_FILES, (rs, _) -> new VisitFileRow(integer(rs, TILLSYNSTILLFALLE_NR), text(rs, BIFOGADFIL)))),
-				codeTable(jdbc, "TillsynsArt"),
-				codeTable(jdbc, "Anmarkningar"),
+				codeTable(jdbc, CodeTable.TILLSYNSART),
+				codeTable(jdbc, CodeTable.ANMARKNINGAR),
 				users.byNumber(),
 				// Tillsyn_Omgång has no primary key in AlkOL, so the first row of an id, by its dates and name, counts
 				byKey(jdbc.query(SELECT_ROUNDS, (rs, _) -> InspectionVisitRows.toRound(rs)), RoundRow::id)));
@@ -216,9 +213,30 @@ public class AlkolRepository {
 	record UserNames(Map<String, String> byNumber, Map<String, String> byCode) {
 	}
 
-	private static Map<String, String> codeTable(final JdbcTemplate jdbc, final String table) {
+	/**
+	 * The code tables of AlkOL that give the texts of codes, each with the query that reads it. Kod is no key: an active
+	 * row of a code gives its text before a passive one.
+	 */
+	private enum CodeTable {
+		BESLUTSKODER("Beslutskoder"),
+		HANDELSETYPER("[Händelsetyper]"),
+		ARENDETYPER("[Ärendetyper]"),
+		KATEGORIER("Kategorier"),
+		OMRADEN("[Områden]"),
+		PBI_ROLLER("PBI_Roller"),
+		TILLSYNSART("TillsynsArt"),
+		ANMARKNINGAR("Anmarkningar");
+
+		private final String select;
+
+		CodeTable(final String table) {
+			this.select = "SELECT c.Kod, c.Klartext FROM dbo." + table + " c ORDER BY c.Kod, ISNULL(c.Passiv, 0), c.Klartext";
+		}
+	}
+
+	private static Map<String, String> codeTable(final JdbcTemplate jdbc, final CodeTable table) {
 		final var texts = new HashMap<String, String>();
-		jdbc.query(SELECT_CODE_TABLE.formatted(table), rs -> {
+		jdbc.query(table.select, rs -> {
 			final var code = text(rs, "Kod");
 			final var codeText = text(rs, "Klartext");
 			if (code != null && codeText != null) {

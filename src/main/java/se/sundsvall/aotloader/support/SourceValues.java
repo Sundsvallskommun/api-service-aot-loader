@@ -61,7 +61,7 @@ public final class SourceValues {
 		}
 		try {
 			return Optional.of(LocalDate.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)), Integer.parseInt(matcher.group(3))));
-		} catch (final DateTimeException e) {
+		} catch (final DateTimeException _) {
 			return Optional.empty();
 		}
 	}
@@ -135,7 +135,7 @@ public final class SourceValues {
 	private static Optional<MonthDay> monthDay(final int month, final int day) {
 		try {
 			return Optional.of(MonthDay.of(month, day));
-		} catch (final DateTimeException e) {
+		} catch (final DateTimeException _) {
 			return Optional.empty();
 		}
 	}

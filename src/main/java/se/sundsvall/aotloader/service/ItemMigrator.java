@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
@@ -19,8 +20,7 @@ import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
 import se.sundsvall.aotloader.service.TargetWriter.DecisionWrite;
 import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
-import se.sundsvall.aotloader.service.mapper.AssetMapper;
-import se.sundsvall.aotloader.service.mapper.TargetMapper;
+import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -32,7 +32,6 @@ import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.Constants.ERRAND_NUMBER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.PLACE_NAME_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.PLACE_NUMBER_MAX_LENGTH;
@@ -70,6 +69,7 @@ public class ItemMigrator {
 	private final AotLoaderProperties properties;
 	private final Clock clock;
 
+	@Autowired
 	ItemMigrator(final MigrationItemRepository itemRepository, final ReviewExceptionRepository exceptionRepository, final PartyResolver partyResolver, final RelationPlanner relationPlanner,
 		final FileUploader fileUploader, final AssetFileUploader assetFileUploader, final LegalBasisReader legalBasisReader, final TargetWriter targets, final AotLoaderProperties properties,
 		final Clock clock) {
@@ -222,21 +222,29 @@ public class ItemMigrator {
 				return wasActivated(municipalityId) ? activatedBefore() : stop(VANTAR, Outcome.VANTAR, List.of(relationPlan.waitReason()));
 			}
 			if (context.dryRun()) {
-				final var uploadable = fileUploader.check(candidate, context, notes);
-				noteTruncatedParameters(legalBasisReader.withLegalBasis(candidate, context, notes));
-				if (wasActivated(municipalityId)) {
-					noteDecisionOfActiveErrand();
-				} else {
-					// Counted as the real run counts them, among the files it would upload
-					noteDecision(municipalityId, candidate.decision() == null ? 0 : (int) candidate.decision().documents().stream().filter(uploadable::contains).distinct().count());
-				}
-				return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
+				return rehearse(municipalityId);
 			}
 			if (!context.tryCountWrite()) {
 				return new ItemResult(Outcome.EJ_KORD, List.of(), "Körningens gräns för antal ärenden nåddes", null);
 			}
 			write(municipalityId, parties, assessment.decision() == Decision.MIGRATE_AS_EXPIRED, relationPlan);
 			return notes.result(Outcome.MIGRERAD, entity.getErrandNumber());
+		}
+
+		/**
+		 * Tells in the report what the real run would write, without writing to the target systems.
+		 */
+		private ItemResult rehearse(final String municipalityId) {
+			final var uploadable = fileUploader.check(candidate, context, notes);
+			legalBasisReader.withLegalBasis(candidate, context, notes);
+			noteOmitted();
+			if (wasActivated(municipalityId)) {
+				noteDecisionOfActiveErrand();
+			} else {
+				// Counted as the real run counts them, among the files it would upload
+				noteDecision(municipalityId, candidate.decision() == null ? 0 : (int) candidate.decision().documents().stream().filter(uploadable::contains).distinct().count());
+			}
+			return notes.result(Outcome.SKULLE_MIGRERAS, errandNumber());
 		}
 
 		/**
@@ -295,12 +303,7 @@ public class ItemMigrator {
 			}
 
 			step = Step.RELATION;
-			if (relationPlan.relates()) {
-				if (entity.getRelationId() == null) {
-					targets.ensureRelation(municipalityId, relationPlan.permitErrandId(), errand.getId(), notes).ifPresent(entity::setRelationId);
-				}
-				saveAs(RELATION_KLAR);
-			}
+			relate(municipalityId, errand.getId(), relationPlan);
 
 			step = Step.AKTIVERA;
 			if (!active) {
@@ -310,14 +313,33 @@ public class ItemMigrator {
 		}
 
 		/**
-		 * Tells in the report which parameters of the post PartyAssets takes only cut to 255 characters, since a certificate
-		 * the new system renders from them would show them cut.
-		 *
-		 * @param withLegalBasis the candidate with the legal basis read from its documents, which is one of the parameters
+		 * Relates the errand to the errand of its permit when the plan says so, unless an earlier run did.
 		 */
-		private void noteTruncatedParameters(final Candidate withLegalBasis) {
-			Optional.ofNullable(withLegalBasis.asset()).map(AssetMapper::truncatedParameters).filter(keys -> !keys.isEmpty())
-				.ifPresent(keys -> notes.line("Parametrar som kortas till 255 tecken i PartyAssets: " + String.join(", ", keys)));
+		private void relate(final String municipalityId, final String errandId, final RelationPlan relationPlan) {
+			if (!relationPlan.relates()) {
+				return;
+			}
+			if (entity.getRelationId() == null) {
+				targets.ensureRelation(municipalityId, relationPlan.permitErrandId(), errandId, notes).ifPresent(entity::setRelationId);
+			}
+			saveAs(RELATION_KLAR);
+		}
+
+		/**
+		 * Tells in the report what the source has but the JSON parameter of the post leaves out, since it does not follow the
+		 * schema (decision 87), by the field and why, without the value.
+		 */
+		private void noteOmitted() {
+			Optional.ofNullable(candidate.asset()).map(AssetData::omitted).filter(omitted -> !omitted.isEmpty())
+				.ifPresent(omitted -> notes.line("Utelämnat i JSON-parametern i PartyAssets, eftersom det inte följer schemat: " + String.join("; ", omitted)));
+		}
+
+		/**
+		 * @return the display name of the outcome of the decision of the permit in the namespace, null when the permit has no
+		 *         decision or the namespace does not name the outcome
+		 */
+		private String decisionText(final String municipalityId) {
+			return Optional.ofNullable(candidate.decision()).flatMap(decision -> context.decisionOutcomeText(municipalityId, decision.outcome())).orElse(null);
 		}
 
 		/**
@@ -336,10 +358,9 @@ public class ItemMigrator {
 		 * @param uploaded       the attachments of the files of the item on the errand
 		 */
 		private void writeDecision(final String municipalityId, final String errandId, final Candidate withLegalBasis, final UploadedFiles uploaded) {
-			final var legalBasis = Optional.ofNullable(withLegalBasis.asset()).map(asset -> asset.parameters().get(ASSET_PARAMETER_LEGAL_BASIS)).orElse(null);
+			final var legalBasis = Optional.ofNullable(withLegalBasis.asset()).map(AssetData::legalBasis).orElse(null);
 			final var documentIds = uploaded.idsOf(candidate.decision().documents());
-			final var outcomeText = context.decisionOutcomeText(municipalityId, TargetMapper.decisionOutcome(candidate.decision())).orElse(null);
-			final var written = targets.ensureDecision(withLegalBasis, municipalityId, errandId, legalBasis, documentIds, outcomeText);
+			final var written = targets.ensureDecision(withLegalBasis, municipalityId, errandId, legalBasis, documentIds, decisionText(municipalityId));
 			noteDecision(municipalityId, documentIds.size());
 			if (written == DecisionWrite.KEPT) {
 				notes.line("Beslutet från en tidigare körning är redan fattat i SupportManagement och har det källan ger nu");
@@ -363,7 +384,7 @@ public class ItemMigrator {
 				notes.line("Inget beslut: %s har inget beslut med tidpunkt för tillståndet".formatted(candidate.key().source().getDisplayName()));
 				return;
 			}
-			final var outcome = TargetMapper.decisionOutcome(decision);
+			final var outcome = decision.outcome();
 			notes.line("Beslut: %s, fattat %s, %d villkor, %d dokument".formatted(context.decisionOutcomeText(municipalityId, outcome).orElse(outcome),
 				SourceValues.format(decision.decidedAt().toLocalDate()), decision.terms().size(), documents));
 		}
@@ -387,8 +408,9 @@ public class ItemMigrator {
 		 */
 		private Candidate writeAsset(final String municipalityId, final String errandId, final PartyIds parties, final boolean expired, final boolean earlierErrand) {
 			final var withLegalBasis = legalBasisReader.withLegalBasis(candidate, context, notes);
-			noteTruncatedParameters(withLegalBasis);
-			final var post = targets.ensureAsset(withLegalBasis, municipalityId, new PostLookup(errandId, entity.getPartyAssetsId(), earlierErrand), parties, expired, notes);
+			noteOmitted();
+			final var post = targets.ensureAsset(withLegalBasis, municipalityId, new PostLookup(errandId, entity.getPartyAssetsId(), earlierErrand), parties, expired,
+				decisionText(municipalityId), notes);
 			final var partyAssetsId = post.id();
 			entity.setPartyAssetsId(partyAssetsId);
 			entity.setAssetId(errandId);

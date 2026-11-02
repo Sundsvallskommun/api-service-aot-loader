@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
-import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -20,8 +19,10 @@ import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.RuleHit;
-import se.sundsvall.aotloader.source.AssetParameters;
+import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
+import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
+import se.sundsvall.aotloader.source.CertificateParameters;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
@@ -42,13 +43,13 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.support.DiaryNumbers;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_ANNEX;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_DRAWING;
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_CONDITIONS;
 import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
@@ -159,6 +160,13 @@ final class AlktPermits {
 		final var premises = place == null ? null : index.place(place);
 		final var settings = index.properties().errandType(ErrandType.SERVING_PERMIT);
 		final var title = Texts.title("Serveringstillstånd", name);
+		final var drawings = files.namesWithPurpose(FilePurposes.SERVING_AREA_DRAWINGS);
+		final var granted = Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files))
+			.map(data -> withCase(data, grant.orElse(null), errands, permit.utfardandeDiarienr()))
+			.map(data -> data.withDecided(decided).withCertificate(certificate(content, holder, premises, drawings, data)))
+			.orElse(null);
+		final var investigation = PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
+			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, shownNotes(permit)));
 		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSTAND, String.valueOf(permit.objektId())), ErrandType.SERVING_PERMIT)
 			.placeName(placeName)
 			.placeNumber(restaurantNumber)
@@ -167,8 +175,7 @@ final class AlktPermits {
 			.place(premises)
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
 			.title(title)
-			.investigation(PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
-				permit.utfardandeDatum(), index.investigationTexts(issuingErrands, shownNotes(permit))))
+			.investigation(PermitInvestigations.premisesSection(permit.servingArea().serveringslokal()).map(investigation::withSection).orElse(investigation))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
@@ -187,19 +194,15 @@ final class AlktPermits {
 				.add("period", "Period", periods.periodText())
 				.add("hogstaAntal", "Högsta antal gäster", permit.servingArea().hogstaAntal())
 				.add("sittplatser", "Sittplatser", permit.servingArea().sittplatser())
-				// Under the key and label of Draken's examination of the premises, which shows it (decision 82)
-				.add("PREMISES_SERVING_AREA", "Serveringsytor", permit.servingArea().serveringslokal())
 				.add("villkor", "Villkor", content.conditions())
-				.table(ServingStaff.KEY, ServingStaff.GROUP, ServingStaff.COLUMNS, ServingStaff.rows(snapshot.staffOf(permit.objektId())))
 				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", index.decisionText(decision, true))
 				.add(CandidateTexts.migrated(today, ALKT))
 				.build())
-			.asset(new AssetData(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(),
-				ServingPermits.validTo(permit, periods),
-				assetParameters(content, holder, premises, restaurantNumber), legalBasisDocuments(permit, decision, files)))
+			.asset(asset(content, subtype, holder, premises, restaurantNumber, drawings, granted)
+				.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files)))
 			.files(files.build(), files.assetFiles(), files.details())
-			.decision(Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files)).map(data -> data.withDecided(decided)).orElse(null));
+			.decision(granted);
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -511,35 +514,150 @@ final class AlktPermits {
 	}
 
 	/**
-	 * The parameters of the permit, under the keys of the AoT solution (section 7.4).
+	 * @return the decision as made in the errand of the grant, with its diary number and handlers; a grant without an
+	 *         errand, or a decision built from the permit, is made in the errands that issued the permit, under the diary
+	 *         number of the permit
 	 */
-	private static Map<String, String> assetParameters(final PermitContent content, final Holder holder, final Place premises, final String restaurantNumber) {
+	private DecisionData withCase(final DecisionData decision, final DecisionRow grant, final List<ErrandRow> issuingErrands, final String permitDiaryNumber) {
+		final var grantErrand = Optional.ofNullable(grant).map(DecisionRow::arendeId).map(snapshot.errands()::get);
+		final var handlers = grantErrand.map(ErrandRow::handlaggare).orElseGet(() -> issuingErrands.stream().flatMap(errand -> errand.handlaggare().stream()).toList());
+		return decision.withCase(grantErrand.map(ErrandRow::diarieNr).map(Texts::trimToNull).orElse(Texts.trimToNull(permitDiaryNumber)),
+			Texts.join(", ", snapshot.visits().handlerNames(handlers)));
+	}
+
+	/**
+	 * The parameters of the decision for the certificate, under the keys Draken gives a decision on a serving permit
+	 * (decision 87).
+	 */
+	private static Map<String, String> certificate(final PermitContent content, final Holder holder, final Place premises, final List<String> drawings, final DecisionData decision) {
 		final var permit = content.permit();
 		final var periods = content.periods();
-		return new AssetParameters()
+		return new CertificateParameters()
 			.holder(holder)
-			.premises(premises, restaurantNumber)
-			.flag(AssetParameters.SERVING_TO_PUBLIC, permit.servingPublic())
-			.flag(AssetParameters.SERVING_TO_CLOSED_COMPANY, permit.servingPrivate())
-			.flag(AssetParameters.SCOPE_ALL_YEAR, permit.period().aretRunt())
-			.flag(AssetParameters.SCOPE_ANNUAL_PERIOD, !permit.period().aretRunt() && periods.seasonText() != null)
-			.flag(AssetParameters.SCOPE_TASTING, permit.scope().provsmakning())
-			.lines(AssetParameters.SCOPE_PERIOD_FROM_TO, Arrays.asList(periods.seasonText(), periods.periodText()))
-			.flag(AssetParameters.BEVERAGE_SPIRITS, permit.drinks().spritdrycker())
-			.flag(AssetParameters.BEVERAGE_WINE, permit.drinks().vin())
-			.flag(AssetParameters.BEVERAGE_BEER, permit.drinks().starkol())
-			.flag(AssetParameters.BEVERAGE_OTHER_FERMENTED, permit.drinks().ajaDrycker())
-			.text(AssetParameters.SERVING_AREA_DESCRIPTION, permit.servingArea().serveringslokal())
-			.text(AssetParameters.SERVING_AREA_SEATS, permit.servingArea().sittplatser())
-			.text(AssetParameters.SERVING_AREA_MAX_PERSONS, permit.servingArea().hogstaAntal())
-			.lines(AssetParameters.SERVING_HOURS, content.servingTimes())
-			.lines(ASSET_PARAMETER_CONDITIONS, content.conditions())
-			.text(AssetParameters.CASE_NUMBER, permit.utfardandeDiarienr())
-			.text(AssetParameters.EXECUTION_DATE, SourceValues.format(permit.utfardandeDatum()))
-			.text(AssetParameters.DECISION_DATE_AND_CASE_NUMBER, Texts.join(", ", Arrays.asList(SourceValues.format(permit.utfardandeDatum()), permit.utfardandeDiarienr())))
-			.text(AssetParameters.DIARY_NUMBER, permit.utfardandeDiarienr())
-			.text(AssetParameters.MIGRATED_FROM, ALKT.getDisplayName())
+			.text(CertificateParameters.PERMIT_HOLDER_PHONE, holder == null ? null : holder.phone())
+			.premises(premises)
+			.flag(CertificateParameters.SERVING_TO_PUBLIC, permit.servingPublic())
+			.flag(CertificateParameters.SERVING_TO_CLOSED_COMPANY, permit.servingPrivate())
+			.flag(CertificateParameters.SCOPE_ALL_YEAR, permit.period().aretRunt())
+			.flag(CertificateParameters.SCOPE_ANNUAL_PERIOD, !permit.period().aretRunt() && periods.seasonText() != null)
+			.flag(CertificateParameters.SCOPE_TASTING, permit.scope().provsmakning())
+			.lines(CertificateParameters.SCOPE_PERIOD_FROM_TO, Arrays.asList(periods.seasonText(), periods.periodText()))
+			.flag(CertificateParameters.BEVERAGE_SPIRITS, permit.drinks().spritdrycker())
+			.flag(CertificateParameters.BEVERAGE_WINE, permit.drinks().vin())
+			.flag(CertificateParameters.BEVERAGE_BEER, permit.drinks().starkol())
+			.flag(CertificateParameters.BEVERAGE_OTHER_FERMENTED, permit.drinks().ajaDrycker())
+			.text(CertificateParameters.SERVING_AREA_DESCRIPTION, permit.servingArea().serveringslokal())
+			.text(CertificateParameters.SERVING_AREA_DRAWING_REFERENCE, Texts.join(", ", drawings))
+			.text(CertificateParameters.SERVING_AREA_SEATS, permit.servingArea().sittplatser())
+			.text(CertificateParameters.SERVING_AREA_MAX_PERSONS, permit.servingArea().hogstaAntal())
+			.lines(CertificateParameters.SERVING_HOURS, content.servingTimes())
+			.text(CertificateParameters.CASE_NUMBER, permit.utfardandeDiarienr())
+			.text(CertificateParameters.EXECUTION_DATE, SourceValues.format(permit.utfardandeDatum()))
+			.text(CertificateParameters.DECISION_DATE_AND_CASE_NUMBER, CertificateParameters.decisionDateAndCaseNumber(decision))
+			.decision(decision)
 			.build();
+	}
+
+	/**
+	 * The JSON parameter of the permit by the alcohol schema (decision 87). The single number of seats of AlkT is the
+	 * number of seats indoors.
+	 *
+	 * @param decision the decision the permit was granted by, null when it has none
+	 */
+	private AssetContents asset(final PermitContent content, final ServingPermitSubtype subtype, final Holder holder, final Place premises, final String restaurantNumber,
+		final List<String> drawings, final DecisionData decision) {
+		final var permit = content.permit();
+		final var contents = new AssetContents(ErrandType.SERVING_PERMIT.getAssetSchema()).caseRegistrationNumber(permit.utfardandeDiarienr());
+		contents.fields().text("servingPermitType", subtype == null ? null : subtype.name());
+		contents.permitHolder(holder).place(premises, restaurantNumber);
+		contents.fields()
+			.texts("servingTo", servingTo(permit))
+			.objects("servingPeriods", servingPeriods(permit, content.periods()))
+			.objects("servingHours", DecidedScopes.servingHours(permit))
+			.flag("tasting", permit.scope().provsmakning())
+			.texts("additionalScopes", additionalScopes(permit, subtype))
+			.texts("beverages", beverages(permit))
+			.object("servingArea", JsonFields.object()
+				.text("description", permit.servingArea().serveringslokal())
+				.text("drawingReference", Texts.join(", ", drawings))
+				.number("seatsIndoor", contents.count("servingArea.seatsIndoor", permit.servingArea().sittplatser()))
+				.number("maxPersons", contents.count("servingArea.maxPersons", permit.servingArea().hogstaAntal())))
+			.objects(ServingStaff.KEY, ServingStaff.of(snapshot.staffOf(permit.objektId()), today));
+		return contents.conditions(content.conditions())
+			.decision(decision, permit.utfardandeDatum(), Texts.join(", ", Arrays.asList(SourceValues.format(permit.ersatterDatum()), permit.ersatterDiarienr())))
+			.migration(ALKT, false);
+	}
+
+	private static List<String> servingTo(final PermitRow permit) {
+		final var servingTo = new ArrayList<String>();
+		addIf(servingTo, permit.servingPublic(), "PUBLIC");
+		addIf(servingTo, permit.servingPrivate(), "CLOSED_COMPANY");
+		return servingTo;
+	}
+
+	/**
+	 * @return the periods of the permit: all year, its season, and its period of dates, each as it says; a season or
+	 *         period that cannot be read has its text as the description
+	 */
+	private static List<JsonFields> servingPeriods(final PermitRow permit, final PermitPeriods periods) {
+		final var entries = new ArrayList<JsonFields>();
+		if (permit.period().aretRunt()) {
+			entries.add(period("ALL_YEAR", null));
+		}
+		if (periods.seasonStart() != null) {
+			entries.add(period("ANNUAL_PERIOD", null).text("from", SourceValues.format(periods.seasonStart())).text("to", SourceValues.format(periods.seasonEnd())));
+		} else if (periods.rawSeason() != null) {
+			entries.add(period("ANNUAL_PERIOD", periods.rawSeason()));
+		}
+		if (periods.hasDatePeriod()) {
+			entries.add(period("FIXED_PERIOD", null).date("fromDate", periods.periodStart()).date("toDate", periods.periodEnd()));
+		} else if (periods.rawPeriod() != null) {
+			entries.add(period("FIXED_PERIOD", periods.rawPeriod()));
+		}
+		return entries;
+	}
+
+	/**
+	 * @param  description the text of a season or period that cannot be read, null for one that can
+	 * @return             an entry of the periods of the permit
+	 */
+	private static JsonFields period(final String type, final String description) {
+		return JsonFields.object().text("period", type).text("description", description);
+	}
+
+	/**
+	 * @return what the permit covers besides serving indoors, in the order of the schema; catering and farm sales not on a
+	 *         permit of that subtype, and tasting not at all, since the schema has a field of its own for it
+	 */
+	private static List<String> additionalScopes(final PermitRow permit, final ServingPermitSubtype subtype) {
+		final var scope = permit.scope();
+		final var scopes = new ArrayList<String>();
+		addIf(scopes, scope.uteservering(), "OUTDOOR_SERVING");
+		addIf(scopes, scope.catering() && subtype != ServingPermitSubtype.PERMANENT_CATERING, "CATERING");
+		addIf(scopes, scope.gardsforsaljning() && subtype != ServingPermitSubtype.FARM_SALES, "FARM_SALES");
+		addIf(scopes, scope.roomservice(), "ROOM_SERVICE");
+		addIf(scopes, scope.minibar(), "MINIBAR");
+		addIf(scopes, scope.pausservering(), "INTERMISSION_SERVING");
+		addIf(scopes, scope.kryddning(), "IN_HOUSE_FLAVORING");
+		addIf(scopes, scope.trafikservering(), "TRANSPORT_SERVING");
+		return scopes;
+	}
+
+	private static List<String> beverages(final PermitRow permit) {
+		final var drinks = permit.drinks();
+		final var beverages = new ArrayList<String>();
+		addIf(beverages, drinks.spritdrycker(), "SPIRITS");
+		addIf(beverages, drinks.vin(), "WINE");
+		addIf(beverages, drinks.starkol(), "STRONG_BEER");
+		addIf(beverages, drinks.ajaDrycker(), "OTHER_FERMENTED_BEVERAGES");
+		addIf(beverages, drinks.alp(), "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS");
+		return beverages;
+	}
+
+	private static void addIf(final List<String> list, final boolean condition, final String value) {
+		if (condition) {
+			list.add(value);
+		}
 	}
 
 	private static String description(final String name, final PermitContent content) {

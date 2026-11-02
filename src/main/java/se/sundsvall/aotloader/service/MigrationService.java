@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import se.sundsvall.aotloader.api.model.CleanupRequest;
@@ -60,6 +61,7 @@ public class MigrationService {
 	private final MigrationItemRepository itemRepository;
 	private final Clock clock;
 
+	@Autowired
 	MigrationService(final MigrationRunner runner, final CleanupRunner cleanupRunner, final RunLock lock, @Qualifier(MIGRATION_EXECUTOR) final ExecutorService executor, final MigrationRunRepository runRepository,
 		final RunItemRepository runItemRepository, final MigrationItemRepository itemRepository, final Clock clock) {
 		this.runner = runner;

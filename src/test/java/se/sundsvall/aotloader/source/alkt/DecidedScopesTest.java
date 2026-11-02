@@ -10,6 +10,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
+import se.sundsvall.aotloader.support.JsonFields;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -22,6 +24,8 @@ import static se.sundsvall.aotloader.source.alkt.AlktTestData.permit;
 
 class DecidedScopesTest {
 
+	private static final JsonMapper JSON = JsonMapper.builder().build();
+
 	@Test
 	void eachTimeGoesWhereItsTextSaysForWhomThePermitServes() {
 		final var hits = new ArrayList<RuleHit>();
@@ -30,7 +34,7 @@ class DecidedScopesTest {
 		final var parameters = DecidedScopes.of(row, PERMANENT_SERVING, hits);
 
 		assertThat(parameters).extracting(Parameter::key, Parameter::displayName, Parameter::group, Parameter::values).containsExactly(
-			tuple("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STARKOL", "VIN")),
+			tuple("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STRONG_BEER", "WINE")),
 			tuple("decidedServingHoursIndoorPublic", "Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")),
 			tuple("decidedServingHoursOutdoorPublic", "Serveringstid ute (allmänheten)", "DECIDED", List.of("11:00", "22:00")),
 			tuple("decidedServingHoursIndoorPrivate", "Serveringstid inne (slutet sällskap)", "DECIDED", List.of("11:00", "01:00")),
@@ -137,7 +141,7 @@ class DecidedScopesTest {
 		final var row = permit(1).drinks(false, false, true, true, true).time("11:00", "01:00", "Inomhus").build();
 
 		assertThat(DecidedScopes.of(row, subtype, hits)).extracting(Parameter::key, Parameter::values)
-			.containsExactly(tuple("decidedBeverages", List.of("SPRITDRYCKER", "CIDER_ELLER_ANDRA_JASTA_ALKOHOLDRYCKER")));
+			.containsExactly(tuple("decidedBeverages", List.of("SPIRITS", "OTHER_FERMENTED_BEVERAGES")));
 		assertThat(DecidedScopes.of(row, null, hits)).extracting(Parameter::key).containsExactly("decidedBeverages");
 		assertThat(hits).isEmpty();
 	}
@@ -156,6 +160,23 @@ class DecidedScopesTest {
 
 		assertThat(hours(DecidedScopes.of(row, PERMANENT_SERVING, hits))).containsOnly(entry("decidedServingHoursOutdoorPublic", List.of("11:00", "22:00")));
 		assertThat(hits).isEmpty();
+	}
+
+	@Test
+	void onThePostEachTimeHasTheAudienceAndPlaceItsTextNamesAloneAndItsText() {
+		final var row = permit(1).noTimes().servingTo(true, true)
+			.time("11:00", "01:00", "Inomhus för slutna sällskap")
+			.time("11:00", "22:00", null)
+			.time("12:00", "24:00", "Inne och ute")
+			.time("11:00", "sent", "Fredagar")
+			.build();
+
+		// A time without a place is not taken for indoors here, since a time without one holds for all serving
+		assertThat(JSON.writeValueAsString(DecidedScopes.servingHours(row).stream().map(JsonFields::toNode).toList())).isEqualTo("""
+			[{"audience":"CLOSED_COMPANY","location":"INDOOR","from":"11:00","to":"01:00","description":"Inomhus för slutna sällskap"},\
+			{"from":"11:00","to":"22:00"},\
+			{"from":"12:00","to":"24:00","description":"Inne och ute"},\
+			{"description":"11:00–sent Fredagar"}]""");
 	}
 
 	private static Map<String, List<String>> hours(final List<Parameter> parameters) {

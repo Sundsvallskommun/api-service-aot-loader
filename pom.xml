@@ -108,6 +108,9 @@
 						</goals>
 						<configuration>
 							<inputSpec>src/main/resources/integrations/support-management-api.yaml</inputSpec>
+							<!-- The value of a JSON parameter is any JSON, which the generated JsonNode model would drop -->
+							<typeMappings>JsonNode=JsonNode</typeMappings>
+							<importMappings>JsonNode=tools.jackson.databind.JsonNode</importMappings>
 							<output>${generated-sources-path}</output>
 							<generatorName>spring</generatorName>
 							<generateApis>false</generateApis>
@@ -138,6 +141,9 @@
 						</goals>
 						<configuration>
 							<inputSpec>src/main/resources/integrations/party-assets-api.yaml</inputSpec>
+							<!-- The value of a JSON parameter is any JSON, which the generated JsonNode model would drop -->
+							<typeMappings>JsonNode=JsonNode</typeMappings>
+							<importMappings>JsonNode=tools.jackson.databind.JsonNode</importMappings>
 							<output>${generated-sources-path}</output>
 							<generatorName>spring</generatorName>
 							<generateApis>false</generateApis>

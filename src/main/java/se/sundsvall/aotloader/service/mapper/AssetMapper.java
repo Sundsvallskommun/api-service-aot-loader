@@ -2,9 +2,10 @@ package se.sundsvall.aotloader.service.mapper;
 
 import generated.se.sundsvall.partyassets.Asset;
 import generated.se.sundsvall.partyassets.AssetCreateRequest;
+import generated.se.sundsvall.partyassets.AssetJsonParameter;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -15,24 +16,37 @@ import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import static se.sundsvall.aotloader.Constants.ASSET_ORIGIN;
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_ERRAND_ID;
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
 import static se.sundsvall.aotloader.Constants.ASSET_TEXT_MAX_LENGTH;
-import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_DECISION;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_DECISION_TEXT;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_ERRAND_ID;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_LEGAL_BASIS;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_MUNICIPALITY_ID;
 
 /**
- * Maps a candidate to its post in PartyAssets (section 7.4).
+ * Maps a candidate to its post in PartyAssets (section 7.4): its fields, and the JSON parameter that holds its content
+ * by the AoT schema of its type (decision 87).
  */
 @Component
 public class AssetMapper {
 
-	// A value longer than PartyAssets stores is cut and points to the errand, where the whole text is; not the legal basis
+	// A description longer than PartyAssets stores is cut and points to the errand, where the whole text is
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
+	// A number read back from PartyAssets may be of another type than the one sent, such as a long for an int
+	private static final Comparator<JsonNode> NUMBERS_BY_VALUE = (one, other) -> {
+		if (one.isNumber() && other.isNumber()) {
+			return one.decimalValue().compareTo(other.decimalValue());
+		}
+		return one.equals(other) ? 0 : 1;
+	};
 
 	private final AotLoaderProperties properties;
 
@@ -41,53 +55,25 @@ public class AssetMapper {
 	}
 
 	/**
-	 * @return the keys of the parameters of the post that are longer than PartyAssets takes, and which {@link #toAsset}
-	 *         therefore cuts, in the order of the parameters
-	 */
-	public static List<String> truncatedParameters(final AssetData asset) {
-		return asset.parameters().entrySet().stream()
-			.filter(parameter -> parameter.getValue() != null && parameter.getValue().length() > ASSET_TEXT_MAX_LENGTH)
-			.map(Map.Entry::getKey)
-			.toList();
-	}
-
-	/**
-	 * @return the legal basis as long as PartyAssets takes it: the references that fit whole, without pointing to the
-	 *         errand, which does not hold the legal basis; a first reference that does not fit is cut
-	 */
-	static String legalBasisWithin(final String value) {
-		if (value == null || value.length() <= ASSET_TEXT_MAX_LENGTH) {
-			return value;
-		}
-		var kept = "";
-		for (final var reference : value.split("; ")) {
-			final var longer = kept.isEmpty() ? reference : kept + "; " + reference;
-			if (longer.length() > ASSET_TEXT_MAX_LENGTH) {
-				break;
-			}
-			kept = longer;
-		}
-		return kept.isEmpty() ? Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, null) : kept;
-	}
-
-	/**
-	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4).
+	 * Maps the candidate to a post in PartyAssets. The asset id is the id of the errand (decision 4). The post has its
+	 * JSON parameter and no additional parameters, as the AoT solution keeps the permit in the JSON parameter (decision
+	 * 87).
 	 *
 	 * @param  candidate      the candidate
 	 * @param  municipalityId the municipality the run is started for
 	 * @param  errandId       the id of the errand
 	 * @param  partyId        the partyId of the holder
 	 * @param  expired        true to create the post as EXPIRED (the exception list said so)
+	 * @param  decisionText   the display name of the outcome of the decision of the permit in the namespace, null when the
+	 *                        permit has no decision or the name is unknown
 	 * @return                the request
 	 */
-	public AssetCreateRequest toAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyId, final boolean expired) {
+	public AssetCreateRequest toAsset(final Candidate candidate, final String municipalityId, final String errandId, final String partyId, final boolean expired,
+		final String decisionText) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
+		final var schema = properties.jsonParameter(asset.schema().settingsName());
 		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : Texts.title(settings.assetTitle(), asset.titleSuffix());
-		final var parameters = new LinkedHashMap<String, String>();
-		parameters.put(ASSET_PARAMETER_ERRAND_ID, errandId);
-		asset.parameters().forEach((key, value) -> parameters.put(key, ASSET_PARAMETER_LEGAL_BASIS.equals(key) ? legalBasisWithin(value) : Texts.truncate(value, ASSET_TEXT_MAX_LENGTH, TRUNCATED_SUFFIX)));
-		parameters.put(PARAMETER_PREMISES_MUNICIPALITY_ID, properties.premisesMunicipalityOf(candidate.place(), municipalityId));
 		return new AssetCreateRequest()
 			.assetId(errandId)
 			.origin(ASSET_ORIGIN)
@@ -98,12 +84,40 @@ public class AssetMapper {
 			.issued(asset.issued())
 			.validTo(asset.validTo())
 			.status(expired ? Status.EXPIRED : Status.ACTIVE)
-			.additionalParameters(parameters);
+			.jsonParameters(List.of(new AssetJsonParameter()
+				.key(schema.key())
+				.schemaId(schema.schemaId())
+				.value(jsonValue(asset, errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText))));
+	}
+
+	/**
+	 * The JSON parameter as it is written: what the source gives, preceded by the id of the errand, with the municipality
+	 * in the field of the place, also of a post without a place, as every errand has it (decision 19), and with the text
+	 * of the outcome and the legal basis in the decision. A legal basis of a post without a decision gets a decision of its
+	 * own. Neither is cut, since the parameter has no limit of length.
+	 */
+	static ObjectNode jsonValue(final AssetData asset, final String errandId, final String municipalityId, final String decisionText) {
+		final var value = JsonNodeFactory.instance.objectNode().put(FIELD_ERRAND_ID, errandId);
+		value.setAll(asset.content());
+		placeOf(value, asset.schema().placeField()).put(FIELD_MUNICIPALITY_ID, municipalityId);
+		final var legalBasis = Texts.trimToNull(asset.legalBasis());
+		final var text = Texts.trimToNull(decisionText);
+		if (value.get(FIELD_DECISION) instanceof final ObjectNode decision) {
+			Optional.ofNullable(text).ifPresent(outcome -> decision.put(FIELD_DECISION_TEXT, outcome));
+			Optional.ofNullable(legalBasis).ifPresent(basis -> decision.put(FIELD_LEGAL_BASIS, basis));
+		} else if (legalBasis != null) {
+			value.putObject(FIELD_DECISION).put(FIELD_LEGAL_BASIS, legalBasis);
+		}
+		return value;
+	}
+
+	private static ObjectNode placeOf(final ObjectNode value, final String field) {
+		return value.get(field) instanceof final ObjectNode place ? place : value.putObject(field);
 	}
 
 	/**
 	 * Compares a post with what it is to be, as far as PartyAssets lets the post change: its title, its last day and its
-	 * parameters.
+	 * parameters. Any additional parameters of the post are removed, since its content is in the JSON parameter.
 	 *
 	 * @param  found  the post in PartyAssets
 	 * @param  wanted the post the item gives now
@@ -125,12 +139,33 @@ public class AssetMapper {
 			}
 			changes = true;
 		}
-		if (!Objects.equals(Optional.ofNullable(found.getAdditionalParameters()).orElse(Map.of()), wanted.getAdditionalParameters())) {
-			// PartyAssets replaces the whole map
-			update.additionalParameters(wanted.getAdditionalParameters());
+		if (!sameJsonParameters(found.getJsonParameters(), wanted.getJsonParameters())) {
+			// PartyAssets replaces the whole list
+			update.jsonParameters(wanted.getJsonParameters());
+			changes = true;
+		}
+		if (!Optional.ofNullable(found.getAdditionalParameters()).orElse(Map.of()).isEmpty()) {
+			// An empty map removes them all, while a missing one leaves them
+			update.additionalParameters(Map.of());
 			changes = true;
 		}
 		return changes ? Optional.of(update) : Optional.empty();
+	}
+
+	/**
+	 * @return true when both lists have the same parameters, by key, schema and value, whatever their order and whatever
+	 *         type of number a value has
+	 */
+	static boolean sameJsonParameters(final List<AssetJsonParameter> found, final List<AssetJsonParameter> wanted) {
+		final var one = Optional.ofNullable(found).orElse(List.of());
+		final var other = Optional.ofNullable(wanted).orElse(List.of());
+		return one.size() == other.size() && one.stream().allMatch(parameter -> other.stream().anyMatch(candidate -> sameJsonParameter(parameter, candidate)));
+	}
+
+	private static boolean sameJsonParameter(final AssetJsonParameter one, final AssetJsonParameter other) {
+		return Objects.equals(one.getKey(), other.getKey())
+			&& Objects.equals(one.getSchemaId(), other.getSchemaId())
+			&& (one.getValue() == null ? other.getValue() == null : other.getValue() != null && one.getValue().equals(NUMBERS_BY_VALUE, other.getValue()));
 	}
 
 	/**

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,9 +13,11 @@ import org.springframework.util.unit.DataSize;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirectories;
+import se.sundsvall.aotloader.configuration.AotLoaderProperties.JsonParameterSettings;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.AssetFile;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
@@ -34,6 +37,8 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.FilePurposes;
+import se.sundsvall.aotloader.support.JsonFields;
+import tools.jackson.databind.node.ObjectNode;
 
 import static java.util.function.Function.identity;
 import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
@@ -53,6 +58,9 @@ public final class TestData {
 	public static final String INTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION";
 	public static final String EXTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION";
 	public static final String DOCUMENTATION = "CATEGORYROOT/DOCUMENTATION/DOCUMENTATION";
+	/** The keys and schemas of the JSON parameters of the posts, as the test environment has them. */
+	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.of("alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
+		"tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
 
 	private static final List<FileReference> PERMIT_FILES = List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS),
 		new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS));
@@ -128,7 +136,7 @@ public final class TestData {
 			Map.of(Source.ALKT, new AotLoaderProperties.Database("jdbc:sqlserver://alkt", null, null, null), Source.ALKOL, new AotLoaderProperties.Database("jdbc:sqlserver://alkol", null, null, null)),
 			Map.of(Source.ALKT, new FileAreaDirectories(documents, attachments), Source.ALKOL, new FileAreaDirectories(documents, attachments)),
 			DataSize.ofBytes(100),
-			Map.of(" Timrå ", "2262"), decisionAdAccount);
+			Map.of(" Timrå ", "2262"), decisionAdAccount, JSON_PARAMETERS);
 	}
 
 	public static Candidate permit(final String objektId) {
@@ -178,9 +186,37 @@ public final class TestData {
 	public static Candidate permitWithDecision(final String objektId) {
 		return permitBuilder(objektId, "City")
 			.files(PERMIT_FILES)
-			.decision(new DecisionData("Anna Berg", LocalDateTime.of(2019, 4, 30, 9, 0), "Stadigvarande serveringstillstånd", "Tillstånd beviljas.", LocalDate.of(2019, 5, 1), null,
-				List.of("Mat ska serveras"), List.of(PERMIT_FILES.getFirst())))
+			.decision(new DecisionData("Anna Berg", "Anna Berg", LocalDateTime.of(2019, 4, 30, 9, 0), "Stadigvarande serveringstillstånd", "Tillstånd beviljas.", LocalDate.of(2019, 5, 1), null,
+				List.of("Mat ska serveras"), List.of(PERMIT_FILES.getFirst()))
+				.withCase("IAN-2019-" + objektId, "Anna Berg")
+				.withCertificate(certificate(objektId)))
 			.build();
+	}
+
+	/**
+	 * @return a permit without files whose investigation has the section of the premises with the serving area
+	 */
+	public static Candidate permitWithPremisesSection(final String objektId, final String servingArea) {
+		return permitBuilder(objektId, "City")
+			.investigation(new InvestigationData("Serveringstillstånd – Restaurang " + objektId, LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0),
+				InvestigationTexts.NONE)
+				.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor",
+					List.of(servingArea))))))
+			.build();
+	}
+
+	/**
+	 * @return the parameters of the certificate of the decision of {@link #permitWithDecision(String)}, under some of the
+	 *         keys Draken gives them
+	 */
+	private static Map<String, String> certificate(final String objektId) {
+		final var certificate = new LinkedHashMap<String, String>();
+		certificate.put("caseNumber", "IAN-2019-" + objektId);
+		certificate.put("decisionCaseNumber", "IAN-2019-" + objektId);
+		certificate.put("decisionMaker", "Anna Berg");
+		certificate.put("decisionDate", "2019-04-30");
+		certificate.put("validFrom", "2019-05-01");
+		return certificate;
 	}
 
 	/**
@@ -189,7 +225,7 @@ public final class TestData {
 	public static Candidate permitWithLegalBasisDocuments(final String objektId, final FileReference... documents) {
 		final var permit = permit(objektId);
 		final var asset = permit.asset();
-		return permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), asset.parameters(), List.of(documents)));
+		return permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), asset.schema(), asset.content(), asset.omitted(), null, List.of(documents)));
 	}
 
 	private static Candidate.Builder permitBuilder(final String objektId, final String area) {
@@ -204,7 +240,18 @@ public final class TestData {
 			.labelPath("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING")
 			.externalTag("diarienummer", "IAN-2019-" + objektId)
 			.parameters(List.of(new Parameter("alktObjektId", "Id i AlkT", List.of(objektId))))
-			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, Map.of("migreradFran", "AlkT")));
+			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, permitContent(objektId), List.of()));
+	}
+
+	/**
+	 * @return the JSON parameter of the post of {@link #permit(String)}, as the source gives it
+	 */
+	public static ObjectNode permitContent(final String objektId) {
+		return JsonFields.object()
+			.text("caseRegistrationNumber", "IAN-2019-" + objektId)
+			.text("externalCaseRegistrationNumber", "IAN-2019-" + objektId)
+			.object("migration", JsonFields.object().text("sourceSystem", "ALKT").flag("issuedDateEstimated", false))
+			.toNode();
 	}
 
 	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId inspectionHolder) {

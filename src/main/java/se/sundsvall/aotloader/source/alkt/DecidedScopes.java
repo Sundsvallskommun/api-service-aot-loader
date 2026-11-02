@@ -12,9 +12,12 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static java.util.regex.Pattern.CANON_EQ;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.UNICODE_CASE;
 import static java.util.regex.Pattern.UNICODE_CHARACTER_CLASS;
@@ -31,7 +34,6 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.SERVING_TIME_UNPLA
  * first time indoors when its text says neither, and for the public or closed company as the text says, otherwise for
  * whom the permit serves. A text that names one of them goes before one that names neither. A temporary permit and farm
  * sales get their one time in Draken's one field. A time that cannot be placed, and a field that would get two
- * different
  * times, are left out of the decision and hit G34, since a wrong time would be worse than none; the times stay on the
  * errand with their texts.
  */
@@ -45,8 +47,8 @@ final class DecidedScopes {
 	private static final Pattern INDOORS = Pattern.compile("inomhus|\\binne\\b", FLAGS);
 	// A room says indoors only in a text that says nothing of outdoors, as "Uteservering vid restaurangen" is outdoors
 	private static final Pattern ROOMS = Pattern.compile("restaurang|lokal|matsal", FLAGS);
-	private static final Pattern CLOSED_COMPANY = Pattern.compile("slutet sällskap|slutna sällskap", FLAGS);
-	private static final Pattern PUBLIC = Pattern.compile("allmänhet", FLAGS);
+	private static final Pattern CLOSED_COMPANY = Pattern.compile("slutet sällskap|slutna sällskap", FLAGS | CANON_EQ);
+	private static final Pattern PUBLIC = Pattern.compile("allmänhet", FLAGS | CANON_EQ);
 
 	private DecidedScopes() {}
 
@@ -112,22 +114,56 @@ final class DecidedScopes {
 	}
 
 	/**
+	 * The serving hours of the permit as its post in PartyAssets has them (decision 87): an entry per time of AlkT, with
+	 * the audience and the place only when its text names them alone, since a time without them holds for all serving,
+	 * and with the text as its description. A time that cannot be read has its start and end in the description.
+	 *
+	 * @return the entries, in the order of AlkT
+	 */
+	static List<JsonFields> servingHours(final PermitRow permit) {
+		return permit.servingTimes().stream()
+			.filter(ServingTime::isSet)
+			.map(DecidedScopes::servingHour)
+			.toList();
+	}
+
+	private static JsonFields servingHour(final ServingTime time) {
+		final var text = Optional.ofNullable(time.text()).orElse("");
+		final var from = SourceValues.parseTime(time.start());
+		final var to = SourceValues.parseTime(time.end());
+		final var readable = from.isPresent() && to.isPresent();
+		final var places = places(text, 0);
+		final var closedCompany = CLOSED_COMPANY.matcher(text).find();
+		final var entry = JsonFields.object();
+		if (closedCompany != PUBLIC.matcher(text).find()) {
+			entry.text("audience", closedCompany ? "CLOSED_COMPANY" : "PUBLIC");
+		}
+		if (places.size() == 1) {
+			entry.text("location", Boolean.TRUE.equals(places.getFirst()) ? "OUTDOOR" : "INDOOR");
+		}
+		return entry
+			.text("from", from.filter(_ -> readable).orElse(null))
+			.text("to", to.filter(_ -> readable).orElse(null))
+			.text("description", readable ? time.text() : Texts.joinWords(Texts.range(time.start(), time.end()), time.text()));
+	}
+
+	/**
 	 * @return the beverages, as the constants Draken knows them by; empty when the permit has none of them. Alcohol-like
 	 *         preparations, ALP, have none.
 	 */
 	private static Optional<Parameter> beverages(final Drinks drinks) {
 		final var values = new ArrayList<String>();
 		if (drinks.starkol()) {
-			values.add("STARKOL");
+			values.add("STRONG_BEER");
 		}
 		if (drinks.vin()) {
-			values.add("VIN");
+			values.add("WINE");
 		}
 		if (drinks.spritdrycker()) {
-			values.add("SPRITDRYCKER");
+			values.add("SPIRITS");
 		}
 		if (drinks.ajaDrycker()) {
-			values.add("CIDER_ELLER_ANDRA_JASTA_ALKOHOLDRYCKER");
+			values.add("OTHER_FERMENTED_BEVERAGES");
 		}
 		return values.isEmpty() ? Optional.empty() : Optional.of(new Parameter(BEVERAGES, BEVERAGES_DISPLAY_NAME, DECISION_PARAMETER_GROUP_DECIDED, values));
 	}
@@ -150,22 +186,7 @@ final class DecidedScopes {
 
 	private static Map<Slot, Range> permanent(final PermitRow permit, final List<Interval> intervals, final List<String> unplaced) {
 		final var candidates = new EnumMap<Slot, List<Candidate>>(Slot.class);
-		for (final var interval : intervals) {
-			final var text = Optional.ofNullable(interval.text()).orElse("");
-			final var places = places(text, interval.number());
-			if (places.isEmpty()) {
-				unplaced.add("%s: texten säger inte inne eller ute".formatted(interval));
-				continue;
-			}
-			final var named = CLOSED_COMPANY.matcher(text).find() != PUBLIC.matcher(text).find();
-			final var audiences = named ? List.of(CLOSED_COMPANY.matcher(text).find()) : audiences(permit);
-			if (audiences.isEmpty()) {
-				unplaced.add("%s: tillståndet anger inte om serveringen är för allmänheten eller slutet sällskap".formatted(interval));
-				continue;
-			}
-			places.forEach(outdoors -> audiences.forEach(closedCompany -> candidates.computeIfAbsent(Slot.of(outdoors, closedCompany), _ -> new ArrayList<>())
-				.add(new Candidate(interval, named))));
-		}
+		intervals.forEach(interval -> place(permit, interval, candidates, unplaced));
 		final var placed = new EnumMap<Slot, Range>(Slot.class);
 		candidates.forEach((slot, list) -> {
 			final var chosen = list.stream().anyMatch(Candidate::named) ? list.stream().filter(Candidate::named).toList() : list;
@@ -177,6 +198,24 @@ final class DecidedScopes {
 			}
 		});
 		return placed;
+	}
+
+	/**
+	 * Adds the interval to the fields its text points out, or, when it points out none, to what cannot be placed.
+	 */
+	private static void place(final PermitRow permit, final Interval interval, final Map<Slot, List<Candidate>> candidates, final List<String> unplaced) {
+		final var text = Optional.ofNullable(interval.text()).orElse("");
+		final var places = places(text, interval.number());
+		final var named = CLOSED_COMPANY.matcher(text).find() != PUBLIC.matcher(text).find();
+		final var audiences = named ? List.of(CLOSED_COMPANY.matcher(text).find()) : audiences(permit);
+		if (places.isEmpty()) {
+			unplaced.add("%s: texten säger inte inne eller ute".formatted(interval));
+		} else if (audiences.isEmpty()) {
+			unplaced.add("%s: tillståndet anger inte om serveringen är för allmänheten eller slutet sällskap".formatted(interval));
+		} else {
+			places.forEach(outdoors -> audiences.forEach(closedCompany -> candidates.computeIfAbsent(Slot.of(outdoors, closedCompany), _ -> new ArrayList<>())
+				.add(new Candidate(interval, named))));
+		}
 	}
 
 	/**

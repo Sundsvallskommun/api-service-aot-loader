@@ -11,14 +11,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
-import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.RuleHit;
-import se.sundsvall.aotloader.source.AssetParameters;
+import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
@@ -100,18 +99,18 @@ final class AlkolNotifications {
 		final var premises = index.place(place);
 		final var ownEvents = ownEvents(place, product);
 		final var files = files(product, registrations, ownEvents);
-		final var assetParameters = new AssetParameters()
-			.premises(premises, null)
-			.text(AssetParameters.PRODUCT, product.parameterText())
-			.text(AssetParameters.DIARY_NUMBER, diaryNumber)
-			.text(AssetParameters.NOTIFIED_DATE_ESTIMATED, notified.estimated() ? Boolean.TRUE.toString() : null)
-			.text(AssetParameters.MIGRATED_FROM, ALKOL.getDisplayName())
-			.build();
+		final var holder = PartyRows.holder(owner, today);
+		// The type of the post tells the product; the schema has no field for it
+		final var asset = new AssetContents(type.getAssetSchema())
+			.caseRegistrationNumber(diaryNumber)
+			.permitHolder(holder)
+			.place(premises, null)
+			.migration(ALKOL, notified.estimated());
 
 		return Candidate.builder(new ItemKey(ALKOL, ANMALAN, notificationId(place, product.code())), type)
 			.placeName(place.namn())
 			.ruleHits(hits)
-			.holder(PartyRows.holder(owner, today))
+			.holder(holder)
 			.place(premises)
 			.title(Texts.title(subject, name))
 			.description(Texts.join("\n", Arrays.asList(
@@ -131,7 +130,7 @@ final class AlkolNotifications {
 				.table(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.COLUMNS, Journal.rows(log(registrations, ownEvents)))
 				.add(CandidateTexts.migrated(today, ALKOL))
 				.build())
-			.asset(new AssetData(null, subject + " på " + name, notified.date(), null, assetParameters))
+			.asset(asset.asset(null, subject + " på " + name, notified.date(), null, List.of()))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}

@@ -10,8 +10,6 @@ import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.source.files.LegalBasis;
 import se.sundsvall.aotloader.support.MigrationException;
 
-import static se.sundsvall.aotloader.Constants.ASSET_PARAMETER_LEGAL_BASIS;
-
 /**
  * Reads the legal basis of a permit from its documents in the file area, for its post in PartyAssets (decision 58).
  */
@@ -58,7 +56,7 @@ class LegalBasisReader {
 		}
 		notes.line(legalBasis.map(value -> "Lagrum: %d ur tillståndets beslut eller bevis".formatted(value.split("; ").length))
 			.orElse("Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget"));
-		return legalBasis.map(value -> candidate.withAsset(asset.withParameter(ASSET_PARAMETER_LEGAL_BASIS, value))).orElse(candidate);
+		return legalBasis.map(value -> candidate.withAsset(asset.withLegalBasis(value))).orElse(candidate);
 	}
 
 	/**

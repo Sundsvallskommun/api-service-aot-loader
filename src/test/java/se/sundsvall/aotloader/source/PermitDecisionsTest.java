@@ -38,7 +38,8 @@ class PermitDecisionsTest {
 		assertThat(data.validTo()).isEqualTo(LocalDate.of(2024, 4, 30));
 		assertThat(data.terms()).containsExactly("Mat ska serveras");
 		assertThat(data.documents()).containsExactly(new FileReference("beslut.rtf", DOCUMENTS), new FileReference("signerat.pdf", ATTACHMENTS));
-		assertThat(data).hasToString("DecisionData[decidedAt=2019-04-30T09:15, terms=1, documents=2, decided=0]");
+		assertThat(data.maker()).isEqualTo("Anna Berg");
+		assertThat(data).hasToString("DecisionData[decidedAt=2019-04-30T09:15, terms=1, documents=2, decided=0, certificate=[]]");
 	}
 
 	@Test
@@ -69,6 +70,8 @@ class PermitDecisionsTest {
 		final var data = PermitDecisions.of(decision, null, " ", days(LocalDate.of(2019, 4, 1), LocalDate.of(2030, 1, 1)), List.of(), files, Source.ALKOL);
 
 		assertThat(data.decidedBy()).isEqualTo("Uppgift saknas i AlkOL");
+		// The source names nobody who made the decision
+		assertThat(data.maker()).isNull();
 		assertThat(data.decidedAt()).isEqualTo(LocalDateTime.of(2019, 4, 1, 0, 0));
 		assertThat(data.description()).isNull();
 		assertThat(data.justification()).isNull();
@@ -83,6 +86,8 @@ class PermitDecisionsTest {
 		final var data = PermitDecisions.fromPermit(days(LocalDate.of(2019, 4, 1), LocalDate.of(2030, 1, 1)), List.of("Mat ska serveras"), Source.ALKT);
 
 		assertThat(data.decidedBy()).isEqualTo("Uppgift saknas i AlkT");
+		// The source names nobody who made the decision
+		assertThat(data.maker()).isNull();
 		assertThat(data.decidedAt()).isEqualTo(LocalDateTime.of(2019, 4, 1, 0, 0));
 		assertThat(data.description()).isEqualTo("Beslutet finns inte i AlkT och bygger på tillståndet");
 		assertThat(data.justification()).isNull();

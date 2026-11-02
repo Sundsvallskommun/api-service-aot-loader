@@ -6,6 +6,7 @@ import generated.se.sundsvall.supportmanagement.DecisionOutcome;
 import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -122,6 +123,25 @@ public interface SupportManagementClient {
 		@PathVariable String namespace,
 		@PathVariable String errandId,
 		@RequestBody Investigation investigation);
+
+	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
+	ResponseEntity<Void> createInvestigationSection(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@RequestBody InvestigationSection section);
+
+	@PatchMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections/{sectionId}",
+		consumes = APPLICATION_JSON_VALUE,
+		produces = APPLICATION_JSON_VALUE)
+	InvestigationSection updateInvestigationSection(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String sectionId,
+		@RequestBody InvestigationSection section);
 
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/attachments/{attachmentId}", produces = ALL_VALUE)
 	ResponseEntity<Void> linkInvestigationAttachment(

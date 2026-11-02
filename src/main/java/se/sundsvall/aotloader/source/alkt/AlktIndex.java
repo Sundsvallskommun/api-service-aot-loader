@@ -40,6 +40,9 @@ import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.partitioningBy;
+import static java.util.stream.Collectors.toList;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
@@ -169,13 +172,15 @@ final class AlktIndex {
 	}
 
 	Place place(final PlaceRow place) {
-		final var group = place.objektGrupp1();
-		final var marking = group != null && PLACE_MARKINGS.contains(group.toUpperCase(Locale.ROOT));
+		final var groups = place.objektGrupper().stream()
+			.map(String::strip)
+			.distinct()
+			.collect(partitioningBy(group -> PLACE_MARKINGS.contains(group.toUpperCase(Locale.ROOT)), mapping(group -> snapshot.codeText(CODE_TYPE_PLACE_GROUP, group), toList())));
 		final var area = snapshot.codeText(CODE_TYPE_AREA, place.omrade());
 		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
 			.add(ERRAND_PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurangBeteckning())
-			.add("typAvServeringsstalle", "Typ av serveringsställe", marking ? null : snapshot.codeText(CODE_TYPE_PLACE_GROUP, group))
-			.add("markering", "Markering", marking ? snapshot.codeText(CODE_TYPE_PLACE_GROUP, group) : null)
+			.add("typAvServeringsstalle", "Typ av serveringsställe", groups.get(false))
+			.add("markering", "Markering", groups.get(true))
 			.add(ErrandParameters.AREA, "Område", area)
 			.build());
 	}

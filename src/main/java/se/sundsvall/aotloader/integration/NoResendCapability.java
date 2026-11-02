@@ -92,7 +92,7 @@ public class NoResendCapability implements Capability {
 		}
 
 		@Override
-		public Retryer clone() { // NOSONAR java:S2975, the Retryer of Feign requires clone
+		public Retryer clone() { // NOSONAR java:S2975 java:S1182, the Retryer of Feign requires clone, and a record copies by its constructor
 			return new NoResendRetryer(delegate.clone());
 		}
 	}

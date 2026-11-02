@@ -273,7 +273,7 @@ class MigrationRunnerTest {
 		assertThatThrownBy(() -> runner.execute(run, scope, single)).isInstanceOf(StackOverflowError.class);
 
 		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
-		assertThat(run.getMessage()).isEqualTo("Körningen avbröts av ett oväntat fel: StackOverflowError");
+		assertThat(run.getMessage()).isEqualTo("Körningen avbröts av ett oväntat fel, som står i appens logg");
 		verify(runRepository).save(run);
 		assertThat(runner.requestStop(run.getId())).isFalse();
 	}

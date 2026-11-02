@@ -23,6 +23,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.AssetFile;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileDetails;
@@ -87,8 +88,10 @@ class AssetFileUploaderTest {
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
 		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(true);
 		final var candidate = withAssetFiles(new AssetFile(gone, "Ritning"), new AssetFile(readable, "Beslut"));
+		final var context = context(fileArea);
+		final var notes = new ReportNotes();
 
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(fileArea), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context, MUNICIPALITY_ID, ASSET_ID, notes))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
 
@@ -140,7 +143,7 @@ class AssetFileUploaderTest {
 		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
 		final var drawing = new FileReference("ritning.pdf", ATTACHMENTS);
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
-			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
 			.files(List.of(drawing))
 			.assetFiles(List.of(new AssetFile(drawing, "Ritning")))
 			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.FLOOR_PLAN, null)))
@@ -159,14 +162,16 @@ class AssetFileUploaderTest {
 	void aFileTheExpiredPostOfANotificationRefusesSpeaksOfTheNotification() {
 		final var reference = new FileReference("ansokan.pdf", ATTACHMENTS);
 		final var notification = Candidate.builder(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
-			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
 			.files(List.of(reference), List.of(new AssetFile(reference, null)), Map.of())
 			.build();
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
 		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), isNull())).thenReturn(false);
 		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
+		final var context = context();
+		final var notes = new ReportNotes();
 
-		assertThatThrownBy(() -> uploader.uploadToAsset(notification, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+		assertThatThrownBy(() -> uploader.uploadToAsset(notification, context, MUNICIPALITY_ID, ASSET_ID, notes))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Anmälan " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
 	}
@@ -177,8 +182,10 @@ class AssetFileUploaderTest {
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
 		when(partyAssets.createAttachment(eq(MUNICIPALITY_ID), eq(ASSET_ID), anyString(), any(), anyString())).thenReturn(false);
 		when(partyAssets.getAsset(MUNICIPALITY_ID, ASSET_ID)).thenReturn(Optional.of(new Asset().id(ASSET_ID).status(Status.EXPIRED)));
+		final var context = context();
+		final var notes = new ReportNotes();
 
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context, MUNICIPALITY_ID, ASSET_ID, notes))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Tillståndet " + ASSET_ID + " i PartyAssets har status EXPIRED och tar inte emot filer");
 	}
@@ -216,8 +223,10 @@ class AssetFileUploaderTest {
 		properties = TestData.properties(documents.resolve("finns-inte").toString(), attachments.toString());
 		final var candidate = withAssetFiles(new AssetFile(new FileReference("beslut.rtf", DOCUMENTS), "Tillståndsbevis"));
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		final var context = context();
+		final var notes = new ReportNotes();
 
-		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context(), MUNICIPALITY_ID, ASSET_ID, new ReportNotes()))
+		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context, MUNICIPALITY_ID, ASSET_ID, notes))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Filarean för AlkT gick inte att läsa");
 		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
@@ -228,7 +237,7 @@ class AssetFileUploaderTest {
 	 */
 	private static Candidate withAssetFiles(final AssetFile... files) {
 		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
-			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, Map.of()))
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
 			.files(Arrays.stream(files).map(AssetFile::reference).toList())
 			.assetFiles(List.of(files))
 			.build();

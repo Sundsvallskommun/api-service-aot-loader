@@ -53,6 +53,7 @@ public final class PermitDecisions {
 			.toList();
 		return new DecisionData(
 			Optional.ofNullable(Texts.trimToNull(maker)).orElse(missingIn(source)),
+			Texts.trimToNull(maker),
 			decidedAt,
 			Texts.trimToNull(typeText),
 			decision.beslutsText(),
@@ -76,7 +77,7 @@ public final class PermitDecisions {
 		if (days.decidedOn() == null) {
 			return null;
 		}
-		return new DecisionData(missingIn(source), days.decidedOn().atStartOfDay(), "Beslutet finns inte i %s och bygger på tillståndet".formatted(source.getDisplayName()), null,
+		return new DecisionData(missingIn(source), null, days.decidedOn().atStartOfDay(), "Beslutet finns inte i %s och bygger på tillståndet".formatted(source.getDisplayName()), null,
 			days.issued(), days.validTo(), terms, List.of());
 	}
 

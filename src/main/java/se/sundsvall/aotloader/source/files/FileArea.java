@@ -71,7 +71,7 @@ public final class FileArea {
 				return new Lookup(LookupResult.TOO_LARGE, name, path, size);
 			}
 			return new Lookup(LookupResult.FOUND, path.getFileName().toString(), path, size);
-		} catch (final IOException e) {
+		} catch (final IOException _) {
 			return new Lookup(LookupResult.UNREADABLE, name, path, 0);
 		}
 	}
@@ -104,7 +104,7 @@ public final class FileArea {
 				return Optional.of("katalogen finns inte eller går inte att läsa");
 			}
 			return Optional.empty();
-		} catch (final InvalidPathException e) {
+		} catch (final InvalidPathException _) {
 			return Optional.of("katalogens sökväg är ogiltig");
 		}
 	}

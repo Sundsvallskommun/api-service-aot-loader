@@ -26,25 +26,37 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesName",
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_tobacco_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].schemaId",
+					"equalTo": "2281_aot_tobacco_party_asset_0.1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.pointOfSale.name",
 					"equalTo": "Kiosken"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.salesRetail",
-					"equalTo": "true"
+					"expression": "$.jsonParameters[0].value.salesTypes[0]",
+					"equalTo": "RETAIL"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.salesWholesale",
-					"equalTo": "false"
+					"expression": "$.jsonParameters[0].value.caseRegistrationNumber",
+					"equalTo": "IAN-2019-100"
 				}
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.caseNumber",
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
 					"equalTo": "IAN-2019-100"
 				}
 			}

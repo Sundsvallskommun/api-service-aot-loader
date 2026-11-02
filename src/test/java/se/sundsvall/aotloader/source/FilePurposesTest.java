@@ -184,8 +184,8 @@ class FilePurposesTest {
 
 	@Test
 	void drawingsAndTheDetailsOfAFileAddedTwice() {
-		assertThat(FilePurposes.ALL).allSatisfy(purpose -> assertThat(FilePurposes.isDrawing(purpose))
-			.isEqualTo(purpose.endsWith("_DRAWING") || purpose.endsWith("FLOOR_PLAN")));
+		assertThat(FilePurposes.ALL.stream().filter(FilePurposes::isDrawing))
+			.containsExactlyInAnyOrderElementsOf(FilePurposes.ALL.stream().filter(purpose -> purpose.endsWith("_DRAWING") || purpose.endsWith("FLOOR_PLAN")).toList());
 		assertThat(FilePurposes.isDrawing(null)).isFalse();
 		final var first = new FileDetails(FilePurposes.STATEMENT_RESPONSE, null);
 		assertThat(first.orElse(new FileDetails(FilePurposes.POLICE_RESPONSE, LocalDateTime.of(2019, 6, 1, 0, 0))))

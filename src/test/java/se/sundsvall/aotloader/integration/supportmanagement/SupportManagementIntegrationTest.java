@@ -10,6 +10,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -178,6 +179,22 @@ class SupportManagementIntegrationTest {
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).extracting(Investigation::getId).containsExactly("i");
 		assertThat(integration.getInvestigations(MUNICIPALITY_ID, "a")).isEmpty();
 		assertThat(integration.createInvestigation(MUNICIPALITY_ID, "a", investigation)).isEqualTo("i-1");
+	}
+
+	@Test
+	void sectionsOfAnInvestigation() {
+		final var section = new InvestigationSection().sectionKey("premises");
+		final var change = new InvestigationSection().parameters(List.of());
+		when(client.createInvestigationSection(MUNICIPALITY_ID, NAMESPACE, "a", "i", section))
+			.thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/a/investigations/i/sections/s-1")).build())
+			.thenReturn(ResponseEntity.ok().build());
+
+		integration.createInvestigationSection(MUNICIPALITY_ID, "a", "i", section);
+		integration.updateInvestigationSection(MUNICIPALITY_ID, "a", "i", "s-1", change);
+
+		verify(client).updateInvestigationSection(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s-1", change);
+		// An answer without the location of the section does not tell that it was created
+		assertThatThrownBy(() -> integration.createInvestigationSection(MUNICIPALITY_ID, "a", "i", section)).isInstanceOf(MigrationException.class);
 	}
 
 	@Test

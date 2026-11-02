@@ -33,9 +33,9 @@ public class SupportManagementDecisionConfiguration {
 			.withErrorDecoder(new ProblemErrorDecoder(CLIENT_ID, Fallbacks.BYPASSED_STATUSES))
 			.withRequestTimeoutsInSeconds(properties.connectTimeout(), properties.readTimeout())
 			.withRetryableOAuth2InterceptorForClientRegistration(clientRepository.findByRegistrationId(CLIENT_ID))
-			// The headers of every other call. SupportManagement heeds X-notify from an AD account too, but not X-Trigger-Process;
-			// no process hears of the decisions all the same, since they are written to a draft with the label that blocks
-			// processes (decision 17)
+			// The headers of every other call. SupportManagement heeds X-notify from an AD account too, but not X-Trigger-Process.
+			// No process hears of the decisions all the same, since they are written to a draft with the label that blocks
+			// processes, see decision 17
 			.withRequestInterceptor(template -> template.header(TRIGGER_PROCESS_HEADER, "false"))
 			.withRequestInterceptor(template -> template.header(NOTIFY_HEADER, "false"))
 			.withRequestInterceptor(new SentByInterceptor(aotLoaderProperties.decisionSentBy().orElse(aotLoaderProperties.sentBy())))

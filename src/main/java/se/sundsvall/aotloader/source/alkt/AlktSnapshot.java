@@ -202,12 +202,14 @@ public record AlktSnapshot(
 
 	/**
 	 * A row of Objekt.
+	 *
+	 * @param objektGrupper ObjektGrupp1-3, those filled in, in that order: the types of the place and its markings
 	 */
 	public record PlaceRow(
 		Integer objektId,
 		Integer agarId,
 		String restaurangBeteckning,
-		String objektGrupp1,
+		List<String> objektGrupper,
 		String namn,
 		String adress,
 		String postnummer,
@@ -220,7 +222,7 @@ public record AlktSnapshot(
 
 		@Override
 		public String toString() {
-			return "PlaceRow[objektId=" + objektId + ", agarId=" + agarId + ", objektGrupp1=" + objektGrupp1 + ", omrade=" + omrade + "]";
+			return "PlaceRow[objektId=" + objektId + ", agarId=" + agarId + ", objektGrupper=" + objektGrupper + ", omrade=" + omrade + "]";
 		}
 	}
 
@@ -236,13 +238,14 @@ public record AlktSnapshot(
 	}
 
 	/**
-	 * A row of Objektpersonal, a person of the serving staff of a place. The personal identity number is not read, since
-	 * the migration does not pass it on (decision 79).
+	 * A row of Objektpersonal, a person of the serving staff of a place. It is personal data: {@link #toString()} shows
+	 * none of it, and of the personal identity number only the date of birth is passed on (decision 87).
 	 *
 	 * @param namn      the name, Namn
+	 * @param personnr  the personal identity number as the source has it, Personnr, null when blank
 	 * @param fromDatum the day the person became serving staff of the place, FROMDatum, null when unknown
 	 */
-	public record StaffRow(Integer objektId, String namn, LocalDate fromDatum) {
+	public record StaffRow(Integer objektId, String namn, String personnr, LocalDate fromDatum) {
 
 		@Override
 		public String toString() {
@@ -312,9 +315,8 @@ public record AlktSnapshot(
 	}
 
 	/**
-	 * An event or the text of a picture, which goes in the journal of the investigation (decisions 44, 46 and 52), or for
-	 * an
-	 * event without an errand in its documentation errand (decision 71).
+	 * An event or the text of a picture. It goes in the journal of the investigation (decisions 44, 46 and 52), or, for an
+	 * event without an errand, in its documentation errand (decision 71).
 	 *
 	 * @param tidpunkt     when the event was or the picture was taken, null when unknown
 	 * @param handelseTyp  the code of the event type, null for a picture

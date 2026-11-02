@@ -35,7 +35,7 @@ final class AlktTestData {
 	private AlktTestData() {}
 
 	static PlaceRow place(final int objektId, final Integer agarId, final String restaurantNumber) {
-		return new PlaceRow(objektId, agarId, restaurantNumber, "12", "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
+		return new PlaceRow(objektId, agarId, restaurantNumber, List.of("12"), "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
 	}
 
 	static ContactRow owner(final int agarId, final String number) {
@@ -229,6 +229,7 @@ final class AlktTestData {
 		private String diaryNumber;
 		private String gtRestaurantNumber;
 		private Integer beslutsId;
+		private ServingArea servingArea = new ServingArea("200", "80", "Matsal");
 
 		private PermitBuilder(final int objektId) {
 			this.objektId = objektId;
@@ -310,6 +311,11 @@ final class AlktTestData {
 			return this;
 		}
 
+		PermitBuilder servingArea(final String hogstaAntal, final String sittplatser, final String serveringslokal) {
+			servingArea = new ServingArea(hogstaAntal, sittplatser, serveringslokal);
+			return this;
+		}
+
 		PermitBuilder beslutsId(final Integer value) {
 			beslutsId = value;
 			return this;
@@ -321,7 +327,7 @@ final class AlktTestData {
 				servingTimes.add(new ServingTime(null, null, null));
 			}
 			return new PermitRow(objektId, gtAgarId, new Drinks(starkol, vin, sprit, aja, alp), new Period(aretRunt, arligStart, arligSlut, periodStart, periodSlut),
-				new Scope(false, uteservering, false, false, false, catering, provsmakning, false, gardsforsaljning), servingPublic, servingPrivate, servingTimes, new ServingArea("200", "80", "Matsal"),
+				new Scope(false, uteservering, false, false, false, catering, provsmakning, false, gardsforsaljning), servingPublic, servingPrivate, servingTimes, servingArea,
 				List.of("En notering"), LocalDate.of(2015, 1, 1), "SN 2015-1", issued, diaryNumber, gtRestaurantNumber, beslutsId);
 		}
 	}

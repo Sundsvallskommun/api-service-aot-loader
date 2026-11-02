@@ -74,6 +74,7 @@ public class AlktRepository {
 	private static final int GENERAL_NOTE_AFTER_INTERVAL = 4;
 	private static final String ARENDE_ID = "ArendeID";
 	private static final String OBJEKT_ID = "ObjektID";
+	private static final String HANDELSE_ID = "HandelseID";
 	private static final String BIFOGADFIL = "Bifogadfil";
 	private static final String HANDELSE_TYP = "HandelseTyp";
 	private static final String HANDELSE_DATUM = "HandelseDatumTid";
@@ -100,7 +101,7 @@ public class AlktRepository {
 		""";
 
 	private static final String SELECT_PLACES = """
-		SELECT o.ObjektID, o.AgarID, o.RestaurangBeteckning, o.ObjektGrupp1, o.ServeringsNamn, o.ServeringsGAdress,
+		SELECT o.ObjektID, o.AgarID, o.RestaurangBeteckning, o.ObjektGrupp1, o.ObjektGrupp2, o.ObjektGrupp3, o.ServeringsNamn, o.ServeringsGAdress,
 		       o.ServeringsPNr, o.ServeringsPOrt, o.TelefonNr1, o.Email, o.OmradesBeteckning, o.ObjBifogadfil, o.ObjBifogadfil2
 		FROM dbo.Objekt o
 		ORDER BY o.ObjektID
@@ -184,9 +185,9 @@ public class AlktRepository {
 		ORDER BY p.AgarID, p.PBIAGID
 		""";
 
-	// Without Personnr, which the migration does not pass on (decision 79)
+	// Personnr gives the date of birth of the person, and only that is passed on (decision 87)
 	private static final String SELECT_STAFF = """
-		SELECT p.ObjektID, p.Namn, p.FROMDatum
+		SELECT p.ObjektID, p.Namn, p.Personnr, p.FROMDatum
 		FROM dbo.Objektpersonal p
 		WHERE p.ObjektID IS NOT NULL
 		  AND (p.PASSIV IS NULL OR p.PASSIV = 0)
@@ -277,7 +278,7 @@ public class AlktRepository {
 			eventFiles.documents(),
 			eventTexts.errandTexts(),
 			jdbc.query(SELECT_PERSONS, (rs, _) -> PartyRows.toPerson(rs)).stream().filter(row -> row.agarId() != null).collect(groupingBy(PersonRow::agarId)),
-			jdbc.query(SELECT_STAFF, (rs, _) -> new StaffRow(integer(rs, "ObjektID"), text(rs, "Namn"), date(rs, "FROMDatum"))).stream().collect(groupingBy(StaffRow::objektId)),
+			jdbc.query(SELECT_STAFF, (rs, _) -> new StaffRow(integer(rs, OBJEKT_ID), text(rs, "Namn"), text(rs, "Personnr"), date(rs, "FROMDatum"))).stream().collect(groupingBy(StaffRow::objektId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
 			readVisits(jdbc, codeTexts));
@@ -361,7 +362,7 @@ public class AlktRepository {
 			integer(rs, OBJEKT_ID),
 			integer(rs, "AgarID"),
 			text(rs, "RestaurangBeteckning"),
-			text(rs, "ObjektGrupp1"),
+			texts(rs, "ObjektGrupp1", "ObjektGrupp2", "ObjektGrupp3"),
 			text(rs, "ServeringsNamn"),
 			text(rs, "ServeringsGAdress"),
 			text(rs, "ServeringsPNr"),
@@ -444,7 +445,7 @@ public class AlktRepository {
 
 	static EventFile toEventFile(final ResultSet rs) throws SQLException {
 		return new EventFile(
-			integer(rs, "HandelseID"),
+			integer(rs, HANDELSE_ID),
 			integer(rs, ARENDE_ID),
 			integer(rs, OBJEKT_ID),
 			text(rs, HANDELSE_TYP),
@@ -455,7 +456,7 @@ public class AlktRepository {
 	}
 
 	static EventFile toEventExtraFile(final ResultSet rs) throws SQLException {
-		return new EventFile(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), text(rs, HANDELSE_TYP), null, dateTime(rs, HANDELSE_DATUM), null, text(rs, BIFOGADFIL));
+		return new EventFile(integer(rs, HANDELSE_ID), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID), text(rs, HANDELSE_TYP), null, dateTime(rs, HANDELSE_DATUM), null, text(rs, BIFOGADFIL));
 	}
 
 	/**
@@ -475,7 +476,7 @@ public class AlktRepository {
 	}
 
 	static EventText toEventText(final ResultSet rs) throws SQLException {
-		return new EventText(integer(rs, "HandelseID"), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID),
+		return new EventText(integer(rs, HANDELSE_ID), integer(rs, ARENDE_ID), integer(rs, OBJEKT_ID),
 			new TextRow(dateTime(rs, HANDELSE_DATUM), text(rs, HANDELSE_TYP), false, text(rs, "HandelseText"), flag(rs, "Sekretess"), text(rs, "DiarieNr")));
 	}
 
@@ -521,17 +522,23 @@ public class AlktRepository {
 	 * @return           the events by the ObjektID of the event, each place's in the order of their ids
 	 */
 	static Map<Integer, List<PlaceEventRow>> placeEvents(final List<EventText> events, final List<EventFile> files, final Set<Integer> errandIds) {
-		final Predicate<Integer> withoutErrand = arendeId -> arendeId == null || !errandIds.contains(arendeId);
 		final var filesOfEvents = files.stream()
-			.filter(file -> withoutErrand.test(file.arendeId()) && file.objektId() != null)
+			.filter(file -> isWithoutErrand(file.arendeId(), errandIds) && file.objektId() != null)
 			.collect(groupingBy(EventFile::handelseId, LinkedHashMap::new, flatMapping(file -> file.files(null), toList())));
 		final var placeEvents = new HashMap<Integer, List<PlaceEventRow>>();
 		events.stream()
-			.filter(event -> event.handelseId() != null && event.objektId() != null && withoutErrand.test(event.arendeId()))
+			.filter(event -> event.handelseId() != null && event.objektId() != null && isWithoutErrand(event.arendeId(), errandIds))
 			.sorted(Comparator.comparing(EventText::handelseId))
 			.forEach(event -> placeEvents.computeIfAbsent(event.objektId(), _ -> new ArrayList<>())
 				.add(new PlaceEventRow(event.handelseId(), event.row(), filesOfEvents.getOrDefault(event.handelseId(), List.of()))));
 		return placeEvents;
+	}
+
+	/**
+	 * @return true for an event without an errand, or whose errand is missing in Ärende
+	 */
+	private static boolean isWithoutErrand(final Integer arendeId, final Set<Integer> errandIds) {
+		return arendeId == null || !errandIds.contains(arendeId);
 	}
 
 	static FileRow toPicture(final ResultSet rs) throws SQLException {

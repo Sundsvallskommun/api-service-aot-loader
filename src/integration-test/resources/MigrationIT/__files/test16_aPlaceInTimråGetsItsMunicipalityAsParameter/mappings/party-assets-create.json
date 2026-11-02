@@ -26,8 +26,26 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.additionalParameters.premisesMunicipalityId",
+					"expression": "$.jsonParameters[0].value.premises.municipalityId",
 					"equalTo": "2262"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2020-7"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_alcohol_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.migration.sourceSystem",
+					"equalTo": "ALKOL"
 				}
 			}
 		]

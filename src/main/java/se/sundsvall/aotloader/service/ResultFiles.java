@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.db.RunItemRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationRunEntity;
 import se.sundsvall.aotloader.support.Texts;
+
+import static java.util.function.Predicate.not;
+import static java.util.stream.Collectors.joining;
 
 /**
  * Writes the report of a finished run to the result directory as a CSV file for Excel, the same as the API gives, so
@@ -28,6 +32,7 @@ class ResultFiles {
 	private static final Logger LOG = LoggerFactory.getLogger(ResultFiles.class);
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 	private static final int RUN_ID_LENGTH = 8;
+	private static final Pattern UNSAFE = Pattern.compile("[^A-Za-z0-9]+");
 
 	private final RunItemRepository runItemRepository;
 	private final String directory;
@@ -85,13 +90,13 @@ class ResultFiles {
 	}
 
 	private static String safe(final String text) {
-		return Optional.ofNullable(text).orElse("").replaceAll("[^A-Za-z0-9]+", "-").replaceAll("(?:^-)|(?:-$)", "");
+		return UNSAFE.splitAsStream(Optional.ofNullable(text).orElse("")).filter(not(String::isEmpty)).collect(joining("-"));
 	}
 
 	private static void move(final Path from, final Path to) throws IOException {
 		try {
 			Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-		} catch (final AtomicMoveNotSupportedException e) {
+		} catch (final AtomicMoveNotSupportedException _) {
 			Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
 		}
 	}

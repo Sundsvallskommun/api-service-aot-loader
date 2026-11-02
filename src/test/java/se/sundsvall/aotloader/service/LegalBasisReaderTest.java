@@ -50,15 +50,18 @@ class LegalBasisReaderTest {
 		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "borta.rtf", documents.resolve("borta.rtf"), 6));
 		when(fileArea.find(certificate)).thenReturn(new FileArea.Lookup(LookupResult.FOUND, "bevis.rtf", documents.resolve("bevis.rtf"), 50));
 		final var notes = new ReportNotes();
+		final var context = context(fileArea);
+		final var unreadableFirst = TestData.permitWithLegalBasisDocuments("1", unreadable, certificate);
+		final var goneFirst = TestData.permitWithLegalBasisDocuments("1", gone, certificate);
 
-		assertThatThrownBy(() -> reader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", unreadable, certificate), context(fileArea), notes))
+		assertThatThrownBy(() -> reader.withLegalBasis(unreadableFirst, context, notes))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Tillståndets beslut eller bevis på filarean för AlkT gick inte att läsa, och lagrummet läses i nästa körning");
-		assertThatThrownBy(() -> reader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", gone, certificate), context(fileArea), notes))
+		assertThatThrownBy(() -> reader.withLegalBasis(goneFirst, context, notes))
 			.isInstanceOf(MigrationException.class);
 		// A document after the one that states the legal basis is not read
-		assertThat(reader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", certificate, unreadable), context(fileArea), notes).asset().parameters())
-			.containsEntry("legalBasis", "8 kap. 2 § alkohollagen (2010:1622)");
+		assertThat(reader.withLegalBasis(TestData.permitWithLegalBasisDocuments("1", certificate, unreadable), context, notes).asset().legalBasis())
+			.isEqualTo("8 kap. 2 § alkohollagen (2010:1622)");
 	}
 
 	@Test

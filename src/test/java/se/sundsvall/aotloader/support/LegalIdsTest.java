@@ -73,6 +73,34 @@ class LegalIdsTest {
 		assertThat(LegalIds.normalize(raw, TODAY)).isEmpty();
 	}
 
+	@ParameterizedTest
+	@CsvSource({
+		// The date alone, as AlkT has some numbers, with or without the century
+		"780601, 1978-06-01",
+		"780601-, 1978-06-01",
+		"19780601, 1978-06-01",
+		"261012, 2026-10-12",
+		"261013, 1926-10-13",
+		"780601-1234, 1978-06-01",
+		"7806011234, 1978-06-01",
+		"19780601-1234, 1978-06-01",
+		"200101+1234, 1920-01-01",
+		"780661-1234, 1978-06-01",
+		"780661, 1978-06-01"
+	})
+	void birthDate(final String raw, final LocalDate expected) {
+		assertThat(LegalIds.birthDate(raw, TODAY)).contains(expected);
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = {
+		" ", "5566778899", "16556677-8899", "781301", "780632", "20780601", "7806", "78060112", "1978060112345", "78-06-0A"
+	})
+	void noBirthDate(final String raw) {
+		assertThat(LegalIds.birthDate(raw, TODAY)).isEmpty();
+	}
+
 	@Test
 	void digitsOf() {
 		assertThat(LegalIds.digitsOf(" 556677-8899 ")).contains("5566778899");

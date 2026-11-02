@@ -121,7 +121,7 @@ public class SourceDatabases implements DisposableBean {
 	private static boolean allowsSnapshot(final JdbcTemplate jdbc) {
 		try {
 			return Integer.valueOf(1).equals(jdbc.queryForObject(SELECT_SNAPSHOT_ALLOWED, Integer.class));
-		} catch (final DataAccessException e) {
+		} catch (final DataAccessException _) {
 			return false;
 		}
 	}

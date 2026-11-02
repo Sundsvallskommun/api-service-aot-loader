@@ -51,10 +51,28 @@ class SupportTest {
 	}
 
 	@Test
+	void aDiaryNumberIsPartedFromTheDelegationDecisionWrittenAfterIt() {
+		// The forms analysis round 18 found, with the board before DEL or not, and § with or without a blank
+		assertThat(DiaryNumbers.split("MBN/2019:123 MBN DEL/2019 §45")).isEqualTo(new DiaryNumbers.Split("MBN/2019:123", "MBN DEL/2019 §45"));
+		assertThat(DiaryNumbers.split("MBN/2019:123  MBN DEL/2019§45")).isEqualTo(new DiaryNumbers.Split("MBN/2019:123", "MBN DEL/2019§45"));
+		assertThat(DiaryNumbers.split("MBN/2019:1234  DEL/2019 § 123")).isEqualTo(new DiaryNumbers.Split("MBN/2019:1234", "DEL/2019 § 123"));
+		assertThat(DiaryNumbers.split("MBN/2019:1234 MBN DEL2019 §123")).isEqualTo(new DiaryNumbers.Split("MBN/2019:1234", "MBN DEL2019 §123"));
+		assertThat(DiaryNumbers.split("IAN-2019-12345")).isEqualTo(new DiaryNumbers.Split("IAN-2019-12345", null));
+		// Nothing with a digit before the reference, a word that only ends in DEL, and DEL not followed by a year
+		assertThat(DiaryNumbers.split("MBN DEL/2019 §4")).isEqualTo(new DiaryNumbers.Split("MBN DEL/2019 §4", null));
+		assertThat(DiaryNumbers.split("IAN-2019-5 MODEL/2019")).isEqualTo(new DiaryNumbers.Split("IAN-2019-5 MODEL/2019", null));
+		assertThat(DiaryNumbers.split("IAN-2019-5 DEL av beslut")).isEqualTo(new DiaryNumbers.Split("IAN-2019-5 DEL av beslut", null));
+		// Only DEL in capitals, since "del 2" is a part of an errand, not a delegation decision
+		assertThat(DiaryNumbers.split("IAN-2019-5 del 2")).isEqualTo(new DiaryNumbers.Split("IAN-2019-5 del 2", null));
+		assertThat(DiaryNumbers.split(null)).isEqualTo(new DiaryNumbers.Split(null, null));
+	}
+
+	@Test
 	void locations() {
 		assertThat(Locations.idOf(ResponseEntity.created(URI.create("/2281/AOT/errands/abc-123")).build(), "ärendet")).isEqualTo("abc-123");
 		assertThat(Locations.idOf(ResponseEntity.created(URI.create("http://host/2281/assets/xyz/")).build(), "tillståndet")).isEqualTo("xyz");
-		assertThatThrownBy(() -> Locations.idOf(ResponseEntity.ok().build(), "ärendet"))
+		final var withoutLocation = ResponseEntity.ok().build();
+		assertThatThrownBy(() -> Locations.idOf(withoutLocation, "ärendet"))
 			.isInstanceOf(MigrationException.class)
 			.hasMessage("Svaret när ärendet skapades saknade id i Location");
 		assertThatThrownBy(() -> Locations.idOf(null, "relationen")).isInstanceOf(MigrationException.class);

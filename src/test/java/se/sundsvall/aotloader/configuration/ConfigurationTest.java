@@ -2,6 +2,8 @@ package se.sundsvall.aotloader.configuration;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import ch.qos.logback.core.spi.FilterReply;
 import java.io.IOException;
 import java.util.List;
@@ -12,6 +14,7 @@ import org.zalando.logbook.HttpRequest;
 import org.zalando.logbook.HttpResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -31,6 +34,30 @@ class ConfigurationTest {
 			assertThat(threadName).isEqualTo("migration-run");
 		} finally {
 			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	void anErrorThatStopsARunIsLoggedByTheMigration() {
+		final var logger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(ExecutorConfiguration.class);
+		final var appender = new ListAppender<ILoggingEvent>();
+		appender.start();
+		logger.addAppender(appender);
+		final var executor = new ExecutorConfiguration().migrationExecutor();
+		try {
+			executor.execute(() -> {
+				throw new StackOverflowError();
+			});
+
+			await().atMost(5, TimeUnit.SECONDS).until(() -> !appender.list.isEmpty());
+			assertThat(appender.list).singleElement().satisfies(event -> {
+				assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+				assertThat(event.getFormattedMessage()).isEqualTo("migration-run stopped: StackOverflowError");
+				assertThat(event.getThrowableProxy()).isNotNull();
+			});
+		} finally {
+			executor.shutdownNow();
+			logger.detachAppender(appender);
 		}
 	}
 
