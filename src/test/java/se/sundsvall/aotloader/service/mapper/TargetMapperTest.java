@@ -163,7 +163,10 @@ class TargetMapperTest {
 
 		assertThat(stakeholders.get(2)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
-			assertThat(person.getFirstName()).isEqualTo("Person Ett");
+			// The name split, with the first name after the comma, as Draken names a person (decision 93)
+			assertThat(person.getFirstName()).isEqualTo("Anna Maria");
+			assertThat(person.getLastName()).isEqualTo("Svensson");
+			assertThat(person.getOrganizationName()).isNull();
 			assertThat(person.getExternalId()).isEqualTo("person-party-id");
 			assertThat(person.getExternalIdType()).isEqualTo("PRIVATE");
 			assertThat(person.getCountry()).isEqualTo("SVERIGE");
@@ -175,6 +178,9 @@ class TargetMapperTest {
 		});
 		assertThat(stakeholders.get(3)).satisfies(person -> {
 			assertThat(person.getRole()).isEqualTo("CONTACT");
+			// A person without number has the name split all the same
+			assertThat(person.getFirstName()).isEqualTo("John");
+			assertThat(person.getLastName()).isEqualTo("Smith");
 			assertThat(person.getExternalId()).isNull();
 			assertThat(person.getExternalIdType()).isEqualTo("PRIVATE");
 			assertThat(person.getParameters()).extracting("key", "values").containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")));
@@ -230,6 +236,28 @@ class TargetMapperTest {
 			assertThat(holder.getFirstName()).isEqualTo("Okänd Ägare");
 			assertThat(holder.getOrganizationName()).isEqualTo("Okänd Ägare");
 		});
+	}
+
+	@Test
+	void aPersonHasTheNameSplitAndACompanyByItsNameKeepsItWhole() {
+		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
+			.persons(List.of(
+				new Person("Lindqvist  Erik", new LegalId("198001011234", PartyType.PRIVATE), false, List.of("Ledamot")),
+				new Person("Zelda", null, false, List.of("Suppleant")),
+				new Person("Revisionsbyrån i Sundsvall", null, false, List.of("Revisor")),
+				new Person("Berg & Son", null, false, List.of("Ägare"))))
+			.build();
+
+		final var stakeholders = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, Arrays.asList("person-party-id", null, null, null)), TestData.labelIds())
+			.getStakeholders();
+
+		// Draken shows the first name and the last name together (decision 93); a company without number is no person and
+		// keeps its whole name as first name, as before
+		assertThat(stakeholders).extracting("firstName", "lastName", "organizationName", "externalIdType").containsExactly(
+			tuple("Erik", "Lindqvist", null, "PRIVATE"),
+			tuple("Zelda", null, null, "PRIVATE"),
+			tuple("Revisionsbyrån i Sundsvall", null, null, "PRIVATE"),
+			tuple("Berg & Son", null, null, "PRIVATE"));
 	}
 
 	@Test

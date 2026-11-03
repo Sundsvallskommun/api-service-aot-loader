@@ -77,7 +77,7 @@ INSERT INTO dbo.[Ärende_Händelser] VALUES (2, 500, NULL, 'saknas.pdf', NULL, N
 INSERT INTO dbo.[Ärende_Händelser] VALUES (4, 500, '55555555.rtf', NULL, NULL, 'TDBV2', '2019-05-02T13:45:00', NULL)
 INSERT INTO dbo.[Ärende_Händelser] VALUES (5, NULL, NULL, 'serveringsansvarig.pdf', 1, NULL, '2020-01-01', NULL)
 INSERT INTO dbo.[Sökande] VALUES (70, '5566778899', 'Testbolaget AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvan Tolvansson', '191212121212', 'VD', 0, 0)
+INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Tolvansson, Tolvan', '191212121212', 'VD', 0, 0)
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Avgången Ledamot', '191212121212', 'LE', 1, 0)
 -- An owning company among the persons, which is looked up as a company
 INSERT INTO dbo.[PBI_ägare] (AgarID, Namn, Personnr, Befattningskod1, PASSIV, UtlandskPerson) VALUES (10, 'Ägarbolaget AB', '559988-7766', 'ÄB', 0, 0)

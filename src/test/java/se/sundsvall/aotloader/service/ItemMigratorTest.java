@@ -355,11 +355,11 @@ class ItemMigratorTest {
 		assertThat(created.getReporterUserId()).isEqualTo("alkt-migration");
 		assertThat(created.getExternalTags()).extracting("key", "value").contains(tuple("migreringsid", "ALKT-TILLSTAND-1"));
 		// The holder, its contact person, and the persons with significant influence
-		assertThat(created.getStakeholders()).extracting("role", "externalId", "firstName").containsExactly(
-			tuple("PRIMARY", PARTY_ID, null),
-			tuple("CONTACT", null, "Kontakt Person"),
-			tuple("CONTACT", PERSON_PARTY_ID, "Person Ett"),
-			tuple("CONTACT", null, "Utländsk Person"));
+		assertThat(created.getStakeholders()).extracting("role", "externalId", "firstName", "lastName").containsExactly(
+			tuple("PRIMARY", PARTY_ID, null, null),
+			tuple("CONTACT", null, "Kontakt Person", null),
+			tuple("CONTACT", PERSON_PARTY_ID, "Anna Maria", "Svensson"),
+			tuple("CONTACT", null, "John", "Smith"));
 		verify(supportManagement).createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any(), any());
 		assertThat(assetCaptor.getValue().getAssetId()).isEqualTo(ERRAND_ID);
 		assertThat(assetCaptor.getValue().getStatus()).isEqualTo(Status.ACTIVE);

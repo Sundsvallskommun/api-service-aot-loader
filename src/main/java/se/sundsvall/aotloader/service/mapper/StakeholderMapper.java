@@ -15,6 +15,7 @@ import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.support.LegalIds;
+import se.sundsvall.aotloader.support.PersonNames;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.PARAMETER_ORGANIZATION_NUMBER;
@@ -115,9 +116,11 @@ final class StakeholderMapper {
 	}
 
 	/**
-	 * A person with significant influence, which can also be a company. The name is the first name, which Draken shows for
-	 * such a person, and a company has it also as organization name. A person who is only an auditor is no person with
-	 * significant influence, as Draken sees it, and is a contact with the position as its title instead (decision 84).
+	 * A person with significant influence, which can also be a company. A person has the name split into first and last
+	 * name (decision 93), which Draken shows together. A company, by its organization number or by its name, has the whole
+	 * name as first name, which Draken shows for a person with significant influence, and a company by its number has it
+	 * also as organization name. A person who is only an auditor is no person with significant influence, as Draken sees
+	 * it, and is a contact with the position as its title instead (decision 84).
 	 *
 	 * @param partyId the partyId of the person, null when it has none
 	 */
@@ -127,11 +130,15 @@ final class StakeholderMapper {
 			: pbiParameters(person.positions(), PBI_SOURCE_MANUAL);
 		final var stakeholder = new Stakeholder()
 			.role(properties.roles().contact())
-			.firstName(person.name())
 			.country(COUNTRY)
 			.parameters(toParameters(parameters));
 		if (person.isCompany()) {
-			stakeholder.organizationName(person.name());
+			stakeholder.firstName(person.name()).organizationName(person.name());
+		} else if (PersonNames.looksLikeCompany(person.name())) {
+			stakeholder.firstName(person.name());
+		} else {
+			final var name = PersonNames.split(person.name());
+			stakeholder.firstName(name.firstName()).lastName(name.lastName());
 		}
 		if (partyId == null) {
 			unidentified(stakeholder, person.legalId(), parameters);

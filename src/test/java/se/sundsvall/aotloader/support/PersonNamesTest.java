@@ -1,9 +1,9 @@
-package se.sundsvall.aotloader.source.alkt;
+package se.sundsvall.aotloader.support;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import se.sundsvall.aotloader.source.alkt.PersonNames.Split;
+import se.sundsvall.aotloader.support.PersonNames.Split;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +48,52 @@ class PersonNamesTest {
 	@Test
 	void everyBlankAroundTheCommaBecomesOne() {
 		assertThat(PersonNames.split("Berg ,\tAnna\t Maria")).isEqualTo(new Split("Anna Maria", "Berg"));
+	}
+
+	@Test
+	void theBlanksOfANameWithoutCommaDoNotCount() {
+		assertThat(PersonNames.split("  Anna \t Svensson ")).isEqualTo(new Split("Anna", "Svensson"));
+		assertThat(PersonNames.split(" Zelda ")).isEqualTo(new Split("Zelda", null));
+	}
+
+	@Test
+	void noNameHasNeitherName() {
+		assertThat(PersonNames.split(null)).isEqualTo(new Split(null, null));
+		assertThat(PersonNames.split(" \t ")).isEqualTo(new Split(null, null));
+		assertThat(PersonNames.split(" , ")).isEqualTo(new Split(null, null));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"Ägarbolaget AB | true",
+		"Bolaget AB, filial | true",
+		"Tolvans Krog HB | true",
+		"Norsk Mat AS | true",
+		"Dansk Mad ApS | true",
+		"Suomi Oy | true",
+		"Example Ltd. | true",
+		"Krogen Aktiebolag | true",
+		"Bygdegårdsföreningen | true",
+		"Krogen ek. för. | true",
+		"Krogen Ek för | true",
+		"Ek Förberg, Anna | false",
+		"Stiftelsen Gården | true",
+		"Revisionsbyrån i Sundsvall | true",
+		"Berg & Son | true",
+		"Anna Svensson | false",
+		"Svensson, Anna | false",
+		"Abbe Sas | false",
+		"Abdi As | false",
+		"Kabir Hb | false"
+	})
+	void aCompanyIsToldByItsForm(final String name, final boolean company) {
+		assertThat(PersonNames.looksLikeCompany(name)).isEqualTo(company);
+	}
+
+	@Test
+	void noNameIsNoCompany() {
+		assertThat(PersonNames.looksLikeCompany(null)).isFalse();
+		assertThat(PersonNames.looksLikeCompany(" ")).isFalse();
 	}
 
 	@Test

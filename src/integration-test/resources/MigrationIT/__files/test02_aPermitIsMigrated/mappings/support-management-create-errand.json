@@ -91,7 +91,7 @@
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'COMPANY' && @.country == 'SVERIGE')]"
 			},
 			{
-				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan Tolvansson' && @.country == 'SVERIGE')]"
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan' && @.lastName == 'Tolvansson' && @.country == 'SVERIGE')]"
 			},
 			{
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person' && @.externalIdType == 'PRIVATE' && @.country == 'SVERIGE')]"

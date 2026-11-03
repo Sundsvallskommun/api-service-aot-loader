@@ -216,6 +216,13 @@ class MigrationIT extends AbstractAppTest {
 		final List<Map<String, Object>> personParameters = JsonPath.read(created, "$.stakeholders[?(@.externalId == '22222222-aaaa-bbbb-cccc-000000000002')].parameters[*]");
 		assertThat(personParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
 			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Verkställande direktör")));
+		final List<Map<String, Object>> persons = JsonPath.read(created, "$.stakeholders[?(@.externalId == '22222222-aaaa-bbbb-cccc-000000000002')]");
+		assertThat(persons).as("AlkT writes the last name first, before a comma, and the person gets both names (decision 93)")
+			.singleElement()
+			.satisfies(person -> {
+				assertThat(person).containsEntry("firstName", "Tolvan").containsEntry("lastName", "Tolvansson");
+				assertThat(person.get("organizationName")).isNull();
+			});
 		// The holder's contact person is a contact of its own, without the parameter PBI
 		final List<Map<String, Object>> contacts = JsonPath.read(created, "$.stakeholders[?(@.firstName == 'Kontakt Person')]");
 		assertThat(contacts).singleElement().satisfies(contact -> {

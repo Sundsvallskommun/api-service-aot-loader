@@ -1,4 +1,4 @@
-package se.sundsvall.aotloader.source.alkt;
+package se.sundsvall.aotloader.support;
 
 import java.util.Arrays;
 import java.util.List;
@@ -9,14 +9,14 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Splits a whole name as AlkT writes it, in one field, into the first name and the last name (decision 87). After a
- * comma the first name follows the last name. Otherwise the words tell the order, as analysis round 16 found it: the
- * last name comes first when the last word is a common first name and the first word is not, or when the first word is
- * a common last name or has the ending of one and neither word says otherwise. Any other name has its first name first,
- * the most common order: the last word is the last name and the words before it the first names. A prefix such as von
- * or af belongs to the last name, and a name of one word is the first name.
+ * Splits a whole name as AlkT and AlkOL write it, in one field, into the first name and the last name (decisions 87 and
+ * 93). After a comma the first name follows the last name. Otherwise the words tell the order, as analysis round 16
+ * found it: the last name comes first when the last word is a common first name and the first word is not, or when the
+ * first word is a common last name or has the ending of one and neither word says otherwise. Any other name has its
+ * first name first, the most common order: the last word is the last name and the words before it the first names. A
+ * prefix such as von or af belongs to the last name, and a name of one word is the first name.
  */
-final class PersonNames {
+public final class PersonNames {
 
 	private static final Locale SWEDISH = Locale.forLanguageTag("sv-SE");
 	private static final Pattern BLANKS = Pattern.compile("\\s+");
@@ -59,6 +59,13 @@ final class PersonNames {
 	private static final List<String> LAST_NAME_ENDINGS = List.of("son", "berg", "ström", "strom", "qvist", "kvist", "quist", "gren", "lund", "holm", "dahl", "blad", "stedt", "stad",
 		"sjö", "fors", "bäck", "nen");
 	private static final Set<String> PREFIXES = Set.of("von", "af", "de", "van", "der", "den", "du", "la", "le", "al", "el", "da", "di", "dos", "del");
+	// Whole words, compared as written, since a short form in small letters, such as "As", can be a name
+	private static final Set<String> COMPANY_FORMS = Set.of("AB", "HB", "KB", "AS", "ASA", "ApS", "A/S", "Oy", "Oyj", "GmbH", "Ltd", "Ltd.", "LLC", "Inc", "Inc.", "BV",
+		"B.V.", "SA", "S.A.");
+	// Parts of words, in small letters
+	private static final List<String> COMPANY_WORDS = List.of("aktiebolag", "handelsbolag", "kommanditbolag", "förening", "stiftelse", "limited", "revision", "&");
+	// Ekonomisk förening abbreviated, as whole words with the full stops left out
+	private static final String ECONOMIC_ASSOCIATION = " ek för ";
 
 	private PersonNames() {}
 
@@ -66,7 +73,7 @@ final class PersonNames {
 	 * The first name and the last name, either null when the name has none. It is personal data, and
 	 * {@link #toString()} shows none of it.
 	 */
-	record Split(String firstName, String lastName) {
+	public record Split(String firstName, String lastName) {
 
 		@Override
 		public String toString() {
@@ -75,17 +82,21 @@ final class PersonNames {
 	}
 
 	/**
-	 * @param  name the whole name, stripped and with its blanks made one
-	 * @return      the name split
+	 * @param  name the whole name; blanks before, after and between the words do not count
+	 * @return      the name split, with neither name when it is null or blank
 	 */
-	static Split split(final String name) {
-		final var comma = name.indexOf(',');
-		if (comma >= 0) {
-			return new Split(words(name.substring(comma + 1)), words(name.substring(0, comma)));
+	public static Split split(final String name) {
+		final var whole = name == null ? "" : BLANKS.matcher(name.strip()).replaceAll(" ");
+		if (whole.isEmpty()) {
+			return new Split(null, null);
 		}
-		final var words = name.split(" ");
+		final var comma = whole.indexOf(',');
+		if (comma >= 0) {
+			return new Split(words(whole.substring(comma + 1)), words(whole.substring(0, comma)));
+		}
+		final var words = whole.split(" ");
 		if (words.length == 1) {
-			return new Split(name, null);
+			return new Split(whole, null);
 		}
 		final var first = words[0];
 		final var last = words[words.length - 1];
@@ -104,6 +115,21 @@ final class PersonNames {
 			start--;
 		}
 		return new Split(join(words, 0, start), join(words, start, words.length));
+	}
+
+	/**
+	 * @return true when the name is that of a company, which is not split: it has a company form as a word of its own,
+	 *         such as AB, HB, GmbH or ek. för., or a word such as aktiebolag, förening, stiftelse or revision, or an
+	 *         ampersand
+	 */
+	public static boolean looksLikeCompany(final String name) {
+		final var whole = name == null ? null : words(name);
+		if (whole == null) {
+			return false;
+		}
+		final var lowerCase = " " + lowerCase(whole).replace(".", "") + " ";
+		return Arrays.stream(whole.split(" ")).anyMatch(COMPANY_FORMS::contains) || COMPANY_WORDS.stream().anyMatch(lowerCase::contains)
+			|| lowerCase.contains(ECONOMIC_ASSOCIATION);
 	}
 
 	/**
