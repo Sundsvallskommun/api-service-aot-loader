@@ -35,7 +35,7 @@ final class AlktTestData {
 	private AlktTestData() {}
 
 	static PlaceRow place(final int objektId, final Integer agarId, final String restaurantNumber) {
-		return new PlaceRow(objektId, agarId, restaurantNumber, List.of("12"), "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
+		return new PlaceRow(objektId, agarId, restaurantNumber, "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
 	}
 
 	static ContactRow owner(final int agarId, final String number) {

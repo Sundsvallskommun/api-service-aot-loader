@@ -81,17 +81,15 @@ public record Candidate(
 	 * @param description  the description of the errand
 	 * @param labelPaths   the resource paths of the labels the errand gets, besides the label for migrated errands
 	 * @param externalTags the external tags of the errand, besides the one that marks it as migrated
-	 * @param parameters   the parameters of the errand
 	 */
-	public record ErrandContent(String title, String description, List<String> labelPaths, Map<String, String> externalTags, List<Parameter> parameters) {
+	public record ErrandContent(String title, String description, List<String> labelPaths, Map<String, String> externalTags) {
 
 		/** An errand that says nothing. */
-		public static final ErrandContent NONE = new ErrandContent(null, null, List.of(), Map.of(), List.of());
+		public static final ErrandContent NONE = new ErrandContent(null, null, List.of(), Map.of());
 
 		public ErrandContent {
 			labelPaths = labelPaths == null ? List.of() : List.copyOf(labelPaths);
 			externalTags = externalTags == null ? Map.of() : unmodifiableMap(new LinkedHashMap<>(externalTags));
-			parameters = parameters == null ? List.of() : List.copyOf(parameters);
 		}
 
 		@Override
@@ -142,7 +140,6 @@ public record Candidate(
 		private final List<Person> persons = new ArrayList<>();
 		private final List<String> labelPaths = new ArrayList<>();
 		private final Map<String, String> externalTags = new LinkedHashMap<>();
-		private final List<Parameter> parameters = new ArrayList<>();
 		private final List<FileReference> files = new ArrayList<>();
 		private final List<AssetFile> assetFiles = new ArrayList<>();
 		private final Map<FileReference, FileDetails> fileDetails = new LinkedHashMap<>();
@@ -225,11 +222,6 @@ public record Candidate(
 			return this;
 		}
 
-		public Builder parameters(final List<Parameter> values) {
-			this.parameters.addAll(values);
-			return this;
-		}
-
 		public Builder asset(final AssetData value) {
 			this.asset = value;
 			return this;
@@ -278,7 +270,7 @@ public record Candidate(
 		}
 
 		public Candidate build() {
-			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, new ErrandContent(title, description, labelPaths, externalTags, parameters), asset,
+			return new Candidate(key, type, placeName, placeNumber, ruleHits, holder, place, persons, new ErrandContent(title, description, labelPaths, externalTags), asset,
 				new CandidateFiles(files, assetFiles, fileDetails), investigation, permitLink, measures, decision);
 		}
 	}

@@ -17,7 +17,6 @@ import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
-import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
@@ -26,10 +25,9 @@ import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
-import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
-import se.sundsvall.aotloader.source.ParameterList;
+import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitDecisions;
 import se.sundsvall.aotloader.source.PermitDecisions.PermitDays;
@@ -41,7 +39,6 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.PermitViewRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
 import se.sundsvall.aotloader.support.JsonFields;
-import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
@@ -143,21 +140,12 @@ final class AlkolPermits {
 				"Tobakstillstånd för " + name + ".",
 				line("Tillståndstyp", kindsText),
 				CandidateTexts.issuedLine(issued, diaryNumber),
+				line("Handläggare", Texts.join(", ", handlers)),
+				line("Tidigare beviljanden", Texts.join("; ", earlierGrantTexts(fsId, grant))),
+				line("Senaste beslut", latestDecisionText(fsId, grant)),
 				line(NOTIFIED_PRODUCTS + " (gäller hela stället, inte bara detta ärende)", Texts.join("; ", products)))))
 			.labelPaths(index.properties().errandType(ErrandType.TOBACCO_PERMIT).labels())
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
-			.parameters(new ParameterList()
-				.add(ErrandParameters.ALKOL_FS_ID, "Id i AlkOL", String.valueOf(fsId))
-				.add("tillstandstyp", "Tillståndstyp", kindsText)
-				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(issued))
-				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
-				.add(ErrandParameters.HANDLERS, "Handläggare i AlkOL", handlers)
-				.add("tidigareBeviljanden", "Tidigare beviljanden", earlierGrantTexts(fsId, grant))
-				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkOL", latestDecisionText(fsId, grant))
-				.add("anmaldaProdukter", NOTIFIED_PRODUCTS, products)
-				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", notes)
-				.add(CandidateTexts.migrated(today, ALKOL))
-				.build())
 			.asset(post)
 			.files(files.build(), files.assetFiles(), files.details())
 			// The decision says of the permit what the post does (decision 92)
@@ -228,7 +216,7 @@ final class AlkolPermits {
 	 */
 	private String notifiedProduct(final SalesPlaceRow place, final Product product) {
 		final var notified = notifications.notifiedDate(place, product).text();
-		return notified == null ? product.parameterText() : product.parameterText() + ", anmäld " + notified;
+		return notified == null ? product.text() : product.text() + ", anmäld " + notified;
 	}
 
 	private List<Person> persons(final ContactRow owner) {
@@ -236,14 +224,14 @@ final class AlkolPermits {
 	}
 
 	/**
-	 * @param  shownNote the note of the place, which the permit already shows as a parameter; null when none
-	 * @return           the investigation of the tobacco permit from the errand of its latest grant (decision 46), without
-	 *                   the note already shown
+	 * @param  placeNote the note of the sales place, which comes first among the notes; null when none
+	 * @return           the investigation of the tobacco permit from the errand of its latest grant (decision 46), with the
+	 *                   note of the place, also when there is no such errand
 	 */
-	private InvestigationData permitInvestigation(final String title, final DecisionRow grant, final ErrandRow grantErrand, final String shownNote) {
+	private InvestigationData permitInvestigation(final String title, final DecisionRow grant, final ErrandRow grantErrand, final String placeNote) {
 		return PermitInvestigations.of(title, Stream.ofNullable(grantErrand).map(ErrandRow::oppnad).toList(),
 			Stream.ofNullable(grantErrand).map(ErrandRow::avslutad).toList(), grant == null ? null : grant.beslutsDatum(),
-			grantErrand == null ? InvestigationTexts.NONE : index.investigationTexts(grantErrand, shownNote));
+			grantErrand == null ? Journal.investigation(Stream.ofNullable(Texts.trimToNull(placeNote)).toList(), List.of(), List.of()) : index.investigationTexts(grantErrand, placeNote));
 	}
 
 	/**

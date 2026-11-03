@@ -41,8 +41,7 @@ class PersonalDataTest {
 		assertHidden(new Person(NAME, legalId, false, List.of("VD")));
 		assertHidden(new PermitLink(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true), legalId, legalId, null));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
-		assertHidden(new Candidate.ErrandContent("Serveringstillstånd – " + NAME, NAME + " " + NUMBER, List.of("TAGROOT/X"), Map.of("diarienummer", NUMBER),
-			List.of(new Parameter("noteringar", "Noteringar", List.of(NAME)))));
+		assertHidden(new Candidate.ErrandContent("Serveringstillstånd – " + NAME, NAME + " " + NUMBER, List.of("TAGROOT/X"), Map.of("diarienummer", NUMBER)));
 		final var file = new FileReference("Intyg " + NAME + " " + NUMBER + ".pdf", FileReference.FileFolder.ATTACHMENTS);
 		assertHidden(new Candidate.CandidateFiles(List.of(file), List.of(new AssetFile(file, null)), Map.of(file, FileDetails.NONE)));
 		assertHidden(new AssetData(null, "Tillstånd", null, null, AssetSchema.ALCOHOL, JsonFields.object()
@@ -93,10 +92,10 @@ class PersonalDataTest {
 			List.of(NAME + " " + NUMBER), null, null, null, null, null, 1));
 		assertHidden(new AlktSnapshot.ServingArea("100", "50", NAME + " " + NUMBER));
 		assertHidden(new AlktSnapshot.ServingTime("11:00", "01:00", NAME + " " + NUMBER));
-		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", List.of("REST"), NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
+		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
 		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
 		assertHidden(new AlktSnapshot.StaffRow(1, NAME, NUMBER, null));
-		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", List.of(new Parameter("restaurantNumber", null, List.of(NAME)))));
+		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", NAME));
 		assertHidden(new InspectionCandidates.InspectionErrand(Source.ALKT, 1, "07", "Tillsyn", "AOT 2020-1", null, null, List.of(NAME), null, null));
 	}
 

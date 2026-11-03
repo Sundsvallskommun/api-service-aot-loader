@@ -11,7 +11,6 @@ import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Kind;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -53,7 +52,6 @@ class DocumentationCandidatesTest {
 			Händelsen är markerad med sekretess i AlkOL.
 			Ringde om skylten.""");
 		assertThat(candidate.errand().labelPaths()).containsExactly(TestData.DOCUMENTATION);
-		assertThat(candidate.errand().parameters()).extracting(Parameter::key).containsExactly("alkolHandelseId", "handelsetyp", "diarienummer", "sekretess", "migrerad");
 		assertThat(candidate.permitLink().permit()).isEqualTo(permit);
 		assertThat(candidate.permitLink().basis()).isEqualTo(PermitLink.Basis.FILED);
 	}

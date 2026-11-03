@@ -52,34 +52,31 @@
 				"matchesJsonPath": "$.labels[?(@.id == 'label-tobacco-inspection')]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'alkolTillsynsbesokId' && @.values[0] == '950')]"
+				"matchesJsonPath": "$[?(@.description =~ /.* 2024-05-03\\.<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'besoksdatum' && @.values[0] == '2024-05-03')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tid: 14:00–14:20<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'besokstid' && @.values[0] == '14:00–14:20')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynsart: Kontrollköp<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsart' && @.values[0] == 'Kontrollköp')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>- Påträngande reklam i butik<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'anmarkningar' && @.values[0] == 'Påträngande reklam i butik')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Kontrollant: Per Eriksson, 7, PE<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'kontrollant' && @.displayName == 'Kontrollant i AlkOL' && @.values.length() == 3 && @.values[0] == 'Per Eriksson' && @.values[1] == '7' && @.values[2] == 'PE')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Anteckning: Köpet nekades\\.<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'anteckning' && @.values[0] == 'Köpet nekades.')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynsomgang' && @.values.length() == 1 && @.values[0] == 'Kontrollköp vecka 18, 2024-05-03')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynen gällde: Tobak, E-cigaretter<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'tillsynenGallde' && @.values.length() == 2 && @.values[0] == 'Tobak' && @.values[1] == 'E-cigaretter')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'anmaltBesok' && @.values.length() == 1 && @.values[0] == 'Ja')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Anmält besök: Ja<\\/p>.*/)]"
 			},
 			{
 				"matchesJsonPath": "$[?(@.measures.length() == 1)]"

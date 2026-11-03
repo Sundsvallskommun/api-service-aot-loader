@@ -8,11 +8,11 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
@@ -22,13 +22,11 @@ import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.DiaryNumberCounts;
-import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.OwnerNumbers;
-import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
@@ -40,10 +38,6 @@ import se.sundsvall.aotloader.source.files.SharedFileNames;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
-import static java.util.stream.Collectors.mapping;
-import static java.util.stream.Collectors.partitioningBy;
-import static java.util.stream.Collectors.toList;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
@@ -51,7 +45,6 @@ import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_AREA;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_DECISION;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_EVENT;
-import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GROUP;
 
 /**
  * The snapshot of AlkT indexed by place and errand, with what the serving permits and the inspections both read from
@@ -60,7 +53,6 @@ import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GR
  */
 final class AlktIndex {
 
-	private static final Set<String> PLACE_MARKINGS = Set.of("UNG", "UTOK");
 	private static final String PICTURE_HEADING = "Bild";
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
 		.comparing(PlaceDocument::tidpunkt, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
@@ -172,17 +164,8 @@ final class AlktIndex {
 	}
 
 	Place place(final PlaceRow place) {
-		final var groups = place.objektGrupper().stream()
-			.map(String::strip)
-			.distinct()
-			.collect(partitioningBy(group -> PLACE_MARKINGS.contains(group.toUpperCase(Locale.ROOT)), mapping(group -> snapshot.codeText(CODE_TYPE_PLACE_GROUP, group), toList())));
-		final var area = snapshot.codeText(CODE_TYPE_AREA, place.omrade());
-		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
-			.add(ERRAND_PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurangBeteckning())
-			.add("typAvServeringsstalle", "Typ av serveringsställe", groups.get(false))
-			.add("markering", "Markering", groups.get(true))
-			.add(ErrandParameters.AREA, "Område", area)
-			.build());
+		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codeText(CODE_TYPE_AREA, place.omrade()),
+			place.restaurangBeteckning());
 	}
 
 	/**
@@ -244,17 +227,20 @@ final class AlktIndex {
 	 *         their decisions with their texts and who made them (decisions 44, 46, 52 and 53)
 	 */
 	InvestigationTexts investigationTexts(final Collection<Integer> arendeIds) {
-		return investigationTexts(arendeIds, List.of());
+		return investigationTexts(arendeIds, List.of(), List.of());
 	}
 
 	/**
-	 * @param  shownNotes notes the errand already shows as a parameter, which the investigation leaves out, since AlkT
-	 *                    copies the notes of the issuing errand to the permit
-	 * @return            the texts of the investigation of the errands, as above, without the notes already shown
+	 * @param  ownNotes   notes of the permit itself, which come first among the notes; a note of an errand that is the
+	 *                    same comes only once, since AlkT copies the notes of the issuing errand to the permit
+	 * @param  shownNotes notes the errand's description already shows, which the investigation leaves out
+	 * @return            the texts of the investigation of the errands, as above, with the permit's own notes first and
+	 *                    without the notes already shown
 	 */
-	InvestigationTexts investigationTexts(final Collection<Integer> arendeIds, final Collection<String> shownNotes) {
+	InvestigationTexts investigationTexts(final Collection<Integer> arendeIds, final List<String> ownNotes, final Collection<String> shownNotes) {
+		final var errandNotes = arendeIds.stream().map(snapshot.errands()::get).filter(Objects::nonNull).flatMap(errand -> errand.notes().stream());
 		return Journal.investigation(
-			arendeIds.stream().map(snapshot.errands()::get).filter(Objects::nonNull).flatMap(errand -> errand.notes().stream()).filter(note -> !shownNotes.contains(note)).distinct().toList(),
+			Stream.concat(ownNotes.stream(), errandNotes).filter(note -> !Texts.isBlank(note)).filter(note -> !shownNotes.contains(note)).distinct().toList(),
 			arendeIds.stream()
 				.flatMap(arendeId -> entries(snapshot.textsOf(arendeId), Optional.ofNullable(snapshot.errands().get(arendeId)).map(ErrandRow::diarieNr).orElse(null)).stream())
 				.toList(),
@@ -278,17 +264,13 @@ final class AlktIndex {
 	}
 
 	/**
-	 * @param  withValidTo true to tell the last day the decision holds, when it has one
-	 * @return             the decision as "type, date", null for no decision
+	 * @return the decision as "type, date", null for no decision
 	 */
-	String decisionText(final DecisionRow decision, final boolean withValidTo) {
+	String decisionText(final DecisionRow decision) {
 		if (decision == null) {
 			return null;
 		}
-		return Texts.join(", ", Arrays.asList(
-			snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()),
-			SourceValues.format(decision.beslutsDatum()),
-			withValidTo && decision.giltigtTom() != null ? "giltigt till " + decision.giltigtTom() : null));
+		return Texts.join(", ", Arrays.asList(snapshot.codeText(CODE_TYPE_DECISION, decision.beslutsTyp()), SourceValues.format(decision.beslutsDatum())));
 	}
 
 	/**

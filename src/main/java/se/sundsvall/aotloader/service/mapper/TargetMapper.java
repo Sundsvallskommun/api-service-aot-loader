@@ -45,12 +45,11 @@ import se.sundsvall.aotloader.support.JsonValues;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_EMAIL;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_NAME;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_PHONE;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_AREA;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_CODE;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_STREET_ADDRESS;
+import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
@@ -133,9 +132,7 @@ public class TargetMapper {
 			.businessRelated(true)
 			.externalTags(externalTags(candidate))
 			.stakeholders(stakeholders.stakeholders(candidate, parties))
-			.parameters(ErrandParameterMapper.toParameters(Stream.of(candidate.errand().parameters(), premisesParameters(candidate), List.of(premisesMunicipalityParameter(candidate, municipalityId)))
-				.flatMap(List::stream)
-				.toList()));
+			.parameters(ErrandParameterMapper.toParameters(Stream.concat(premisesParameters(candidate).stream(), Stream.of(premisesMunicipalityParameter(candidate, municipalityId))).toList()));
 		// A visit always sends its list, also an empty one, so that an update of a draft replaces what an earlier run gave it
 		if (candidate.type().getKind() == Kind.TILLSYNSBESOK) {
 			errand.measures(measures(candidate, settings.measureType()));
@@ -416,10 +413,10 @@ public class TargetMapper {
 	}
 
 	/**
-	 * The serving place or sales place as parameters of the errand, under the keys pw-alkt reads (section 7.2.1), followed
-	 * by the place's own parameters, e.g. the restaurant number. A serving place of AlkT has the display names Draken
-	 * writes, a sales place of AlkOL the same for a sales place, and the postal code is written without blanks, as Draken
-	 * writes it.
+	 * The serving place or sales place as parameters of the errand, under the keys Draken and pw-alkt read (section 7.2.1,
+	 * decision 94): its name, address and the restaurant number of a serving place. A serving place of AlkT has the display
+	 * names Draken writes, a sales place of AlkOL the same for a sales place, and the postal code is written without
+	 * blanks, as Draken writes it.
 	 */
 	private static List<Parameter> premisesParameters(final Candidate candidate) {
 		final var place = candidate.place();
@@ -427,15 +424,13 @@ public class TargetMapper {
 			return List.of();
 		}
 		final var premises = candidate.key().source() == Source.ALKT ? "Serveringsställets" : "Försäljningsställets";
-		final var parameters = new ParameterList()
+		return new ParameterList()
 			.add(ERRAND_PARAMETER_PREMISES_NAME, premises + " namn", place.name())
 			.add(ERRAND_PARAMETER_PREMISES_STREET_ADDRESS, premises + " gatuadress", place.address())
 			.add(ERRAND_PARAMETER_PREMISES_POSTAL_CODE, premises + " postnummer", Texts.withoutBlanks(place.zipCode()))
 			.add(ERRAND_PARAMETER_PREMISES_POSTAL_AREA, premises + " postort", place.city())
-			.add(ERRAND_PARAMETER_PREMISES_PHONE, premises + " telefon", place.phone())
-			.add(ERRAND_PARAMETER_PREMISES_EMAIL, premises + " e-post", place.email())
+			.add(ERRAND_PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurantNumber())
 			.build();
-		return Stream.concat(parameters.stream(), place.parameters().stream()).toList();
 	}
 
 	/**

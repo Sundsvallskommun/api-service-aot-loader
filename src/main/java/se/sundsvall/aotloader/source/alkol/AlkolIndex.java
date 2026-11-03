@@ -21,13 +21,11 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.DiaryNumberCounts;
-import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.OwnerNumbers;
-import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
@@ -322,11 +320,7 @@ final class AlkolIndex {
 	}
 
 	Place place(final SalesPlaceRow place) {
-		final var area = snapshot.codes().area(place.omrade());
-		return new Place(place.namn(), place.gatuadress(), place.postnummer(), place.postort(), place.telefon(), place.email(), area, new ParameterList()
-			.add("kategori", "Kategori", snapshot.codes().category(place.kategori()))
-			.add(ErrandParameters.AREA, "Område", area)
-			.build());
+		return new Place(place.namn(), place.gatuadress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codes().area(place.omrade()), null);
 	}
 
 	/**
@@ -338,12 +332,13 @@ final class AlkolIndex {
 	}
 
 	/**
-	 * @param  shownNote a note the errand already shows as a parameter, which the investigation leaves out; null when none
-	 * @return           the texts of the investigation of the errand, as above, without the note already shown
+	 * @param  ownNote a note of the permit itself, the note of the sales place, which comes first among the notes and only
+	 *                 once; null when none
+	 * @return         the texts of the investigation of the errand, as above, with the permit's own note first
 	 */
-	InvestigationTexts investigationTexts(final ErrandRow errand, final String shownNote) {
+	InvestigationTexts investigationTexts(final ErrandRow errand, final String ownNote) {
 		return Journal.investigation(
-			Stream.ofNullable(errand.noteringar()).filter(note -> !note.equals(shownNote)).toList(),
+			Stream.of(ownNote, errand.noteringar()).filter(note -> !Texts.isBlank(note)).distinct().toList(),
 			eventsOfErrand(errand.arendeId()).stream().map(event -> journalEntry(event, errand.diarieNr())).toList(),
 			decisionsOfErrand(errand.arendeId()).stream().map(this::journalEntry).toList());
 	}

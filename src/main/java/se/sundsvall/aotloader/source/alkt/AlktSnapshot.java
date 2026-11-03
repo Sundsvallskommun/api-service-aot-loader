@@ -64,7 +64,6 @@ public record AlktSnapshot(
 	public static final String CODE_TYPE_INSPECTION_KIND = "L";
 	public static final String CODE_TYPE_CONDITION = "O";
 	public static final String CODE_TYPE_POSITION = "P";
-	public static final String CODE_TYPE_PLACE_GROUP = "Q";
 	public static final String CODE_TYPE_REMARK = "V";
 
 	@Override
@@ -202,14 +201,11 @@ public record AlktSnapshot(
 
 	/**
 	 * A row of Objekt.
-	 *
-	 * @param objektGrupper ObjektGrupp1-3, those filled in, in that order: the types of the place and its markings
 	 */
 	public record PlaceRow(
 		Integer objektId,
 		Integer agarId,
 		String restaurangBeteckning,
-		List<String> objektGrupper,
 		String namn,
 		String adress,
 		String postnummer,
@@ -222,7 +218,7 @@ public record AlktSnapshot(
 
 		@Override
 		public String toString() {
-			return "PlaceRow[objektId=" + objektId + ", agarId=" + agarId + ", objektGrupper=" + objektGrupper + ", omrade=" + omrade + "]";
+			return "PlaceRow[objektId=" + objektId + ", agarId=" + agarId + ", omrade=" + omrade + "]";
 		}
 	}
 

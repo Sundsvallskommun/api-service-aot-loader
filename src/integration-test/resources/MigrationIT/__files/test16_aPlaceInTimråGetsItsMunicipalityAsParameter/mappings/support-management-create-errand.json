@@ -59,12 +59,6 @@
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'omrade')].values[0]",
-					"equalTo": "Timrå"
-				}
-			},
-			{
-				"matchesJsonPath": {
 					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
 					"equalTo": "2262"
 				}

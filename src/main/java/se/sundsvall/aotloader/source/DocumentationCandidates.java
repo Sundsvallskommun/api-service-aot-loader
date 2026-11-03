@@ -4,14 +4,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ItemKey;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.PlacePermit;
@@ -24,7 +22,6 @@ import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
-import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
 
 /**
  * Builds the documentation errands of the events of the places that belong to no errand, the same way for both sources
@@ -90,7 +87,6 @@ public final class DocumentationCandidates {
 			.description(description(event, typeText, Optional.ofNullable(placeName).orElse(unknownPlace)))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, event.diaryNumber())
-			.parameters(parameters(event, typeText))
 			.permitLink(PermitLink.filedUnder(filedUnder));
 	}
 
@@ -104,18 +100,6 @@ public final class DocumentationCandidates {
 			line("Diarienummer", event.diaryNumber()),
 			event.confidential() ? "Händelsen är markerad med sekretess i " + event.source().getDisplayName() + "." : null,
 			Texts.trimToNull(event.text())));
-	}
-
-	private List<Parameter> parameters(final PlaceEvent event, final String typeText) {
-		final var sourceName = event.source().getDisplayName();
-		return new ParameterList()
-			.add(event.source().name().toLowerCase(Locale.ROOT) + "HandelseId", "Id för händelsen i " + sourceName, String.valueOf(event.handelseId()))
-			.add("handelsetyp", "Händelsetyp i " + sourceName, typeText)
-			.add("handelsedatum", "Händelsedatum", SourceValues.format(event.day()))
-			.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i " + sourceName, event.diaryNumber())
-			.add("sekretess", "Sekretess", event.confidential() ? "Ja" : null)
-			.add(migrated(today, event.source()))
-			.build();
 	}
 
 	/**

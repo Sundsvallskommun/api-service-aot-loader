@@ -40,7 +40,6 @@ import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
@@ -96,14 +95,13 @@ class TargetMapperTest {
 		assertThat(errand.getAssignedUserId()).isNull();
 		assertThat(errand.getExternalTags()).extracting(ExternalTag::getKey, ExternalTag::getValue)
 			.containsExactly(tuple("migreringsid", "ALKT-TILLSTAND-1"), tuple("diarienummer", "IAN-2019-1"));
-		// The place is in the parameters of the errand, under the keys pw-alkt reads and with the display names Draken writes
+		// Only the parameters Draken and pw-alkt read (decision 94): the place under their keys, with the display names
+		// Draken writes, and the municipality
 		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(
-			tuple("alktObjektId", "Id i AlkT", List.of("1")),
 			tuple("premisesName", "Serveringsställets namn", List.of("Restaurang 1")),
 			tuple("premisesStreetAddress", "Serveringsställets gatuadress", List.of("Storgatan 1")),
 			tuple("premisesPostalCode", "Serveringsställets postnummer", List.of("85230")),
 			tuple("premisesPostalArea", "Serveringsställets postort", List.of("Sundsvall")),
-			tuple("premisesPhone", "Serveringsställets telefon", List.of("060-2")),
 			tuple("restaurantNumber", "Valt restaurangnummer", List.of("12345678")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
 	}
@@ -111,7 +109,7 @@ class TargetMapperTest {
 	@Test
 	void aSalesPlaceIsNamedSoAndItsPostalCodeHasNoBlanks() {
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
-			.place(new Place("Kiosken", "Torget 2", "852 31", "Sundsvall", null, "kiosk@example.com", null, List.of()))
+			.place(new Place("Kiosken", "Torget 2", "852 31", "Sundsvall", null, "kiosk@example.com", null, null))
 			.build();
 
 		final var parameters = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getParameters();
@@ -121,7 +119,6 @@ class TargetMapperTest {
 			tuple("premisesStreetAddress", "Försäljningsställets gatuadress", List.of("Torget 2")),
 			tuple("premisesPostalCode", "Försäljningsställets postnummer", List.of("85231")),
 			tuple("premisesPostalArea", "Försäljningsställets postort", List.of("Sundsvall")),
-			tuple("premisesEmail", "Försäljningsställets e-post", List.of("kiosk@example.com")),
 			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
 	}
 
@@ -397,13 +394,13 @@ class TargetMapperTest {
 	void aDraftUpdateHasNoReporterAndALongParameterValueIsSplit() {
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
 			.labelPath("TAGROOT/MIGRATED_ERRAND")
-			.parameters(List.of(new Parameter("noteringar", "Noteringar", List.of("a".repeat(3000) + " " + "b".repeat(10)))))
+			.place(new Place("a".repeat(3000) + " " + "b".repeat(10), null, null, null, null, null, null, null))
 			.build();
 
 		final var errand = mapper.toDraftUpdate(candidate, MUNICIPALITY_ID, new PartyIds(null, null), TestData.labelIds());
 
 		assertThat(errand.getParameters().getFirst().getValues()).containsExactly("a".repeat(3000), "b".repeat(10));
-		// An errand without a place belongs to the municipality of the run
+		// A place without an area belongs to the municipality of the run
 		assertThat(errand.getParameters().getLast()).extracting("key", "values").containsExactly("premisesMunicipalityId", List.of("2281"));
 		assertThat(errand.getLabels()).extracting(ErrandLabel::getId).containsExactly("label-migrated");
 		assertThat(errand.getLifecycle()).isNull();

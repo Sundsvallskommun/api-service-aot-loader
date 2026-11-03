@@ -13,7 +13,6 @@ import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.MeasureData;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
@@ -128,11 +127,6 @@ class InspectionVisitCandidatesTest {
 			Kontrollant: Polisen
 			Anmärkningar: Inga anmärkningar registrerade
 			Serveringspersonal: Ägaren på plats""");
-		assertThat(candidate.errand().parameters()).filteredOn(parameter -> "kontrollant".equals(parameter.key())).singleElement().satisfies(parameter -> {
-			assertThat(parameter.displayName()).isEqualTo("Kontrollant i AlkT");
-			assertThat(parameter.values()).containsExactly("Polisen");
-		});
-		assertThat(candidate.errand().parameters()).extracting(Parameter::key).doesNotContain("handlaggare", "anmarkningar");
 	}
 
 	@Test

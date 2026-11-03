@@ -6,7 +6,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -19,7 +18,6 @@ import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.MeasureData;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.PlacePermit;
@@ -35,11 +33,10 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.VISIT_DATE_INVALID;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
-import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
 
 /**
  * Builds the candidates of the inspection visits of a source, the same way for both sources (section 7.7.2): which
- * visits are migrated, and their rules, title, description, labels and parameters. A visit gets no holder, since the
+ * visits are migrated, and their rules, title, description and labels. A visit gets no holder, since the
  * source does not tell which holder the place had at the time. Its day relates it to the permit errand instead
  * (decision 61).
  */
@@ -118,7 +115,6 @@ public final class InspectionVisitCandidates {
 			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows, investigation.completedAt()))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
-			.parameters(parameters(content))
 			.permitLink(new PermitLink(permit, null, null, visit.datum()));
 	}
 
@@ -155,25 +151,6 @@ public final class InspectionVisitCandidates {
 		lines.add(line("Serveringspersonal", Texts.join(", ", content.staff())));
 		lines.add(line("Anteckning", visit.fritext()));
 		return Texts.join("\n", lines);
-	}
-
-	private List<Parameter> parameters(final VisitContent content) {
-		final var visit = content.visit();
-		final var source = type.getSource();
-		return new ParameterList()
-			.add(source.name().toLowerCase(Locale.ROOT) + "TillsynsbesokId", "Id för tillsynsbesöket i " + source.getDisplayName(), String.valueOf(visit.tillfalleNr()))
-			.add("besoksdatum", "Besöksdatum", SourceValues.format(visit.datum()))
-			.add("besokstid", "Tid", content.time())
-			.add("tillsynsart", "Tillsynsart", content.kind())
-			.add("tillsynsomgang", ROUND, roundName(content.round()))
-			.add("tillsynenGallde", "Tillsynen gällde", visit.covered())
-			.add("anmaltBesok", "Anmält besök", announced(visit))
-			.add(ErrandParameters.INSPECTORS, INSPECTOR + " i " + source.getDisplayName(), content.inspectors())
-			.add("serveringspersonal", "Serveringspersonal", content.staff())
-			.add("anmarkningar", REMARKS, content.remarks())
-			.add("anteckning", "Anteckning i " + source.getDisplayName(), visit.fritext())
-			.add(migrated(today, source))
-			.build();
 	}
 
 	/**
@@ -296,7 +273,7 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
-	 * What a visit holds, interpreted once for the description and the parameters.
+	 * What a visit holds, interpreted once for the description, the protocol and the measures.
 	 *
 	 * @param visit      the row of the visit
 	 * @param kind       the text of the kind of inspection

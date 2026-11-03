@@ -34,7 +34,7 @@
 				"doesNotMatch": "(?s).*handelselogg.*"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Karin Andersson')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Handläggare: Karin Andersson<\\/p>.*/)]"
 			},
 			{
 				"doesNotMatch": "(?s).*\"(reporterUserId|lifecycle)\".*"

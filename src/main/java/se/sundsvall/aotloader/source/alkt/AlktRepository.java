@@ -101,8 +101,8 @@ public class AlktRepository {
 		""";
 
 	private static final String SELECT_PLACES = """
-		SELECT o.ObjektID, o.AgarID, o.RestaurangBeteckning, o.ObjektGrupp1, o.ObjektGrupp2, o.ObjektGrupp3, o.ServeringsNamn, o.ServeringsGAdress,
-		       o.ServeringsPNr, o.ServeringsPOrt, o.TelefonNr1, o.Email, o.OmradesBeteckning, o.ObjBifogadfil, o.ObjBifogadfil2
+		SELECT o.ObjektID, o.AgarID, o.RestaurangBeteckning, o.ServeringsNamn, o.ServeringsGAdress, o.ServeringsPNr, o.ServeringsPOrt, o.TelefonNr1,
+		       o.Email, o.OmradesBeteckning, o.ObjBifogadfil, o.ObjBifogadfil2
 		FROM dbo.Objekt o
 		ORDER BY o.ObjektID
 		""";
@@ -362,7 +362,6 @@ public class AlktRepository {
 			integer(rs, OBJEKT_ID),
 			integer(rs, "AgarID"),
 			text(rs, "RestaurangBeteckning"),
-			texts(rs, "ObjektGrupp1", "ObjektGrupp2", "ObjektGrupp3"),
 			text(rs, "ServeringsNamn"),
 			text(rs, "ServeringsGAdress"),
 			text(rs, "ServeringsPNr"),

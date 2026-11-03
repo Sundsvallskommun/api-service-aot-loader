@@ -3,7 +3,6 @@ package se.sundsvall.aotloader.source.alkol;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -20,11 +19,9 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.ContactRow;
-import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
-import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.SourceRules;
@@ -113,26 +110,39 @@ final class AlkolNotifications {
 			.holder(holder)
 			.place(premises)
 			.title(Texts.title(subject, name))
-			.description(Texts.join("\n", Arrays.asList(
-				subject + " för " + name + ".",
-				line("Anmäld", notified.text()),
-				line("Diarienummer", diaryNumber))))
+			.description(description(subject + " för " + name + ".", notified, diaryNumber,
+				registrations.errands().stream().map(ErrandRow::noteringar).filter(Objects::nonNull).distinct().toList(), Journal.lines(log(registrations, ownEvents))))
 			.labelPaths(index.properties().errandType(type).labels())
 			.externalTag(TAG_NOTIFICATION, notificationId(place, product.code()))
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
-			.parameters(new ParameterList()
-				.add(ErrandParameters.ALKOL_FS_ID, "Id i AlkOL", String.valueOf(place.fsId()))
-				.add("produkt", "Produkt", product.parameterText())
-				.add("anmald", "Anmäld", SourceValues.format(notified.date()))
-				.add("anmaldUppskattat", "Datumet är uppskattat", notified.estimated() ? "Ja" : null)
-				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkOL", diaryNumber)
-				.add(ErrandParameters.NOTES, "Noteringar i AlkOL", registrations.errands().stream().map(ErrandRow::noteringar).filter(Objects::nonNull).distinct().toList())
-				.table(ErrandParameters.EVENT_LOG, "Händelselogg i AlkOL", Journal.COLUMNS, Journal.rows(log(registrations, ownEvents)))
-				.add(CandidateTexts.migrated(today, ALKOL))
-				.build())
 			.asset(asset.asset(null, subject + " på " + name, notified.date(), null, List.of()))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
+	}
+
+	/**
+	 * The description of the notification. A notification has no investigation, so the notes of its errands and its
+	 * events, the event log, are told here, where Draken shows them.
+	 *
+	 * @param  notes  the notes of the errands that register or confirm the product
+	 * @param  events the events as lines of a journal, in order of time
+	 * @return        the first line, the day of the notification and the diary number, followed by the notes and the
+	 *                events under a heading each when there are any
+	 */
+	private static String description(final String firstLine, final NotifiedDate notified, final String diaryNumber, final List<String> notes, final List<String> events) {
+		final var lines = new ArrayList<String>();
+		lines.add(firstLine);
+		lines.add(line("Anmäld", notified.text()));
+		lines.add(line("Diarienummer", diaryNumber));
+		if (!notes.isEmpty()) {
+			lines.add("Noteringar:");
+			lines.addAll(notes);
+		}
+		if (!events.isEmpty()) {
+			lines.add("Händelser:");
+			lines.addAll(events);
+		}
+		return Texts.join("\n", lines);
 	}
 
 	/**
@@ -292,12 +302,12 @@ final class AlkolNotifications {
 	 */
 	private static void notifiedDateHits(final Product product, final Registrations registrations, final NotifiedDate notified, final List<RuleHit> hits) {
 		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
-			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.parameterText()));
+			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.text()));
 			if (notified.date() == null) {
-				hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.parameterText()));
+				hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.text()));
 			}
 		} else if (notified.date() == null) {
-			hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.parameterText() + ", anmälan saknar datum"));
+			hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.text() + ", anmälan saknar datum"));
 		}
 	}
 

@@ -85,7 +85,7 @@
 				"doesNotMatch": "(?s).*handelselogg.*"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handlaggare' && @.values.length() == 1 && @.values[0] == 'Anna Berg')]"
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Handläggare: Anna Berg<\\/p>.*/)]"
 			},
 			{
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'COMPANY' && @.country == 'SVERIGE')]"
@@ -136,15 +136,12 @@
 				}
 			},
 			{
-				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'villkor')].values[0]",
-					"equalTo": "Krav på bordsservering: Mat ska serveras"
-				}
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>- Krav på bordsservering: Mat ska serveras<\\/p>.*/)]"
 			},
 			{
 				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'serveringsansvariga' || @.key == 'PREMISES_SERVING_AREA')]",
-					"absent": true
+					"expression": "$.parameters.length()",
+					"equalTo": "6"
 				}
 			},
 			{

@@ -21,7 +21,7 @@ enum Product {
 	TOBAKSFRI_NIKOTIN("TOBAKSFRI_NIKOTIN", "Tobaksfria nikotinprodukter", Set.of("tn"), Set.of("047"), Set.of(), Set.of("MTN"), Set.of());
 
 	private final String code;
-	private final String parameterText;
+	private final String text;
 	private final Set<String> errandTypes;
 	private final Set<String> registrationEvents;
 	private final Set<String> confirmationEvents;
@@ -32,10 +32,10 @@ enum Product {
 	 * @param confirmationTemplates the templates of the letters that confirm a notification of the product, in upper
 	 *                              case: the confirmations and the receipts (decision 38)
 	 */
-	Product(final String code, final String parameterText, final Set<String> errandTypes, final Set<String> registrationEvents, final Set<String> confirmationEvents,
+	Product(final String code, final String text, final Set<String> errandTypes, final Set<String> registrationEvents, final Set<String> confirmationEvents,
 		final Set<String> confirmationTemplates, final Set<String> servingCodes) {
 		this.code = code;
-		this.parameterText = parameterText;
+		this.text = text;
 		this.errandTypes = errandTypes;
 		this.registrationEvents = registrationEvents;
 		this.confirmationEvents = confirmationEvents;
@@ -74,8 +74,8 @@ enum Product {
 		return code;
 	}
 
-	String parameterText() {
-		return parameterText;
+	String text() {
+		return text;
 	}
 
 	boolean isNotifiedOn(final SalesPlaceRow place) {

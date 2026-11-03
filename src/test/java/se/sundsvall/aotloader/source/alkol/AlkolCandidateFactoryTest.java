@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.TestData;
@@ -24,7 +23,6 @@ import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Outcome;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink.Basis;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.ContactRow;
@@ -112,20 +110,22 @@ class AlkolCandidateFactoryTest {
 			assertThat(person.legalId()).isEqualTo(new LegalId("198001011234", PRIVATE));
 			assertThat(person.positions()).containsExactly("Verkställande direktör");
 		});
-		assertThat(candidate.place().parameters()).extracting(Parameter::key, Parameter::values).containsExactly(
-			tuple("kategori", List.of("Livsmedelsbutik, butikskedja")),
-			tuple("omrade", List.of("City")));
-		assertThat(parameters(candidate)).containsAllEntriesOf(Map.of(
-			"alkolFsId", List.of("1"),
-			"tillstandstyp", List.of("Detaljhandel"),
-			"utfardat", List.of("2019-07-02"),
-			"diarienummer", List.of("IAN-2019-100"),
-			"tidigareBeviljanden", List.of("2015-02-01, IAN-2015-1"),
-			"senasteBeslut", List.of("Godkänd anmälan ändring i bolag, 2021-02-01"),
-			// Only marks on the place, so their notifications have the place's earliest date, estimated (decision 68)
-			"anmaldaProdukter", List.of("Folköl, anmäld 2015-01-01 (uppskattat)", "Tobaksfria nikotinprodukter, anmäld 2015-01-01 (uppskattat)"),
-			"noteringar", List.of("Notering 1"),
-			"migrerad", List.of("2026-10-12 från AlkOL")));
+		assertThat(candidate.place().area()).isEqualTo("City");
+		assertThat(candidate.place().restaurantNumber()).isNull();
+		// What the errand tells of the permit is in its description, which Draken shows, not in parameters (decision 94)
+		assertThat(candidate.errand().description()).isEqualTo("""
+			Tobakstillstånd för Butik 1.
+			Tillståndstyp: Detaljhandel
+			Utfärdat: 2019-07-02 (IAN-2019-100)
+			Tidigare beviljanden: 2015-02-01, IAN-2015-1
+			Senaste beslut: Godkänd anmälan ändring i bolag, 2021-02-01
+			Anmälda produkter på försäljningsstället (gäller hela stället, inte bara detta ärende): Folköl, anmäld 2015-01-01 (uppskattat); \
+			Tobaksfria nikotinprodukter, anmäld 2015-01-01 (uppskattat)""");
+		// The note of the place comes first among the notes of the investigation
+		assertThat(candidate.investigation().texts().parts().getFirst()).satisfies(part -> {
+			assertThat(part.heading()).isEqualTo("Noteringar");
+			assertThat(part.text()).startsWith("Notering 1");
+		});
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("detaljhandel");
 		assertThat(candidate.asset().issued()).isEqualTo(LocalDate.of(2019, 7, 2));
 		assertThat(JSON.writeValueAsString(candidate.asset().content())).isEqualTo("""
@@ -163,10 +163,6 @@ class AlkolCandidateFactoryTest {
 		// Folköl has an errand that registered it; e-cigarettes are only a mark, dated by the place's earliest errand
 		assertThat(permit.errand().description()).startsWith("Tobakstillstånd för Butik 1.\n").contains("\nAnmälda produkter på försäljningsstället (gäller hela stället, inte bara detta ärende): "
 			+ "Folköl, anmäld 2017-05-01; E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)");
-		assertThat(parameters(permit)).containsEntry("anmaldaProdukter",
-			List.of("Folköl, anmäld 2017-05-01", "E-cigaretter och påfyllningsbehållare, anmäld 2017-05-01 (uppskattat)"));
-		assertThat(permit.errand().parameters()).filteredOn(parameter -> "anmaldaProdukter".equals(parameter.key())).extracting(Parameter::displayName)
-			.containsExactly("Anmälda produkter på försäljningsstället");
 	}
 
 	@Test
@@ -390,7 +386,7 @@ class AlkolCandidateFactoryTest {
 			tuple(APPLICANT_NOT_OWNER, null),
 			tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100"),
 			tuple(CERTIFICATE_MISSING, null));
-		assertThat(parameters(candidate)).containsEntry("tillstandstyp", List.of("Partihandel")).containsEntry("utfardat", List.of("2019-07-01"));
+		assertThat(candidate.errand().description()).contains("\nTillståndstyp: Partihandel\n", "\nUtfärdat: 2019-07-01\n");
 		assertThat(candidate.asset().titleSuffix()).isEqualTo("partihandel");
 	}
 
@@ -409,10 +405,25 @@ class AlkolCandidateFactoryTest {
 			tuple(CERTIFICATE_MISSING, null));
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).containsExactlyInAnyOrder(PLACE_MISSING, DIARY_NUMBER_MISSING, CERTIFICATE_MISSING);
 		assertThat(candidates.get(1).errand().title()).isEqualTo("Tobakstillstånd – okänt försäljningsställe");
-		// A permit without a grant gets an investigation all the same, without dates and texts
+		// A permit without a grant gets an investigation all the same, without dates and texts, but the note of its place
 		assertThat(candidates.get(1).investigation()).isEqualTo(new InvestigationData("Tobakstillstånd – okänt försäljningsställe", null, null, InvestigationTexts.NONE));
+		assertThat(candidates.get(0).investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Notering 1")));
 		// but no decision
 		assertThat(candidates).extracting(Candidate::decision).containsOnlyNulls();
+	}
+
+	@Test
+	void aBlankNoteOfThePlaceIsNoNoteOfTheInvestigation() {
+		final var data = new Data()
+			.place(place(1, 10).withNote(" "))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.errand(AlkolTestRows.errand(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Komplett ansökan"))
+			.decision(AlkolTestRows.decision(1000, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null));
+
+		final var permit = data.factory().permits().candidates().getFirst();
+
+		assertThat(permit.investigation().texts().parts()).filteredOn(part -> part.heading().equals("Noteringar")).extracting(Part::text).containsExactly("Komplett ansökan");
 	}
 
 	@Test
@@ -422,7 +433,7 @@ class AlkolCandidateFactoryTest {
 			.owner(owner(10, "5566778899"))
 			.view(new PermitViewRow(1, true, false, false, false))
 			.errand(AlkolTestRows.errand(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Komplett ansökan", List.of("2", "9")))
-			// The errand of another place has the note its place shows as a parameter already
+			// The errand of another place has the note of its place, which comes once, first, as the note of the place
 			.place(place(2, 10))
 			.view(new PermitViewRow(2, true, false, false, false))
 			.errand(AlkolTestRows.errand(101, 2, "WADE", "IAN-2019-2", LocalDate.of(2019, 5, 2), LocalDate.of(2019, 7, 3), null, "Notering 2"))
@@ -446,7 +457,7 @@ class AlkolCandidateFactoryTest {
 		// Started when the errand of the grant was opened, completed when the permit was granted; every event of the errand is
 		// in the journal, also one without a text, and the decision tells who made it
 		assertThat(permit.investigation()).isEqualTo(new InvestigationData("Tobakstillstånd – Butik 1", LocalDateTime.of(2019, 5, 2, 0, 0), LocalDateTime.of(2019, 7, 1, 0, 0),
-			InvestigationTexts.of(new Part("Noteringar", "Komplett ansökan"), new Part("Händelser", "2019-05-10 017\n2019-06-01 Anteckningar: Platsbesök gjort"),
+			InvestigationTexts.of(new Part("Noteringar", "Notering 1\nKomplett ansökan"), new Part("Händelser", "2019-05-10 017\n2019-06-01 Anteckningar: Platsbesök gjort"),
 				new Part("Beslut", "2019-07-01 Tillstånd tobaksförsäljning – detaljhandel, beslutsfattare Karin Andersson: Tillstånd beviljas."))));
 		// The errand gets the latest grant as its decision, valid from its own first day and until further notice, without
 		// terms (decision 70)
@@ -474,9 +485,6 @@ class AlkolCandidateFactoryTest {
 			Diarienummer: IAN-2021-1
 			Händelsen är markerad med sekretess i AlkOL.
 			Samtal med butiken""");
-		assertThat(parameters(confidential)).containsEntry("alkolHandelseId", List.of("301")).containsEntry("handelsetyp", List.of("Anteckningar"))
-			.containsEntry("handelsedatum", List.of("2021-01-02")).containsEntry("diarienummer", List.of("IAN-2021-1")).containsEntry("sekretess", List.of("Ja"))
-			.containsEntry("migrerad", List.of("2026-10-12 från AlkOL"));
 		assertThat(confidential.errand().externalTags()).containsEntry("diarienummer", "IAN-2021-1");
 		assertThat(confidential.holder().legalId().number()).isEqualTo("5566778899");
 		assertThat(confidential.permitLink().permitKey()).isEqualTo(new ItemKey(ALKOL, TILLSTAND, "1"));
@@ -484,15 +492,13 @@ class AlkolCandidateFactoryTest {
 		final var withFile = documentation.get(2);
 		assertThat(withFile.files().references()).containsExactly(new FileReference("borttaget.pdf", ATTACHMENTS));
 		assertThat(withFile.files().detailsOf(new FileReference("borttaget.pdf", ATTACHMENTS)).received()).isEqualTo(LocalDateTime.of(2020, 6, 1, 9, 0));
-		assertThat(parameters(documentation.get(1))).doesNotContainKeys("diarienummer", "sekretess");
+		assertThat(documentation.get(1).errand().description()).doesNotContain("Diarienummer", "sekretess");
 		// The permit has neither their texts nor their files
-		assertThat(parameters(permit)).doesNotContainKey("handelselogg");
 		assertThat(permit.files().references()).doesNotContain(new FileReference("borttaget.pdf", ATTACHMENTS));
 		// A handler AlkOL has no user for stands with the number
-		assertThat(parameters(permit)).containsEntry("handlaggare", List.of("Karin Andersson", "9"));
+		assertThat(permit.errand().description()).contains("\nHandläggare: Karin Andersson, 9\n");
 		final var other = data.factory().permits().candidates().get(1);
-		assertThat(parameters(other)).containsEntry("noteringar", List.of("Notering 2"));
-		assertThat(other.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Noteringar");
+		assertThat(other.investigation().texts().parts()).filteredOn(part -> part.heading().equals("Noteringar")).extracting(Part::text).containsExactly("Notering 2");
 	}
 
 	@Test
@@ -559,14 +565,13 @@ class AlkolCandidateFactoryTest {
 	@Test
 	void codesAreLookedUpWithoutRegardToCase() {
 		final var data = new Data()
-			.place(place(1, 10).withCategory("lbk"))
-			.owner(owner(10, "5566778899"))
-			.view(new PermitViewRow(1, true, false, false, false));
+			.place(place(1, 10).withFlags(true, false, false, false).withCategory("serv"))
+			.owner(owner(10, "5566778899"));
 
-		final var candidate = data.factory().permits().candidates().getFirst();
+		final var candidate = data.factory().notifications().candidates().getFirst();
 
-		assertThat(candidate.place().parameters()).extracting(Parameter::key, Parameter::values)
-			.contains(tuple("kategori", List.of("Livsmedelsbutik, butikskedja")));
+		// The category SERV of a serving place, written in small letters, makes the folköl a serving
+		assertThat(candidate.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
 	}
 
 	@Test
@@ -595,7 +600,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(latestServing.errand().description()).startsWith("Anmälan om servering av folköl för Butik 1.\n");
 		assertThat(latestServing.errand().labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION");
 		assertThat(latestServing.errand().externalTags()).containsExactly(Map.entry("alkolAnmalan", "1-FOLKOL"), Map.entry("diarienummer", "IAN-2015-1"));
-		assertThat(parameters(latestServing)).containsEntry("anmald", List.of("2010-01-01")).containsEntry("produkt", List.of("Folköl")).doesNotContainKey("anmaldUppskattat");
+		assertThat(latestServing.errand().description()).contains("\nAnmäld: 2010-01-01\n").doesNotContain("uppskattat");
 		assertThat(latestServing.asset().issued()).isEqualTo(LocalDate.of(2010, 1, 1));
 		assertThat(latestServing.asset().description()).isEqualTo("Anmälan om servering av folköl på Butik 1");
 		assertThat(latestServing.files().references()).containsExactly(new FileReference("33333333.rtf", DOCUMENTS));
@@ -604,12 +609,12 @@ class AlkolCandidateFactoryTest {
 		final var eventOnly = candidates.get(1);
 		assertThat(eventOnly.type()).isEqualTo(ErrandType.FOLKOL_SALES_NOTIFICATION);
 		assertThat(eventOnly.errand().externalTags()).containsEntry("diarienummer", "IAN-2012-1");
-		assertThat(parameters(eventOnly)).containsEntry("anmald", List.of("2012-03-04"));
+		assertThat(eventOnly.errand().description()).contains("\nAnmäld: 2012-03-04\n");
 
 		final var flagOnlyServingPlace = candidates.get(2);
 		assertThat(flagOnlyServingPlace.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
 		assertThat(flagOnlyServingPlace.ruleHits()).extracting(RuleHit::rule).containsExactly(NOTIFICATION_ONLY_FLAG);
-		assertThat(parameters(flagOnlyServingPlace)).containsEntry("anmald", List.of("2009-03-04")).containsEntry("anmaldUppskattat", List.of("Ja")).doesNotContainKey("diarienummer");
+		assertThat(flagOnlyServingPlace.errand().description()).contains("\nAnmäld: 2009-03-04 (uppskattat)").doesNotContain("Diarienummer");
 		// The holder and the place by the alcohol schema, without a diary number or a restaurant number, which AlkOL has none
 		// of, and with the estimated day
 		assertThat(flagOnlyServingPlace.asset().schema()).isEqualTo(AssetSchema.ALCOHOL);
@@ -702,8 +707,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.asset()).isNull();
 		assertThat(external.permitLink().permitKey()).isEqualTo(new ItemKey(ALKOL, TILLSTAND, "1"));
 		assertThat(external.permitLink().basis()).isEqualTo(Basis.SAME_HOLDER);
-		assertThat(parameters(external)).containsEntry("beslut", List.of("Varning, 2020-01-20")).containsEntry("handlaggare", List.of("Karin Andersson"));
-		assertThat(external.errand().description()).contains("\nHandläggare: Karin Andersson\n");
+		assertThat(external.errand().description()).contains("\nHandläggare: Karin Andersson\n", "\nBeslut: Varning, 2020-01-20");
 		assertThat(external.files().references()).containsExactly(new FileReference("varning.pdf", DOCUMENTS));
 		// A decision maker AlkOL has no user for stands with the code
 		assertThat(external.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Klagomål"),
@@ -714,10 +718,9 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.investigation().protocolFields().type()).isEqualTo(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
 		assertThat(external.investigation().protocolFields().value().propertyNames()).containsExactly("businessName", "businessOrgNumber", "businessAddress", "inspectionType",
 			"inspectionDate", "inspectorName");
-		assertThat(parameters(external)).containsEntry("noteringar", List.of("Klagomål")).containsEntry("beslutstexter", List.of("2020-01-20 Varning, beslutsfattare XY: Varning meddelas."));
 		final var internal = candidates.get(1);
 		assertThat(internal.investigation().texts()).isEqualTo(InvestigationTexts.NONE);
-		assertThat(parameters(internal)).doesNotContainKey("handlaggare");
+		assertThat(internal.errand().description()).doesNotContain("Handläggare");
 		assertThat(internal.ruleHits()).extracting(RuleHit::rule).containsExactly(ERRAND_OPEN);
 		assertThat(internal.errand().labelPaths()).containsExactly("TAGROOT/TOBACCO_INSPECTION", "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION");
 		assertThat(internal.asset()).isNull();
@@ -825,19 +828,6 @@ class AlkolCandidateFactoryTest {
 			Anmärkningar:
 			- Påträngande reklam i butik
 			Anteckning: Köpet nekades.""");
-		assertThat(parameters(visit))
-			.containsEntry("alkolTillsynsbesokId", List.of("900"))
-			.containsEntry("besoksdatum", List.of("2024-05-03"))
-			.containsEntry("besokstid", List.of("21:30–22:15"))
-			.containsEntry("tillsynsart", List.of("Kontrollköp"))
-			.containsEntry("tillsynsomgang", List.of("Kontrollköp vecka 18, 2024-05-03"))
-			.containsEntry("tillsynenGallde", List.of("Tobak", "E-cigaretter"))
-			.containsEntry("anmaltBesok", List.of("Ja"))
-			.containsEntry("kontrollant", List.of("Per Eriksson"))
-			.doesNotContainKey("serveringspersonal")
-			.containsEntry("anmarkningar", List.of("Påträngande reklam i butik"))
-			.containsEntry("anteckning", List.of("Köpet nekades."))
-			.containsEntry("migrerad", List.of(TODAY + " från AlkOL"));
 		assertThat(visit.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Tillsynsomgång", "Kontrollköp vecka 18, 2024-05-03"), new Part("Anteckning", "Köpet nekades."),
 			new Part("Anmärkningar", "Påträngande reklam i butik")));
 		// Draken has no protocol for a visit to a sales place
@@ -847,7 +837,7 @@ class AlkolCandidateFactoryTest {
 		// Every file of the visit is material of its investigation (decision 60)
 		assertThat(visit.files().references()).allSatisfy(file -> assertThat(visit.files().detailsOf(file).investigation()).isTrue());
 		assertThat(candidates.get(1).measures()).isEmpty();
-		assertThat(parameters(candidates.get(1))).doesNotContainKeys("tillsynsomgang", "tillsynenGallde", "anmaltBesok");
+		assertThat(candidates.get(1).errand().description()).doesNotContain("Tillsynsomgång", "Tillsynen gällde", "Anmält besök");
 		assertThat(visit.place().name()).isEqualTo("Butik 1");
 		assertThat(visit.files().references()).containsExactly(new FileReference("55555555.rtf", DOCUMENTS), new FileReference("protokoll.pdf", ATTACHMENTS), new FileReference("foto.jpg", ATTACHMENTS));
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
@@ -881,7 +871,7 @@ class AlkolCandidateFactoryTest {
 			.containsExactlyInAnyOrder(new FileReference("anmalan-b.pdf", ATTACHMENTS), new FileReference("22222222.rtf", DOCUMENTS));
 		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(NOTIFICATION_OF_FORMER_HOLDER, "ArendeID 100, diarienummer IAN-2009-1"));
 		assertThat(notification.type()).isEqualTo(ErrandType.FOLKOL_SERVING_NOTIFICATION);
-		assertThat(parameters(notification)).containsEntry("anmald", List.of("2019-05-01")).containsEntry("diarienummer", List.of("IAN-2019-1"));
+		assertThat(notification.errand().description()).contains("\nAnmäld: 2019-05-01\n", "\nDiarienummer: IAN-2019-1");
 	}
 
 	@Test
@@ -898,7 +888,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
 			.containsExactly(tuple(NOTIFICATION_OF_FORMER_HOLDER, "ArendeID 100"), tuple(APPLICANT_NOT_OWNER, "anmälan är gjord av en tidigare ägare"));
 		assertThat(notification.files().onPost()).isEmpty();
-		assertThat(parameters(notification)).containsEntry("anmald", List.of("2009-01-10"));
+		assertThat(notification.errand().description()).contains("\nAnmäld: 2009-01-10");
 	}
 
 	@Test
@@ -917,7 +907,7 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
-	void theTextsOfANotificationGoInItsEventLogAndItsErrandsNotes() {
+	void theNotesAndEventsOfANotificationAreInItsDescription() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, false, false, false))
 			.owner(owner(10, "5566778899"))
@@ -929,8 +919,13 @@ class AlkolCandidateFactoryTest {
 
 		final var notification = data.factory().notifications().candidates().getFirst();
 
-		assertThat(parameters(notification)).containsEntry("noteringar", List.of("Anteckning om anmälan"))
-			.containsEntry("handelselogg", List.of("2020-01-01|014|Anmälan om folköl", "2020-01-05|BeaFol|Bekräftelse skickad"));
+		// A notification has no investigation, so its description tells the notes of its errands and its events (decision 94)
+		assertThat(notification.errand().description()).endsWith("""
+			Noteringar:
+			Anteckning om anmälan
+			Händelser:
+			2020-01-01 014: Anmälan om folköl
+			2020-01-05 BeaFol: Bekräftelse skickad""");
 		assertThat(data.factory().documentation().candidates()).singleElement()
 			.satisfies(documentation -> assertThat(documentation.key()).isEqualTo(new ItemKey(ALKOL, DOKUMENTATION, "302")))
 			.satisfies(documentation -> assertThat(documentation.permitLink().permitKey()).isEqualTo(notification.key()))
@@ -947,7 +942,7 @@ class AlkolCandidateFactoryTest {
 		final var notification = data.factory().notifications().candidates().getFirst();
 
 		assertThat(notification.ruleHits()).isEmpty();
-		assertThat(parameters(notification)).containsEntry("anmald", List.of("2015-03-02"));
+		assertThat(notification.errand().description()).contains("\nAnmäld: 2015-03-02");
 	}
 
 	@Test
@@ -971,7 +966,7 @@ class AlkolCandidateFactoryTest {
 
 		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ENDED, "GTDEÅ utan datum"));
 		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(UNPARSEABLE, "det beviljande beslutet 203 saknar datum och kan vara det senaste"));
-		assertThat(parameters(permits.get(1))).containsEntry("utfardat", List.of("2019-07-01"));
+		assertThat(permits.get(1).errand().description()).contains("\nUtfärdat: 2019-07-01");
 	}
 
 	@Test
@@ -1008,10 +1003,6 @@ class AlkolCandidateFactoryTest {
 		assertThat(data.factory().visits().candidates()).extracting(candidate -> candidate.key().sourceId()).containsExactly("900");
 	}
 
-	private static Map<String, List<String>> parameters(final Candidate candidate) {
-		return candidate.errand().parameters().stream().collect(Collectors.toMap(Parameter::key, Parameter::values));
-	}
-
 	private static PlaceBuilder place(final int fsId, final Integer agarId) {
 		return new PlaceBuilder(fsId, agarId);
 	}
@@ -1031,10 +1022,12 @@ class AlkolCandidateFactoryTest {
 		private boolean upphort;
 		private String category = "LBK";
 		private String ownerCopy;
+		private String note;
 
 		private PlaceBuilder(final int fsId, final Integer agarId) {
 			this.fsId = fsId;
 			this.agarId = agarId;
+			this.note = "Notering " + fsId;
 		}
 
 		PlaceBuilder withFlags(final boolean folkolValue, final boolean tobakValue, final boolean ecigValue, final boolean tobaksfriValue) {
@@ -1060,8 +1053,13 @@ class AlkolCandidateFactoryTest {
 			return this;
 		}
 
+		PlaceBuilder withNote(final String value) {
+			note = value;
+			return this;
+		}
+
 		SalesPlaceRow build() {
-			return new SalesPlaceRow(fsId, "Butik " + fsId, "Gatan " + fsId, "85230", "Sundsvall", "060-1", "butik@example.com", "12", category, ownerCopy, "Notering " + fsId, folkol, tobak, ecig, tobaksfri, upphort, agarId);
+			return new SalesPlaceRow(fsId, "Butik " + fsId, "Gatan " + fsId, "85230", "Sundsvall", "060-1", "butik@example.com", "12", category, ownerCopy, note, folkol, tobak, ecig, tobaksfri, upphort, agarId);
 		}
 	}
 

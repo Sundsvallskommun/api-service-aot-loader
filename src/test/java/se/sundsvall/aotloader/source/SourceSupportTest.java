@@ -60,33 +60,9 @@ class SourceSupportTest {
 	}
 
 	@Test
-	void aTableHasARowPerValueAndARowTooLongForAValueGoesOnInRowsOfItsOwn() {
-		final var longText = "ord ".repeat(1600).strip();
-		final var rows = List.of(
-			java.util.Arrays.asList("2020-01-01", "Anteckning", "Rad ett | med streck\r\noch radbrytning"),
-			java.util.Arrays.asList("2020-01-02", "Remiss", null),
-			java.util.Arrays.asList(null, " ", " "),
-			java.util.Arrays.asList("2020-01-03", "Brev", longText));
-
-		final var table = new ParameterList().table("handelselogg", "Händelselogg i AlkT", List.of("Datum", "Händelse", "Text"), rows).build();
-
-		assertThat(table).singleElement().satisfies(parameter -> {
-			assertThat(parameter.displayName()).isEqualTo("Datum|Händelse|Text");
-			assertThat(parameter.group()).isEqualTo("Händelselogg i AlkT");
-			// A row without anything is left out; the long row goes on with its first cells blank, and no value is too long
-			assertThat(parameter.values()).hasSize(5).allSatisfy(value -> assertThat(value).hasSizeLessThanOrEqualTo(3000));
-			assertThat(parameter.values().subList(0, 2)).containsExactly("2020-01-01|Anteckning|Rad ett med streck och radbrytning", "2020-01-02|Remiss|");
-			assertThat(parameter.values().get(2)).startsWith("2020-01-03|Brev|ord ord");
-			assertThat(parameter.values().subList(3, 5)).allSatisfy(value -> assertThat(value).startsWith("||ord"));
-			assertThat(String.join(" ", parameter.values().subList(2, 5).stream().map(value -> value.substring(value.lastIndexOf('|') + 1)).toList())).isEqualTo(longText);
-		});
-		assertThat(new ParameterList().table("tom", "Tom", List.of("A", "B"), List.of(java.util.Arrays.asList(null, null))).build()).isEmpty();
-	}
-
-	@Test
 	void parameterAndFileLists() {
-		assertThat(new ParameterList().add("a", "A", (String) null).add("b", "B", " x ").add("c", "C", java.util.Arrays.asList(" ", null, "y")).build())
-			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]", "c=[y]");
+		assertThat(new ParameterList().add("a", "A", null).add("b", "B", " x ").add("c", "C", " ").build())
+			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]");
 		assertThat(new FileList(SharedFileNames.builder(TWO_DIRECTORIES).build()).add(" a.pdf ", ATTACHMENTS).add("A.PDF", ATTACHMENTS).add("a.pdf", DOCUMENTS).add(" ", DOCUMENTS).add(null, DOCUMENTS).build())
 			.containsExactly(new FileReference("a.pdf", ATTACHMENTS), new FileReference("a.pdf", DOCUMENTS));
 	}

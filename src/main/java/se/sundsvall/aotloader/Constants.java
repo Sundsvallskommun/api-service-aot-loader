@@ -29,10 +29,6 @@ public final class Constants {
 	public static final String ERRAND_PARAMETER_PREMISES_POSTAL_CODE = "premisesPostalCode";
 	/** The parameter of the errand with the postal area of the place, as pw-alkt reads it. */
 	public static final String ERRAND_PARAMETER_PREMISES_POSTAL_AREA = "premisesPostalArea";
-	/** The parameter of the errand with the phone number of the place, named like the key pw-alkt reads. */
-	public static final String ERRAND_PARAMETER_PREMISES_PHONE = "premisesPhone";
-	/** The parameter of the errand with the email address of the place, named like the key pw-alkt reads. */
-	public static final String ERRAND_PARAMETER_PREMISES_EMAIL = "premisesEmail";
 	/**
 	 * The parameter of the errand with the municipality code of the place, e.g. 2262 for Timrå, which picks e.g. the
 	 * document templates (decision 19). The permit has it in its JSON parameter (decision 87).

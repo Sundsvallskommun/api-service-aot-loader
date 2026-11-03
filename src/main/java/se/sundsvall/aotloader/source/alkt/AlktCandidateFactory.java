@@ -137,7 +137,7 @@ public final class AlktCandidateFactory {
 		final var applicant = errand.sokandeId() == null ? null : snapshot.applicants().get(errand.sokandeId());
 		final var decisions = index.decisionsOf(errand.arendeId()).stream()
 			.sorted((a, b) -> Objects.compare(a.beslutsDatum(), b.beslutsDatum(), Comparator.nullsFirst(Comparator.naturalOrder())))
-			.map(decision -> index.decisionText(decision, false))
+			.map(decision -> index.decisionText(decision))
 			.filter(Objects::nonNull)
 			.toList();
 

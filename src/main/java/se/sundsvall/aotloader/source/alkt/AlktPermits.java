@@ -23,10 +23,8 @@ import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
-import se.sundsvall.aotloader.source.ErrandParameters;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FilePurposes;
-import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.source.PartyRows;
 import se.sundsvall.aotloader.source.PermitDecisions;
 import se.sundsvall.aotloader.source.PermitDecisions.PermitDays;
@@ -143,7 +141,7 @@ final class AlktPermits {
 		grant.flatMap(chosen -> PermitDecisions.futureDateHit(chosen, today)).ifPresent(hits::add);
 		final var days = PermitDays.of(permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), grant.map(this::errandClosed).orElse(null), today);
 		if (grant.isEmpty() && days.decidedOn() != null) {
-			hits.add(RuleHit.of(GRANT_DECISION_MISSING, Optional.ofNullable(Texts.trimToNull(index.decisionText(decision, false))).map(text -> "tillståndet pekar på " + text).orElse(null)));
+			hits.add(RuleHit.of(GRANT_DECISION_MISSING, Optional.ofNullable(Texts.trimToNull(index.decisionText(decision))).map(text -> "tillståndet pekar på " + text).orElse(null)));
 		}
 		final var subtype = ServingPermits.subtype(permit, periods);
 		if (subtype == null) {
@@ -165,7 +163,8 @@ final class AlktPermits {
 		final var post = asset(content, subtype, holder, premises, restaurantNumber, drawings, granted)
 			.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files));
 		final var investigation = PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
-			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, shownNotes(permit)));
+			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, permit.notes(), servingTimeTexts(permit)));
+		final var handlers = snapshot.visits().handlerNames(errands.stream().flatMap(errand -> errand.handlaggare().stream()).toList());
 		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSTAND, String.valueOf(permit.objektId())), ErrandType.SERVING_PERMIT)
 			.placeName(placeName)
 			.placeNumber(restaurantNumber)
@@ -175,29 +174,9 @@ final class AlktPermits {
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
 			.title(title)
 			.investigation(PermitInvestigations.premisesSection(permit.servingArea().serveringslokal()).map(investigation::withSection).orElse(investigation))
-			.description(description(name, content))
+			.description(description(name, content, handlers))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
-			.parameters(new ParameterList()
-				.add("alktObjektId", "Id i AlkT", String.valueOf(permit.objektId()))
-				.add(ErrandParameters.ISSUED, "Utfärdat", SourceValues.format(permit.utfardandeDatum()))
-				.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i AlkT", permit.utfardandeDiarienr())
-				.add(ErrandParameters.HANDLERS, "Handläggare i AlkT", snapshot.visits().handlerNames(errands.stream().flatMap(errand -> errand.handlaggare().stream()).toList()))
-				.add("ersatter", "Ersätter", Texts.join(", ", Arrays.asList(SourceValues.format(permit.ersatterDatum()), permit.ersatterDiarienr())))
-				.add("drycker", "Drycker", content.drinks())
-				.add("serveringTill", "Servering till", content.servingTo())
-				.add("omfattning", "Omfattning", content.scope())
-				.add("serveringstider", "Serveringstider", content.servingTimes())
-				.add("aretRunt", "Året runt", permit.period().aretRunt() ? "Ja" : "Nej")
-				.add("sasong", "Säsong", periods.seasonText())
-				.add("period", "Period", periods.periodText())
-				.add("hogstaAntal", "Högsta antal gäster", permit.servingArea().hogstaAntal())
-				.add("sittplatser", "Sittplatser", permit.servingArea().sittplatser())
-				.add("villkor", "Villkor", content.conditions())
-				.add(ErrandParameters.NOTES, "Noteringar i AlkT", permit.notes())
-				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", index.decisionText(decision, true))
-				.add(CandidateTexts.migrated(today, ALKT))
-				.build())
 			.asset(post)
 			.files(files.build(), files.assetFiles(), files.details())
 			// The decision says of the permit what the post does, with the beverages and serving hours as Draken decides them
@@ -406,11 +385,11 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @return the texts the errand already shows that AlkT copies from the issuing errand to the permit: the notes, and the
-	 *         texts of the serving times, which stand at their times (decision 76)
+	 * @return the texts of the serving times, which the description shows at their times (decision 76) and AlkT copies
+	 *         from the issuing errand to the permit
 	 */
-	private static List<String> shownNotes(final PermitRow permit) {
-		return Stream.concat(permit.notes().stream(), permit.servingTimes().stream().filter(ServingTime::isSet).map(ServingTime::text).filter(Objects::nonNull)).toList();
+	private static List<String> servingTimeTexts(final PermitRow permit) {
+		return permit.servingTimes().stream().filter(ServingTime::isSet).map(ServingTime::text).filter(Objects::nonNull).toList();
 	}
 
 	/**
@@ -525,8 +504,8 @@ final class AlktPermits {
 	}
 
 	/**
-	 * The JSON parameter of the permit by the alcohol schema (decision 87). The single number of seats of AlkT is the
-	 * number of seats indoors.
+	 * The JSON parameter of the permit by the alcohol schema (decision 87). Sittplatser2 is the number of seats indoors;
+	 * AlkT's number of seats outdoors is empty on every permit, so the post has none (analysis round 20).
 	 *
 	 * @param decision the decision the permit was granted by, null when it has none
 	 */
@@ -615,11 +594,16 @@ final class AlktPermits {
 		}
 	}
 
-	private static String description(final String name, final PermitContent content) {
+	/**
+	 * @param handlers the names of the handlers of the errands that issued the permit, or their codes when no name is found
+	 *                 (decision 51)
+	 */
+	private static String description(final String name, final PermitContent content, final List<String> handlers) {
 		final var permit = content.permit();
 		final var lines = new ArrayList<String>();
 		lines.add("Serveringstillstånd för " + name + ".");
 		lines.add(CandidateTexts.issuedLine(permit.utfardandeDatum(), permit.utfardandeDiarienr()));
+		lines.add(line("Handläggare", Texts.join(", ", handlers)));
 		lines.add(line("Drycker", Texts.join(", ", content.drinks())));
 		lines.add(line("Servering till", Texts.join(", ", content.servingTo())));
 		lines.add(line("Omfattning", Texts.join(", ", content.scope())));

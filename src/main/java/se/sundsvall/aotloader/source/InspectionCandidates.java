@@ -6,8 +6,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -19,7 +17,6 @@ import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.PlacePermit;
@@ -34,20 +31,12 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
-import static se.sundsvall.aotloader.source.CandidateTexts.migrated;
 
 /**
  * Builds the candidates of the inspection errands of a source, the same way for both sources (section 7.7): which
- * errands are migrated, and their rules, holder, relation to the permit errand, title, description, labels and
- * parameters.
+ * errands are migrated, and their rules, holder, relation to the permit errand, title, description and labels.
  */
 public final class InspectionCandidates {
-
-	/** The parameter each part of the texts of the investigation becomes, by the heading of the part. */
-	private static final Map<String, TextParameter> TEXT_PARAMETERS = Map.of(
-		"Noteringar", new TextParameter(ErrandParameters.NOTES, "Noteringar"),
-		"Händelser", new TextParameter("handelser", "Händelser"),
-		"Beslut", new TextParameter("beslutstexter", "Beslutstexter"));
 
 	private final ErrandType type;
 	private final ErrandTypeSettings settings;
@@ -122,7 +111,6 @@ public final class InspectionCandidates {
 			.labelPaths(settings.labels())
 			.labelPath(settings.sourceErrandType(errand.typeCode()).orElse(null))
 			.externalTag(TAG_DIARY_NUMBER, errand.diaryNumber())
-			.parameters(parameters(errand, decisions, texts))
 			.permitLink(new PermitLink(permit, ownerLegalId, holder == null ? null : holder.legalId(), Optional.ofNullable(errand.opened()).orElse(errand.registered())));
 	}
 
@@ -151,28 +139,6 @@ public final class InspectionCandidates {
 			line("Handläggare", Texts.join(", ", errand.handlers())),
 			decisions.isEmpty() ? null : "Beslut: " + String.join("; ", decisions)));
 	}
-
-	/**
-	 * @return the parameters of the errand, among them the texts of its investigation, a line each, since Draken shows an
-	 *         inspection errand's investigation as its protocol, without the texts (decision 77)
-	 */
-	private List<Parameter> parameters(final InspectionErrand errand, final List<String> decisions, final InvestigationTexts texts) {
-		final var sourceName = errand.source().getDisplayName();
-		final var list = new ParameterList()
-			.add(errand.source().name().toLowerCase(Locale.ROOT) + "ArendeId", "Id för ärendet i " + sourceName, String.valueOf(errand.arendeId()))
-			.add("arendetyp", "Ärendetyp i " + sourceName, errand.typeText())
-			.add(ErrandParameters.DIARY_NUMBER, "Diarienummer i " + sourceName, errand.diaryNumber())
-			.add("oppnat", "Öppnat", SourceValues.format(errand.opened()))
-			.add("avslutat", "Avslutat", SourceValues.format(errand.closed()))
-			.add(ErrandParameters.HANDLERS, "Handläggare i " + sourceName, errand.handlers())
-			.add("beslut", "Beslut i " + sourceName, decisions)
-			.add(migrated(today, errand.source()));
-		texts.parts().forEach(part -> Optional.ofNullable(TEXT_PARAMETERS.get(part.heading()))
-			.ifPresent(text -> list.add(text.key(), text.displayName() + " i " + sourceName, part.text().lines().toList())));
-		return list.build();
-	}
-
-	private record TextParameter(String key, String displayName) {}
 
 	/**
 	 * What an inspection errand was in its source.

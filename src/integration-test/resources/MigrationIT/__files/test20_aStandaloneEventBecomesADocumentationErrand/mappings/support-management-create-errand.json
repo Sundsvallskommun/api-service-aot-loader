@@ -67,13 +67,7 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'alktHandelseId' && @.values[0] == '31020')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handelsetyp' && @.values[0] == 'Anteckning')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'handelsedatum' && @.values[0] == '2026-10-13')]"
+				"matchesJsonPath": "$[?(@.description =~ /.* 2026-10-13, som inte hörde till något ärende\\..*/)]"
 			},
 			{
 				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001')]"

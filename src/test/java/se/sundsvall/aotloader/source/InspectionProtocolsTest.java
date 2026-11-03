@@ -22,7 +22,7 @@ import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
 class InspectionProtocolsTest {
 
 	private static final JsonMapper JSON = JsonMapper.builder().build();
-	private static final Place PLACE = new Place("Krogen", "Storgatan 1", "85230", "Sundsvall", null, null, null, List.of());
+	private static final Place PLACE = new Place("Krogen", "Storgatan 1", "85230", "Sundsvall", null, null, null, null);
 
 	@Test
 	void aVisitFillsTheFieldsOfTheServingPermitProtocolByTheKeysOfTheTemplate() {
@@ -40,7 +40,7 @@ class InspectionProtocolsTest {
 	@Test
 	void aVisitWithoutWhatTheFieldsAskForLeavesThemOut() {
 		assertThat(InspectionProtocols.visit(null, null, null, null, null, List.of(), InvestigationTexts.NONE).isEmpty()).isTrue();
-		assertThat(InspectionProtocols.visit(new Place(" ", null, null, null, null, null, null, List.of()), null, "", "9", null, List.of(" "), InvestigationTexts.NONE).isEmpty()).isTrue();
+		assertThat(InspectionProtocols.visit(new Place(" ", null, null, null, null, null, null, null), null, "", "9", null, List.of(" "), InvestigationTexts.NONE).isEmpty()).isTrue();
 		assertThat(json(InspectionProtocols.visit(null, null, null, null, null, List.of("Anna Berg"), InvestigationTexts.NONE))).isEqualTo("""
 			{"inspector1NameAndTitle":"Anna Berg"}""");
 	}
