@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
@@ -69,7 +68,6 @@ public class ItemMigrator {
 	private final AotLoaderProperties properties;
 	private final Clock clock;
 
-	@Autowired
 	ItemMigrator(final MigrationItemRepository itemRepository, final ReviewExceptionRepository exceptionRepository, final PartyResolver partyResolver, final RelationPlanner relationPlanner,
 		final FileUploader fileUploader, final AssetFileUploader assetFileUploader, final LegalBasisReader legalBasisReader, final TargetWriter targets, final AotLoaderProperties properties,
 		final Clock clock) {
