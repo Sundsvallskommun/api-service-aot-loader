@@ -1,24 +1,24 @@
 package se.sundsvall.aotloader.source;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
-import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Place;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.LegalIds;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
-
 /**
  * The inspection protocols Draken shows the investigation of an inspection errand as (decision 77): the template, by
- * the key Draken picks it by from the type of the investigation, and its fields as the parameters of the investigation,
- * by the keys and with the labels of the template. Only what the source tells is filled in; a field it has nothing for,
- * such as the summary or the number of guests, is left out, and Draken then shows it empty.
+ * the key Draken picks it by from the type of the investigation, and its fields in the JSON parameter of the
+ * investigation, by the keys of the template, as Draken saves them (decision 92). Only what the source tells is filled
+ * in; a field it has nothing for, such as the summary or the number of guests, is left out, and Draken then shows it
+ * empty or as it fills in a new protocol.
  */
 public final class InspectionProtocols {
 
@@ -40,21 +40,22 @@ public final class InspectionProtocols {
 	 * @param  texts             the texts of the visit, written as its description
 	 * @return                   the fields of the protocol {@link #SERVING_PERMIT}
 	 */
-	public static List<Parameter> visit(final Place place, final LocalDate date, final String start, final String end, final Boolean responsibleOnSite, final List<String> inspectors,
+	public static JsonContent visit(final Place place, final LocalDate date, final String start, final String end, final Boolean responsibleOnSite, final List<String> inspectors,
 		final InvestigationTexts texts) {
-		final var fields = new ArrayList<Parameter>();
+		final var fields = JsonFields.object();
 		if (place != null) {
-			add(fields, "premisesName", "Restaurang", place.name());
-			add(fields, "premisesAddress", "Adress", address(place));
+			fields.text("premisesName", place.name())
+				.text("premisesAddress", address(place));
 		}
-		add(fields, "inspectionDate", "Tillsynsdatum", SourceValues.format(date));
-		add(fields, "visitStartTime", "Inleds kl.", clock(start));
-		add(fields, "visitEndTime", "Avslutades kl.", clock(end));
-		add(fields, "responsiblePerson", "Ägare eller serveringsansvarig på plats", responsiblePerson(responsibleOnSite));
-		add(fields, "additionalRemarks", "Beskrivning", plain(texts));
-		add(fields, "inspector1NameAndTitle", "Namn, befattning", inspectors.isEmpty() ? null : inspectors.getFirst());
-		add(fields, "inspector2NameAndTitle", "Namn, befattning", inspectors.size() < 2 ? null : inspectors.get(1));
-		return fields;
+		return new JsonContent(JsonParameterType.SERVING_PERMIT_PROTOCOL, fields
+			.date("inspectionDate", date)
+			.text("visitStartTime", clock(start))
+			.text("visitEndTime", clock(end))
+			.text("responsiblePerson", responsiblePerson(responsibleOnSite))
+			.text("additionalRemarks", plain(texts))
+			.text("inspector1NameAndTitle", inspectors.isEmpty() ? null : inspectors.getFirst())
+			.text("inspector2NameAndTitle", inspectors.size() < 2 ? null : inspectors.get(1))
+			.toNode());
 	}
 
 	/**
@@ -65,27 +66,21 @@ public final class InspectionProtocols {
 	 * @param  handlers who made the inspection
 	 * @return          the fields of the protocol {@link #INTERNAL_INSPECTION}
 	 */
-	public static List<Parameter> internal(final Holder holder, final Place place, final String type, final LocalDate date, final List<String> handlers) {
-		final var fields = new ArrayList<Parameter>();
+	public static JsonContent internal(final Holder holder, final Place place, final String type, final LocalDate date, final List<String> handlers) {
+		final var fields = JsonFields.object();
 		if (holder != null) {
-			add(fields, "businessName", "Verksamhetens namn", holder.name());
-			// A sole trader's number is a personal identity number, which Draken leaves out of the field (decision 81)
-			add(fields, "businessOrgNumber", "Organisationsnummer", LegalIds.formatOrganizationNumber(holder.legalId()));
+			fields.text("businessName", holder.name())
+				// A sole trader's number is a personal identity number, which Draken leaves out of the field (decision 81)
+				.text("businessOrgNumber", LegalIds.formatOrganizationNumber(holder.legalId()));
 		}
 		if (place != null) {
-			add(fields, "businessAddress", "Adress", address(place));
+			fields.text("businessAddress", address(place));
 		}
-		add(fields, "inspectionType", "Typ av tillsyn", type);
-		add(fields, "inspectionDate", "Datum", SourceValues.format(date));
-		add(fields, "inspectorName", "Utförd av", Texts.join(", ", handlers));
-		return fields;
-	}
-
-	private static void add(final List<Parameter> fields, final String key, final String label, final String value) {
-		final var trimmed = Texts.trimToNull(value);
-		if (trimmed != null) {
-			fields.add(new Parameter(key, label, List.of(Texts.truncate(trimmed, ERRAND_PARAMETER_MAX_LENGTH, null))));
-		}
+		return new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, fields
+			.text("inspectionType", type)
+			.date("inspectionDate", date)
+			.text("inspectorName", Texts.join(", ", handlers))
+			.toNode());
 	}
 
 	/**

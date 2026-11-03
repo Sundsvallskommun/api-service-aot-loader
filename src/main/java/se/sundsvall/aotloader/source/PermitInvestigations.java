@@ -2,16 +2,15 @@ package se.sundsvall.aotloader.source;
 
 import java.time.LocalDate;
 import java.util.Collection;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
-import se.sundsvall.aotloader.service.model.Parameter;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
-
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
 
 /**
  * Builds the investigation every permit gets in SupportManagement, the same way for both sources (decision 46).
@@ -22,9 +21,6 @@ public final class PermitInvestigations {
 	static final String PREMISES_SECTION = "premises";
 	private static final String PREMISES_SECTION_HEADING = "Lokal och serveringsställe";
 	private static final int PREMISES_SECTION_SORT_ORDER = 5;
-	/** The premises where serving is allowed, a parameter of the section of the premises in Draken. */
-	static final String PREMISES_SERVING_AREA = "PREMISES_SERVING_AREA";
-	private static final String PREMISES_SERVING_AREA_DISPLAY_NAME = "Serveringsytor";
 
 	private PermitInvestigations() {}
 
@@ -52,8 +48,9 @@ public final class PermitInvestigations {
 	}
 
 	/**
-	 * The section of Draken's examination of the premises, with the premises where the permit allows serving under the key
-	 * and label Draken reads them by (decisions 82 and 87).
+	 * The section of Draken's examination of the premises, with the premises where the permit allows serving in its JSON
+	 * parameter, as Draken reads them (decisions 82 and 92). The source tells nothing else the section asks about: when
+	 * the premises were inspected, the right of disposal and the business before.
 	 *
 	 * @param  servingArea the premises where serving is allowed, as the source describes them
 	 * @return             the section, empty when the source does not describe them
@@ -61,6 +58,6 @@ public final class PermitInvestigations {
 	public static Optional<InvestigationData.Section> premisesSection(final String servingArea) {
 		return Optional.ofNullable(Texts.trimToNull(servingArea))
 			.map(text -> new InvestigationData.Section(PREMISES_SECTION, PREMISES_SECTION_HEADING, PREMISES_SECTION_SORT_ORDER,
-				List.of(new Parameter(PREMISES_SERVING_AREA, PREMISES_SERVING_AREA_DISPLAY_NAME, List.of(Texts.truncate(text, ERRAND_PARAMETER_MAX_LENGTH, null))))));
+				new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object().object("servingArea", JsonFields.object().text("description", text)).toNode())));
 	}
 }

@@ -7,26 +7,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
-import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
-import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ServingTime;
 import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
+import tools.jackson.databind.node.ObjectNode;
 
+import static java.util.function.Predicate.not;
 import static java.util.regex.Pattern.CANON_EQ;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.UNICODE_CASE;
 import static java.util.regex.Pattern.UNICODE_CHARACTER_CLASS;
-import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_GROUP_DECIDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SERVING_TIME_UNPLACED;
 
 /**
- * What a serving permit of AlkT was granted with, as the parameters Draken writes and reads on the decision of a permit
- * (decision 76): the beverages, and the serving hours of the fields Draken has for the subtype of the permit.
+ * What a serving permit of AlkT was granted with, as Draken writes and reads it in the JSON of the decision of a permit
+ * (decisions 76 and 92): the beverages, and the serving hours of the fields Draken has for the subtype of the permit.
  * <p>
  * AlkT keeps up to eight serving times, each with a text of its own that says what it is for, such as "Inomhus" or
  * "Uteservering" (analysis round 14). A permanent permit gets a time in each of Draken's four fields, indoors and
@@ -35,12 +34,12 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.SERVING_TIME_UNPLA
  * whom the permit serves. A text that names one of them goes before one that names neither. A temporary permit and farm
  * sales get their one time in Draken's one field. A time that cannot be placed, and a field that would get two
  * times, are left out of the decision and hit G34, since a wrong time would be worse than none; the times stay on the
- * errand with their texts.
+ * errand and on the post in PartyAssets with their texts.
  */
 final class DecidedScopes {
 
-	static final String BEVERAGES = "decidedBeverages";
-	private static final String BEVERAGES_DISPLAY_NAME = "Alkoholdrycker som får serveras";
+	static final String BEVERAGES = "beverages";
+	static final String SERVING_HOURS = "servingHours";
 
 	private static final int FLAGS = CASE_INSENSITIVE | UNICODE_CASE | UNICODE_CHARACTER_CLASS;
 	private static final Pattern OUTDOORS = Pattern.compile("uteserv|utomhus|\\bute\\b|terr?ass|balkong|altan", FLAGS);
@@ -53,30 +52,37 @@ final class DecidedScopes {
 	private DecidedScopes() {}
 
 	/**
-	 * A field of serving hours on a decision in Draken, with its key and the label Draken gives it.
+	 * A field of serving hours on a decision in Draken, in the order Draken shows them, with the audience and the place
+	 * Draken knows it by in the JSON of the decision, both null for its one field, and its label.
 	 */
 	enum Slot {
 
-		INDOOR_PUBLIC("decidedServingHoursIndoorPublic", "Serveringstid inne (allmänheten)"),
-		OUTDOOR_PUBLIC("decidedServingHoursOutdoorPublic", "Serveringstid ute (allmänheten)"),
-		INDOOR_PRIVATE("decidedServingHoursIndoorPrivate", "Serveringstid inne (slutet sällskap)"),
-		OUTDOOR_PRIVATE("decidedServingHoursOutdoorPrivate", "Serveringstid ute (slutet sällskap)"),
-		SINGLE("decidedServingHours", "Serveringstid");
+		INDOOR_PUBLIC("PUBLIC", "INDOOR", "Serveringstid inne (allmänheten)"),
+		OUTDOOR_PUBLIC("PUBLIC", "OUTDOOR", "Serveringstid ute (allmänheten)"),
+		INDOOR_PRIVATE("CLOSED_COMPANY", "INDOOR", "Serveringstid inne (slutet sällskap)"),
+		OUTDOOR_PRIVATE("CLOSED_COMPANY", "OUTDOOR", "Serveringstid ute (slutet sällskap)"),
+		SINGLE(null, null, "Serveringstid");
 
-		private final String key;
+		private final String audience;
+		private final String location;
 		private final String displayName;
 
-		Slot(final String key, final String displayName) {
-			this.key = key;
+		Slot(final String audience, final String location, final String displayName) {
+			this.audience = audience;
+			this.location = location;
 			this.displayName = displayName;
-		}
-
-		String key() {
-			return key;
 		}
 
 		String displayName() {
 			return displayName;
+		}
+
+		JsonFields entry(final Range range) {
+			return JsonFields.object()
+				.text("audience", audience)
+				.text("location", location)
+				.text("from", range.from())
+				.text("to", range.to());
 		}
 
 		static Slot of(final boolean outdoors, final boolean closedCompany) {
@@ -91,12 +97,9 @@ final class DecidedScopes {
 	 * @param  permit  the permit
 	 * @param  subtype its subtype, null when it has none
 	 * @param  hits    the rule hits of the permit, to which G34 is added for the times left out
-	 * @return         the parameters of the decision, in the order Draken shows them; none for a permit without beverages
-	 *                 and without serving hours Draken has a field for
+	 * @return         what the decision decided
 	 */
-	static List<Parameter> of(final PermitRow permit, final ServingPermitSubtype subtype, final List<RuleHit> hits) {
-		final var parameters = new ArrayList<Parameter>();
-		beverages(permit.drinks()).ifPresent(parameters::add);
+	static Decided of(final PermitRow permit, final ServingPermitSubtype subtype, final List<RuleHit> hits) {
 		final var unplaced = new ArrayList<String>();
 		final var intervals = intervals(permit);
 		final Map<Slot, Range> placed = switch (subtype) {
@@ -106,11 +109,50 @@ final class DecidedScopes {
 			case PERMANENT_CATERING, TASTING -> Map.of();
 			case null -> Map.of();
 		};
-		placed.forEach((slot, range) -> parameters.add(new Parameter(slot.key(), slot.displayName(), DECISION_PARAMETER_GROUP_DECIDED, List.of(range.from(), range.to()))));
 		if (!unplaced.isEmpty()) {
 			hits.add(RuleHit.of(SERVING_TIME_UNPLACED, String.join("; ", unplaced)));
 		}
-		return parameters;
+		final var servingHours = new EnumMap<Slot, Range>(Slot.class);
+		servingHours.putAll(placed);
+		return new Decided(beverages(permit), servingHours.entrySet().stream().map(entry -> entry.getKey().entry(entry.getValue())).toList());
+	}
+
+	/**
+	 * What the decision of a serving permit decided, as Draken writes it in the JSON of the decision.
+	 *
+	 * @param beverages    the beverages, as the constants Draken knows them by, in the order of the alcohol schema
+	 * @param servingHours the serving hours, an entry per field of Draken that got a time, in the order Draken shows them
+	 */
+	record Decided(List<String> beverages, List<JsonFields> servingHours) {
+
+		Decided {
+			beverages = List.copyOf(beverages);
+			servingHours = List.copyOf(servingHours);
+		}
+
+		/**
+		 * @param  permit the JSON of the permit, by the alcohol schema
+		 * @return        the JSON of the permit with the beverages and the serving hours of the decision in place of those of
+		 *                the permit, and without the field when the decision has none of them, since Draken reads a time only
+		 *                in a field it has and knows no beverage outside its list
+		 */
+		ObjectNode applyTo(final ObjectNode permit) {
+			final var decided = JsonFields.object().texts(BEVERAGES, beverages).objects(SERVING_HOURS, servingHours).toNode();
+			final var json = permit.deepCopy();
+			for (final var field : List.of(BEVERAGES, SERVING_HOURS)) {
+				if (decided.has(field)) {
+					json.set(field, decided.get(field));
+				} else {
+					json.remove(field);
+				}
+			}
+			return json;
+		}
+
+		@Override
+		public String toString() {
+			return "Decided[beverages=" + beverages + ", servingHours=" + servingHours.size() + "]";
+		}
 	}
 
 	/**
@@ -148,24 +190,13 @@ final class DecidedScopes {
 	}
 
 	/**
-	 * @return the beverages, as the constants Draken knows them by; empty when the permit has none of them. Alcohol-like
-	 *         preparations, ALP, have none.
+	 * @return the beverages of the permit Draken knows, as the alcohol schema has them; alcohol-like preparations, ALP,
+	 *         Draken has no beverage for
 	 */
-	private static Optional<Parameter> beverages(final Drinks drinks) {
-		final var values = new ArrayList<String>();
-		if (drinks.starkol()) {
-			values.add("STRONG_BEER");
-		}
-		if (drinks.vin()) {
-			values.add("WINE");
-		}
-		if (drinks.spritdrycker()) {
-			values.add("SPIRITS");
-		}
-		if (drinks.ajaDrycker()) {
-			values.add("OTHER_FERMENTED_BEVERAGES");
-		}
-		return values.isEmpty() ? Optional.empty() : Optional.of(new Parameter(BEVERAGES, BEVERAGES_DISPLAY_NAME, DECISION_PARAMETER_GROUP_DECIDED, values));
+	private static List<String> beverages(final PermitRow permit) {
+		return ServingPermits.beverages(permit).stream()
+			.filter(not(ServingPermits.ALCOHOL_LIKE_PREPARATIONS::equals))
+			.toList();
 	}
 
 	/**

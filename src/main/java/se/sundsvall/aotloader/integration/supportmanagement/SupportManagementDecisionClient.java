@@ -2,6 +2,7 @@ package se.sundsvall.aotloader.integration.supportmanagement;
 
 import generated.se.sundsvall.supportmanagement.Decision;
 import generated.se.sundsvall.supportmanagement.DecisionTerm;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import se.sundsvall.aotloader.integration.supportmanagement.configuration.SupportManagementDecisionConfiguration;
 
@@ -53,6 +55,27 @@ public interface SupportManagementDecisionClient {
 		@PathVariable String namespace,
 		@PathVariable String errandId,
 		@PathVariable String decisionId);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/json-parameters", produces = APPLICATION_JSON_VALUE)
+	List<JsonParameter> getDecisionJsonParameters(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String decisionId);
+
+	/**
+	 * Creates or replaces the JSON parameter under its key; SupportManagement validates the value by its schema.
+	 */
+	@PutMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/json-parameters/{key}",
+		consumes = APPLICATION_JSON_VALUE,
+		produces = APPLICATION_JSON_VALUE)
+	JsonParameter writeDecisionJsonParameter(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String decisionId,
+		@PathVariable String key,
+		@RequestBody JsonParameter jsonParameter);
 
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/decisions/{decisionId}/terms", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
 	ResponseEntity<Void> createDecisionTerm(

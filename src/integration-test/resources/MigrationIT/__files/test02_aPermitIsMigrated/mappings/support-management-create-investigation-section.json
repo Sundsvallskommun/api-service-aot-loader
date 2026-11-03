@@ -38,7 +38,10 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'PREMISES_SERVING_AREA' && @.displayName == 'Serveringsytor' && @.values[0] == 'Matsal och bar')]"
+				"matchesJsonPath": {
+					"expression": "$.parameters",
+					"absent": true
+				}
 			}
 		]
 	},

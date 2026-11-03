@@ -7,10 +7,13 @@ import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
 
 /**
- * Reads the markings of a serving permit: its subtype (section 7.3.4), its last day, and the drinks, guests and scope
- * it covers as the texts of the errand's parameters (section 7.3.3).
+ * Reads the markings of a serving permit: its subtype (section 7.3.4), its last day, the drinks, guests and scope it
+ * covers as the texts of the errand's parameters (section 7.3.3), and its beverages as the alcohol schema has them.
  */
 final class ServingPermits {
+
+	/** The alcohol-like preparations of the alcohol schema, which Draken has no beverage for. */
+	static final String ALCOHOL_LIKE_PREPARATIONS = "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS";
 
 	private ServingPermits() {}
 
@@ -51,6 +54,19 @@ final class ServingPermits {
 		addIf(drinks, permit.drinks().ajaDrycker(), "Andra jästa alkoholdrycker");
 		addIf(drinks, permit.drinks().alp(), "Alkoholdrycksliknande preparat");
 		return drinks;
+	}
+
+	/**
+	 * @return the beverages the permit covers, as the constants of the alcohol schema, in its order
+	 */
+	static List<String> beverages(final PermitRow permit) {
+		final var beverages = new ArrayList<String>();
+		addIf(beverages, permit.drinks().spritdrycker(), "SPIRITS");
+		addIf(beverages, permit.drinks().vin(), "WINE");
+		addIf(beverages, permit.drinks().starkol(), "STRONG_BEER");
+		addIf(beverages, permit.drinks().ajaDrycker(), "OTHER_FERMENTED_BEVERAGES");
+		addIf(beverages, permit.drinks().alp(), ALCOHOL_LIKE_PREPARATIONS);
+		return beverages;
 	}
 
 	static List<String> servingTo(final PermitRow permit) {

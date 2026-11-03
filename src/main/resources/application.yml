@@ -100,10 +100,11 @@ aot-loader:
   decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
   # The channel Draken shows as "Migrerat ärende"
   channel: MIGRATION
-  # The JSON parameters the migration writes, by the name of their schema (decision 87): the key each is stored under and
-  # the id of its schema in the json-schema service, which the target system validates it by and which must be registered
-  # for the municipality of the run. Every post in PartyAssets gets the one of the AoT schema of its type. The version is
-  # 0.1 in the test environment.
+  # The JSON parameters the migration writes, by the name of their type (decisions 87 and 92): the key each is stored under
+  # and the id of its schema in the json-schema service, which the target system validates it by and which must be
+  # registered for the municipality of the run. Every post in PartyAssets gets the one of the AoT schema of its type, at
+  # version 0.1 in the test environment. The decision of a permit, the section of the premises and the inspection
+  # protocols get theirs under the keys Draken reads them by, with the schemas Draken writes them with.
   json-parameters:
     alcohol-party-asset:
       key: aot_alcohol_party_asset
@@ -111,6 +112,21 @@ aot-loader:
     tobacco-party-asset:
       key: aot_tobacco_party_asset
       schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_0.1}
+    alcohol-decision:
+      key: permit
+      schema-id: ${AOT_LOADER_ALCOHOL_DECISION_SCHEMA_ID:2281_aot_alcohol_decision_1.0}
+    tobacco-decision:
+      key: permit
+      schema-id: ${AOT_LOADER_TOBACCO_DECISION_SCHEMA_ID:2281_aot_tobacco_decision_1.0}
+    premises-section:
+      key: premises
+      schema-id: ${AOT_LOADER_PREMISES_SECTION_SCHEMA_ID:2281_aot_investigation_premises_section_1.0}
+    serving-permit-protocol:
+      key: inspectionProtocol
+      schema-id: ${AOT_LOADER_SERVING_PERMIT_PROTOCOL_SCHEMA_ID:2281_aot_inspection_serving_permit_1.0}
+    internal-inspection-protocol:
+      key: inspectionProtocol
+      schema-id: ${AOT_LOADER_INTERNAL_INSPECTION_PROTOCOL_SCHEMA_ID:2281_aot_inspection_internal_1.0}
   # The closed status of the migrated errands, the one AOT has (decision 5)
   errand-status: SOLVED
   # The resolution Draken closes an errand of AOT with, shown as "Avslutat"

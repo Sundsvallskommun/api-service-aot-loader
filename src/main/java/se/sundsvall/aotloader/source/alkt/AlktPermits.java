@@ -6,7 +6,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -22,7 +21,6 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
-import se.sundsvall.aotloader.source.CertificateParameters;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.ErrandParameters;
@@ -160,11 +158,12 @@ final class AlktPermits {
 		final var premises = place == null ? null : index.place(place);
 		final var settings = index.properties().errandType(ErrandType.SERVING_PERMIT);
 		final var title = Texts.title("Serveringstillstånd", name);
-		final var drawings = files.namesWithPurpose(FilePurposes.SERVING_AREA_DRAWINGS);
+		final var drawings = files.namesWithPurpose(FilePurposes.DRAWINGS);
 		final var granted = Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files))
 			.map(data -> withCase(data, grant.orElse(null), errands, permit.utfardandeDiarienr()))
-			.map(data -> data.withDecided(decided).withCertificate(certificate(content, holder, premises, drawings, data)))
 			.orElse(null);
+		final var post = asset(content, subtype, holder, premises, restaurantNumber, drawings, granted)
+			.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files));
 		final var investigation = PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
 			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, shownNotes(permit)));
 		final var builder = Candidate.builder(new ItemKey(ALKT, TILLSTAND, String.valueOf(permit.objektId())), ErrandType.SERVING_PERMIT)
@@ -199,10 +198,10 @@ final class AlktPermits {
 				.add(ErrandParameters.LATEST_DECISION, "Senaste beslut i AlkT", index.decisionText(decision, true))
 				.add(CandidateTexts.migrated(today, ALKT))
 				.build())
-			.asset(asset(content, subtype, holder, premises, restaurantNumber, drawings, granted)
-				.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files)))
+			.asset(post)
 			.files(files.build(), files.assetFiles(), files.details())
-			.decision(granted);
+			// The decision says of the permit what the post does, with the beverages and serving hours as Draken decides them
+			.decision(granted == null ? null : granted.withContent(decided.applyTo(post.content())));
 		Optional.ofNullable(subtype).flatMap(settings::subtypeLabel).ifPresent(builder::labelPath);
 		return builder.build();
 	}
@@ -526,39 +525,6 @@ final class AlktPermits {
 	}
 
 	/**
-	 * The parameters of the decision for the certificate, under the keys Draken gives a decision on a serving permit
-	 * (decision 87).
-	 */
-	private static Map<String, String> certificate(final PermitContent content, final Holder holder, final Place premises, final List<String> drawings, final DecisionData decision) {
-		final var permit = content.permit();
-		final var periods = content.periods();
-		return new CertificateParameters()
-			.holder(holder)
-			.text(CertificateParameters.PERMIT_HOLDER_PHONE, holder == null ? null : holder.phone())
-			.premises(premises)
-			.flag(CertificateParameters.SERVING_TO_PUBLIC, permit.servingPublic())
-			.flag(CertificateParameters.SERVING_TO_CLOSED_COMPANY, permit.servingPrivate())
-			.flag(CertificateParameters.SCOPE_ALL_YEAR, permit.period().aretRunt())
-			.flag(CertificateParameters.SCOPE_ANNUAL_PERIOD, !permit.period().aretRunt() && periods.seasonText() != null)
-			.flag(CertificateParameters.SCOPE_TASTING, permit.scope().provsmakning())
-			.lines(CertificateParameters.SCOPE_PERIOD_FROM_TO, Arrays.asList(periods.seasonText(), periods.periodText()))
-			.flag(CertificateParameters.BEVERAGE_SPIRITS, permit.drinks().spritdrycker())
-			.flag(CertificateParameters.BEVERAGE_WINE, permit.drinks().vin())
-			.flag(CertificateParameters.BEVERAGE_BEER, permit.drinks().starkol())
-			.flag(CertificateParameters.BEVERAGE_OTHER_FERMENTED, permit.drinks().ajaDrycker())
-			.text(CertificateParameters.SERVING_AREA_DESCRIPTION, permit.servingArea().serveringslokal())
-			.text(CertificateParameters.SERVING_AREA_DRAWING_REFERENCE, Texts.join(", ", drawings))
-			.text(CertificateParameters.SERVING_AREA_SEATS, permit.servingArea().sittplatser())
-			.text(CertificateParameters.SERVING_AREA_MAX_PERSONS, permit.servingArea().hogstaAntal())
-			.lines(CertificateParameters.SERVING_HOURS, content.servingTimes())
-			.text(CertificateParameters.CASE_NUMBER, permit.utfardandeDiarienr())
-			.text(CertificateParameters.EXECUTION_DATE, SourceValues.format(permit.utfardandeDatum()))
-			.text(CertificateParameters.DECISION_DATE_AND_CASE_NUMBER, CertificateParameters.decisionDateAndCaseNumber(decision))
-			.decision(decision)
-			.build();
-	}
-
-	/**
 	 * The JSON parameter of the permit by the alcohol schema (decision 87). The single number of seats of AlkT is the
 	 * number of seats indoors.
 	 *
@@ -576,7 +542,7 @@ final class AlktPermits {
 			.objects("servingHours", DecidedScopes.servingHours(permit))
 			.flag("tasting", permit.scope().provsmakning())
 			.texts("additionalScopes", additionalScopes(permit, subtype))
-			.texts("beverages", beverages(permit))
+			.texts("beverages", ServingPermits.beverages(permit))
 			.object("servingArea", JsonFields.object()
 				.text("description", permit.servingArea().serveringslokal())
 				.text("drawingReference", Texts.join(", ", drawings))
@@ -641,17 +607,6 @@ final class AlktPermits {
 		addIf(scopes, scope.kryddning(), "IN_HOUSE_FLAVORING");
 		addIf(scopes, scope.trafikservering(), "TRANSPORT_SERVING");
 		return scopes;
-	}
-
-	private static List<String> beverages(final PermitRow permit) {
-		final var drinks = permit.drinks();
-		final var beverages = new ArrayList<String>();
-		addIf(beverages, drinks.spritdrycker(), "SPIRITS");
-		addIf(beverages, drinks.vin(), "WINE");
-		addIf(beverages, drinks.starkol(), "STRONG_BEER");
-		addIf(beverages, drinks.ajaDrycker(), "OTHER_FERMENTED_BEVERAGES");
-		addIf(beverages, drinks.alp(), "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS");
-		return beverages;
 	}
 
 	private static void addIf(final List<String> list, final boolean condition, final String value) {

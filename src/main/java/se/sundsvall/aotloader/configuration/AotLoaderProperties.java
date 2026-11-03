@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
@@ -50,8 +51,9 @@ import static java.util.function.UnaryOperator.identity;
  * @param decisionAdAccount the AD account the decisions of the permits are written with, since SupportManagement takes
  *                          a manual decision only from an AD account (decision 70); without one a real run with permits
  *                          does not start
- * @param jsonParameters    the JSON parameters the migration writes, by the name of their schema, such as
- *                          "alcohol-party-asset" for the posts in PartyAssets of the alcohol schema (decision 87)
+ * @param jsonParameters    the JSON parameters the migration writes, by the name of their type, such as
+ *                          "alcohol-party-asset" for the posts in PartyAssets of the alcohol schema (decision 87) and
+ *                          "alcohol-decision" for the decisions of the serving permits (decision 92)
  */
 @Validated
 @ConfigurationProperties("aot-loader")
@@ -118,10 +120,10 @@ public record AotLoaderProperties(
 	}
 
 	/**
-	 * @return the settings of the JSON parameter of the schema by its name, with both blank when none are configured
+	 * @return the settings of the JSON parameter of the type, with both blank when none are configured
 	 */
-	public JsonParameterSettings jsonParameter(final String name) {
-		return Optional.ofNullable(jsonParameters.get(name)).orElse(new JsonParameterSettings(null, null));
+	public JsonParameterSettings jsonParameter(final JsonParameterType type) {
+		return Optional.ofNullable(jsonParameters.get(type.settingsName())).orElse(new JsonParameterSettings(null, null));
 	}
 
 	/**
@@ -239,9 +241,9 @@ public record AotLoaderProperties(
 	}
 
 	/**
-	 * A JSON parameter the migration writes, which the target system validates by its schema (decision 87).
+	 * A JSON parameter the migration writes, which the target system validates by its schema (decisions 87 and 92).
 	 *
-	 * @param key      the key the parameter is stored under
+	 * @param key      the key the parameter is stored under, the one Draken reads it by
 	 * @param schemaId the id of the schema in the json-schema service, e.g. 2281_aot_alcohol_party_asset_0.1, which must
 	 *                 be registered for the municipality of the run, since the target system validates the parameter by it
 	 */

@@ -88,10 +88,10 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'decisionText' && @.values[0] == 'Bifall')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'salesRetail' && @.values[0] == 'true')]"
+				"matchesJsonPath": {
+					"expression": "$.parameters",
+					"absent": true
+				}
 			}
 		]
 	},

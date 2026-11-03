@@ -15,6 +15,8 @@ import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.MigrationException;
@@ -73,28 +75,61 @@ class AssetMapperTest {
 			.object("pointOfSale", JsonFields.object().text("name", "Kiosken"))
 			.object("decision", JsonFields.object().text("outcome", "APPROVAL"))
 			.toNode();
-		final var asset = new AssetData(null, "Tobakstillstånd", LocalDate.of(2020, 1, 1), null, AssetSchema.TOBACCO, content, List.of())
-			.withLegalBasis("5 kap. 1 § lagen (2018:2088) om tobak och liknande produkter");
+		final var legalBasis = "5 kap. 1 § lagen (2018:2088) om tobak och liknande produkter";
 
-		final var value = AssetMapper.jsonValue(asset, ERRAND_ID, "2262", " Bifall ");
+		final var value = AssetMapper.jsonValue(content, AssetSchema.TOBACCO, legalBasis, ERRAND_ID, "2262", " Bifall ");
 
 		assertThat(JSON.writeValueAsString(value)).isEqualTo("""
 			{"errandId":"11111111-1111-1111-1111-111111111111","pointOfSale":{"name":"Kiosken","municipalityId":"2262"},\
 			"decision":{"outcome":"APPROVAL","decisionText":"Bifall","legalBasis":"5 kap. 1 § lagen (2018:2088) om tobak och liknande produkter"}}""");
-		// The content of the post is not changed by it
-		assertThat(asset.content().get("pointOfSale").has("municipalityId")).isFalse();
+		// What the source gives is not changed by it
+		assertThat(content.get("pointOfSale").has("municipalityId")).isFalse();
 	}
 
 	@Test
 	void aLegalBasisOfAPostWithoutADecisionGetsADecisionOfItsOwn() {
-		final var asset = new AssetData(null, "Serveringstillstånd", null, null, AssetSchema.ALCOHOL, null, List.of()).withLegalBasis("8 kap. 2 § alkohollagen (2010:1622)");
+		final var content = JsonNodeFactory.instance.objectNode();
 
-		final var value = AssetMapper.jsonValue(asset, ERRAND_ID, MUNICIPALITY_ID, "Bifall");
+		final var value = AssetMapper.jsonValue(content, AssetSchema.ALCOHOL, "8 kap. 2 § alkohollagen (2010:1622)", ERRAND_ID, MUNICIPALITY_ID, "Bifall");
 
 		// Without a decision there is no outcome to name
 		assertThat(JSON.writeValueAsString(value.get("decision"))).isEqualTo("""
 			{"legalBasis":"8 kap. 2 § alkohollagen (2010:1622)"}""");
-		assertThat(AssetMapper.jsonValue(asset.withLegalBasis(" "), ERRAND_ID, MUNICIPALITY_ID, "Bifall").has("decision")).isFalse();
+		assertThat(AssetMapper.jsonValue(content, AssetSchema.ALCOHOL, " ", ERRAND_ID, MUNICIPALITY_ID, "Bifall").has("decision")).isFalse();
+	}
+
+	@Test
+	void theDecisionSaysOfThePermitWhatThePostDoesByTheDecisionSchemaOfItsArea() {
+		final var candidate = TestData.permitWithDecision("1");
+		final var withLegalBasis = candidate.withAsset(candidate.asset().withLegalBasis("8 kap. 2 § alkohollagen (2010:1622)"));
+
+		final var content = mapper.toDecisionContent(withLegalBasis, MUNICIPALITY_ID, ERRAND_ID, "Bifall med villkor");
+
+		// What the decision says, with what the post gets when it is written: the errand, the municipality, the text of the
+		// outcome and the legal basis
+		assertThat(content).hasValueSatisfying(json -> {
+			assertThat(json.type()).isEqualTo(JsonParameterType.ALCOHOL_DECISION);
+			assertThat(JSON.writeValueAsString(json.value())).isEqualTo("""
+				{"errandId":"11111111-1111-1111-1111-111111111111","caseRegistrationNumber":"IAN-2019-1","externalCaseRegistrationNumber":"IAN-2019-1",\
+				"migration":{"sourceSystem":"ALKT","issuedDateEstimated":false},"beverages":["STRONG_BEER","WINE"],\
+				"decision":{"caseRegistrationNumber":"IAN-2019-1","outcome":"APPROVAL_WITH_CONDITIONS","decisionDate":"2019-04-30","decisionText":"Bifall med villkor",\
+				"legalBasis":"8 kap. 2 § alkohollagen (2010:1622)"},"premises":{"municipalityId":"2281"}}""");
+		});
+		final var tobacco = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
+			.asset(new AssetData(null, "Tobakstillstånd", null, null, AssetSchema.TOBACCO, null, List.of()))
+			.decision(candidate.decision())
+			.build();
+		assertThat(mapper.toDecisionContent(tobacco, MUNICIPALITY_ID, ERRAND_ID, null)).map(JsonContent::type).contains(JsonParameterType.TOBACCO_DECISION);
+	}
+
+	@Test
+	void aDecisionThatSaysNothingOfThePermitGetsNoJson() {
+		final var candidate = TestData.permitWithDecision("1");
+
+		assertThat(mapper.toDecisionContent(TestData.permit("1"), MUNICIPALITY_ID, ERRAND_ID, null)).isEmpty();
+		assertThat(mapper.toDecisionContent(candidate.withAsset(null), MUNICIPALITY_ID, ERRAND_ID, null)).isEmpty();
+		assertThat(mapper.toDecisionContent(Candidate.builder(candidate.key(), candidate.type()).asset(candidate.asset())
+			.decision(candidate.decision().withContent(null)).build(), MUNICIPALITY_ID, ERRAND_ID, null)).isEmpty();
 	}
 
 	@Test

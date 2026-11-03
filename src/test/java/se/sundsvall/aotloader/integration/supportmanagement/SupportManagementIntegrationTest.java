@@ -11,6 +11,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -31,6 +32,7 @@ import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.dept44.problem.Problem;
 import se.sundsvall.dept44.problem.ThrowableProblem;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -189,12 +191,64 @@ class SupportManagementIntegrationTest {
 			.thenReturn(ResponseEntity.created(URI.create("/2281/AOT/errands/a/investigations/i/sections/s-1")).build())
 			.thenReturn(ResponseEntity.ok().build());
 
-		integration.createInvestigationSection(MUNICIPALITY_ID, "a", "i", section);
+		assertThat(integration.createInvestigationSection(MUNICIPALITY_ID, "a", "i", section)).isEqualTo("s-1");
 		integration.updateInvestigationSection(MUNICIPALITY_ID, "a", "i", "s-1", change);
 
 		verify(client).updateInvestigationSection(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s-1", change);
 		// An answer without the location of the section does not tell that it was created
 		assertThatThrownBy(() -> integration.createInvestigationSection(MUNICIPALITY_ID, "a", "i", section)).isInstanceOf(MigrationException.class);
+	}
+
+	@Test
+	void theJsonParametersOfAnInvestigationAndOfItsSections() {
+		final var parameter = new JsonParameter().key("premises").schemaId("2281_aot_investigation_premises_section_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
+		final var change = new Investigation().parameters(List.of());
+		when(client.getInvestigationJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "i")).thenReturn(List.of(parameter), null);
+		when(client.getSectionJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s")).thenReturn(List.of(parameter), null);
+
+		assertThat(integration.getInvestigationJsonParameters(MUNICIPALITY_ID, "a", "i")).containsExactly(parameter);
+		assertThat(integration.getInvestigationJsonParameters(MUNICIPALITY_ID, "a", "i")).isEmpty();
+		assertThat(integration.getSectionJsonParameters(MUNICIPALITY_ID, "a", "i", "s")).containsExactly(parameter);
+		assertThat(integration.getSectionJsonParameters(MUNICIPALITY_ID, "a", "i", "s")).isEmpty();
+		integration.writeInvestigationJsonParameter(MUNICIPALITY_ID, "a", "i", parameter);
+		integration.writeSectionJsonParameter(MUNICIPALITY_ID, "a", "i", "s", parameter);
+		integration.updateInvestigation(MUNICIPALITY_ID, "a", "i", change);
+
+		// Under the key of the parameter, which SupportManagement wants also in the path
+		verify(client).writeInvestigationJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "premises", parameter);
+		verify(client).writeSectionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s", "premises", parameter);
+		verify(client).updateInvestigation(MUNICIPALITY_ID, NAMESPACE, "a", "i", change);
+	}
+
+	@Test
+	void aJsonParameterThatIsGoneAlreadyIsNoErrorWhenItIsRemoved() {
+		when(client.deleteInvestigationJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "k"))
+			.thenReturn(ResponseEntity.noContent().build())
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"))
+			.thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+		when(client.deleteSectionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s", "k"))
+			.thenReturn(ResponseEntity.noContent().build())
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"));
+
+		integration.deleteInvestigationJsonParameter(MUNICIPALITY_ID, "a", "i", "k");
+		integration.deleteInvestigationJsonParameter(MUNICIPALITY_ID, "a", "i", "k");
+		integration.deleteSectionJsonParameter(MUNICIPALITY_ID, "a", "i", "s", "k");
+		integration.deleteSectionJsonParameter(MUNICIPALITY_ID, "a", "i", "s", "k");
+
+		assertThatThrownBy(() -> integration.deleteInvestigationJsonParameter(MUNICIPALITY_ID, "a", "i", "k")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Fel");
+		verify(client, times(3)).deleteInvestigationJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "k");
+	}
+
+	@Test
+	void theJsonParametersOfADecisionGoThroughTheClientOfTheDecisions() {
+		final var parameter = new JsonParameter().key("permit").schemaId("2281_aot_alcohol_decision_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
+		when(decisionClient.getDecisionJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "d")).thenReturn(List.of(parameter), null);
+
+		assertThat(integration.getDecisionJsonParameters(MUNICIPALITY_ID, "a", "d")).containsExactly(parameter);
+		assertThat(integration.getDecisionJsonParameters(MUNICIPALITY_ID, "a", "d")).isEmpty();
+		integration.writeDecisionJsonParameter(MUNICIPALITY_ID, "a", "d", parameter);
+
+		verify(decisionClient).writeDecisionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "d", "permit", parameter);
 	}
 
 	@Test

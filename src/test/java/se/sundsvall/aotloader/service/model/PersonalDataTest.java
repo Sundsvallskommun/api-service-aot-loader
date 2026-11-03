@@ -48,11 +48,16 @@ class PersonalDataTest {
 		assertHidden(new AssetData(null, "Tillstånd", null, null, AssetSchema.ALCOHOL, JsonFields.object()
 			.object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode(), List.of()));
 		assertHidden(JsonFields.object().text("firstName", NAME).text("dateOfBirth", NUMBER));
+		final var holderFields = JsonFields.object().object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode();
 		assertHidden(new DecisionData(NAME, NAME, LocalDateTime.of(2019, 4, 30, 9, 0), null, NAME, null, null, List.of(NAME), List.of()).withCase(NUMBER, NAME)
-			.withCertificate(Map.of("permitHolderName", NAME, "permitHolderOrgNumber", NUMBER)));
+			.withContent(holderFields));
+		assertHidden(new JsonContent(JsonParameterType.ALCOHOL_DECISION, holderFields));
 		assertHidden(new InvestigationData("Tillsyn", null, null, InvestigationTexts.of(new InvestigationTexts.Part("Noteringar", NAME), new InvestigationTexts.Part("Händelser", NAME + " " + NUMBER))));
 		assertHidden(new InvestigationData("Tillsyn – " + NAME, null, null, InvestigationTexts.NONE)
-			.withProtocol("internal_inspection", List.of(new Parameter("businessName", "Verksamhetens namn", List.of(NAME)), new Parameter("businessOrgNumber", "Organisationsnummer", List.of(NUMBER)))));
+			.withProtocol("internal_inspection", new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().text("businessName", NAME).text("businessOrgNumber",
+				NUMBER).toNode()))
+			.withSection(new InvestigationData.Section("premises", "Lokal", 5, new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object().text("previousBusiness", NAME)
+				.toNode()))));
 		assertHidden(new InvestigationTexts.Part("Beslut", NUMBER));
 		assertHidden(new Journal.Entry(null, "Anteckning", NAME + " " + NUMBER));
 	}

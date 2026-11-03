@@ -11,11 +11,14 @@ import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
+import generated.se.sundsvall.supportmanagement.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.partyassets.PartyAssetsIntegration;
@@ -24,6 +27,7 @@ import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementInt
 import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.support.MigrationException;
@@ -387,43 +391,93 @@ class TargetWriter {
 	}
 
 	/**
-	 * Gives an errand its investigation (decision 41), unless it has one, which an earlier run then created, and the
-	 * investigation the sections the candidate gives it: a section it lacks is created, and one whose parameters differ
-	 * from what the source gives now gets them. An errand without an investigation in the candidate gets none.
+	 * Gives an errand its investigation (decision 41), unless it has one, which an earlier run then created, with the
+	 * fields of its inspection protocol as its JSON parameter, and the investigation the sections the candidate gives it,
+	 * each with its JSON parameter (decision 92). It is called only while the errand is a draft, whose investigation is
+	 * the migration's own, so an investigation or section found gets exactly what the source gives now: the JSON
+	 * parameter the source gives, when it lacks it or has another value, no other JSON parameter, and no parameters,
+	 * which the migration does not write. An errand without an investigation in the candidate gets none.
 	 */
 	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
-		if (candidate.investigation() == null) {
+		final var data = candidate.investigation();
+		if (data == null) {
 			return;
 		}
+		final var protocol = Optional.ofNullable(data.protocolFields()).filter(fields -> !fields.isEmpty()).map(mapper::toJsonParameter).orElse(null);
 		final var investigation = supportManagement.getInvestigations(municipalityId, errandId).stream().findFirst();
 		if (investigation.isEmpty()) {
-			final var investigationId = supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(candidate.investigation()));
-			candidate.investigation().sections()
-				.forEach(section -> supportManagement.createInvestigationSection(municipalityId, errandId, investigationId, TargetMapper.toInvestigationSection(section)));
+			final var investigationId = supportManagement.createInvestigation(municipalityId, errandId, mapper.toInvestigation(data));
+			if (protocol != null) {
+				supportManagement.writeInvestigationJsonParameter(municipalityId, errandId, investigationId, protocol);
+			}
+			data.sections().forEach(section -> createSection(municipalityId, errandId, investigationId, section));
 			return;
 		}
 		final var investigationId = investigation.get().getId();
+		if (hasParameters(investigation.get().getParameters())) {
+			supportManagement.updateInvestigation(municipalityId, errandId, investigationId, new Investigation().parameters(List.of()));
+		}
+		bringJsonUpToDate(supportManagement.getInvestigationJsonParameters(municipalityId, errandId, investigationId), protocol,
+			key -> supportManagement.deleteInvestigationJsonParameter(municipalityId, errandId, investigationId, key),
+			wanted -> supportManagement.writeInvestigationJsonParameter(municipalityId, errandId, investigationId, wanted));
 		final var written = Optional.ofNullable(investigation.get().getSections()).orElse(List.of());
-		for (final var section : candidate.investigation().sections()) {
-			final var wanted = TargetMapper.toInvestigationSection(section);
+		for (final var section : data.sections()) {
 			written.stream()
 				.filter(found -> section.key().equalsIgnoreCase(Texts.trimToNull(found.getSectionKey())))
 				.findFirst()
-				.ifPresentOrElse(found -> {
-					if (!TargetMapper.sameParameters(found.getParameters(), wanted.getParameters())) {
-						supportManagement.updateInvestigationSection(municipalityId, errandId, investigationId, found.getId(),
-							new InvestigationSection().parameters(wanted.getParameters()));
-					}
-				}, () -> supportManagement.createInvestigationSection(municipalityId, errandId, investigationId, wanted));
+				.ifPresentOrElse(found -> updateSection(municipalityId, errandId, investigationId, found, section),
+					() -> createSection(municipalityId, errandId, investigationId, section));
 		}
+	}
+
+	private void createSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationData.Section section) {
+		final var sectionId = supportManagement.createInvestigationSection(municipalityId, errandId, investigationId, TargetMapper.toInvestigationSection(section));
+		if (!section.content().isEmpty()) {
+			supportManagement.writeSectionJsonParameter(municipalityId, errandId, investigationId, sectionId, mapper.toJsonParameter(section.content()));
+		}
+	}
+
+	private void updateSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationSection found, final InvestigationData.Section section) {
+		final var sectionId = found.getId();
+		if (hasParameters(found.getParameters())) {
+			supportManagement.updateInvestigationSection(municipalityId, errandId, investigationId, sectionId, new InvestigationSection().parameters(List.of()));
+		}
+		bringJsonUpToDate(supportManagement.getSectionJsonParameters(municipalityId, errandId, investigationId, sectionId),
+			section.content().isEmpty() ? null : mapper.toJsonParameter(section.content()),
+			key -> supportManagement.deleteSectionJsonParameter(municipalityId, errandId, investigationId, sectionId, key),
+			wanted -> supportManagement.writeSectionJsonParameter(municipalityId, errandId, investigationId, sectionId, wanted));
+	}
+
+	/**
+	 * Makes the JSON parameters found exactly the one wanted: every other is removed, and the one wanted is written when
+	 * it is not found as it is.
+	 *
+	 * @param found  the JSON parameters found
+	 * @param wanted the JSON parameter wanted, null for none
+	 * @param delete removes a JSON parameter by its key
+	 * @param write  writes the JSON parameter wanted
+	 */
+	private static void bringJsonUpToDate(final List<JsonParameter> found, final JsonParameter wanted, final Consumer<String> delete, final Consumer<JsonParameter> write) {
+		found.stream()
+			.map(JsonParameter::getKey)
+			.filter(key -> wanted == null || !Objects.equals(key, wanted.getKey()))
+			.forEach(delete);
+		if (wanted != null && !TargetMapper.hasParameter(found, wanted)) {
+			write.accept(wanted);
+		}
+	}
+
+	private static boolean hasParameters(final List<Parameter> parameters) {
+		return parameters != null && !parameters.isEmpty();
 	}
 
 	/**
 	 * Gives the errand of a permit the decision its permit was granted by (decision 70), the way Draken writes a decision:
-	 * a draft, then its terms and the documents it links, and last its completion. A decision an earlier run wrote is kept
-	 * when it is completed and is what the source gives now. Otherwise it is removed and the decision written again, since
-	 * SupportManagement leaves a field that a change does not carry as it is, so a change cannot empty one. Only the
-	 * migration's own decisions are removed: those its AD account wrote.
+	 * a draft, then its terms, the documents it links and what it says of the permit as its JSON parameter (decision 92),
+	 * and last its completion. A decision an earlier run wrote is kept when it is completed and is what the source gives
+	 * now, its JSON parameter included. Otherwise it is removed and the decision written again, since SupportManagement
+	 * leaves a field that a change does not carry as it is, so a change cannot empty one. Only the migration's own
+	 * decisions are removed: those its AD account wrote.
 	 *
 	 * @param  candidate          the permit, with its decision
 	 * @param  legalBasis         the legal basis read from the documents of the permit, null when none was found
@@ -439,16 +493,21 @@ class TargetWriter {
 			throw new MigrationException("Ärendet har redan ett beslut som någon annan än migreringen har skrivit, och det ändras inte");
 		}
 		final var investigationId = supportManagement.getInvestigations(municipalityId, errandId).stream().map(Investigation::getId).filter(Objects::nonNull).findFirst().orElse(null);
-		final var draft = mapper.toDecisionDraft(candidate, legalBasis, investigationId, outcomeText);
+		final var draft = mapper.toDecisionDraft(candidate, legalBasis, investigationId);
 		final var completion = mapper.toDecisionCompletion(candidate.decision());
 		final var terms = TargetMapper.toDecisionTerms(candidate.decision());
-		if (found.size() == 1 && TargetMapper.isWritten(found.getFirst(), draft, completion, terms, documentIds)) {
+		final var permit = assetMapper.toDecisionContent(candidate, municipalityId, errandId, outcomeText).map(mapper::toJsonParameter).orElse(null);
+		if (found.size() == 1 && TargetMapper.isWritten(found.getFirst(), draft, completion, terms, documentIds)
+			&& TargetMapper.hasOnly(supportManagement.getDecisionJsonParameters(municipalityId, errandId, found.getFirst().getId()), permit)) {
 			return DecisionWrite.KEPT;
 		}
 		found.forEach(decision -> supportManagement.deleteDecision(municipalityId, errandId, decision.getId()));
 		final var decisionId = supportManagement.createDecision(municipalityId, errandId, draft);
 		terms.forEach(term -> supportManagement.createDecisionTerm(municipalityId, errandId, decisionId, term));
 		documentIds.forEach(attachmentId -> supportManagement.linkDecisionAttachment(municipalityId, errandId, decisionId, attachmentId));
+		if (permit != null) {
+			supportManagement.writeDecisionJsonParameter(municipalityId, errandId, decisionId, permit);
+		}
 		supportManagement.updateDecision(municipalityId, errandId, decisionId, completion);
 		return found.isEmpty() ? DecisionWrite.WRITTEN : DecisionWrite.REPLACED;
 	}

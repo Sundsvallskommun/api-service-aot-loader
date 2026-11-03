@@ -7,6 +7,7 @@ import generated.se.sundsvall.supportmanagement.Errand;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Labels;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -124,6 +126,43 @@ public interface SupportManagementClient {
 		@PathVariable String errandId,
 		@RequestBody Investigation investigation);
 
+	@PatchMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	Investigation updateInvestigation(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@RequestBody Investigation investigation);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/json-parameters", produces = APPLICATION_JSON_VALUE)
+	List<JsonParameter> getInvestigationJsonParameters(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId);
+
+	/**
+	 * Creates or replaces the JSON parameter under its key; SupportManagement validates the value by its schema.
+	 */
+	@PutMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/json-parameters/{key}",
+		consumes = APPLICATION_JSON_VALUE,
+		produces = APPLICATION_JSON_VALUE)
+	JsonParameter writeInvestigationJsonParameter(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String key,
+		@RequestBody JsonParameter jsonParameter);
+
+	@DeleteMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/json-parameters/{key}", produces = ALL_VALUE)
+	ResponseEntity<Void> deleteInvestigationJsonParameter(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String key);
+
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections", consumes = APPLICATION_JSON_VALUE, produces = ALL_VALUE)
 	ResponseEntity<Void> createInvestigationSection(
 		@PathVariable String municipalityId,
@@ -142,6 +181,38 @@ public interface SupportManagementClient {
 		@PathVariable String investigationId,
 		@PathVariable String sectionId,
 		@RequestBody InvestigationSection section);
+
+	@GetMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections/{sectionId}/json-parameters", produces = APPLICATION_JSON_VALUE)
+	List<JsonParameter> getSectionJsonParameters(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String sectionId);
+
+	/**
+	 * Creates or replaces the JSON parameter under its key; SupportManagement validates the value by its schema.
+	 */
+	@PutMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections/{sectionId}/json-parameters/{key}",
+		consumes = APPLICATION_JSON_VALUE,
+		produces = APPLICATION_JSON_VALUE)
+	JsonParameter writeSectionJsonParameter(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String sectionId,
+		@PathVariable String key,
+		@RequestBody JsonParameter jsonParameter);
+
+	@DeleteMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/sections/{sectionId}/json-parameters/{key}", produces = ALL_VALUE)
+	ResponseEntity<Void> deleteSectionJsonParameter(
+		@PathVariable String municipalityId,
+		@PathVariable String namespace,
+		@PathVariable String errandId,
+		@PathVariable String investigationId,
+		@PathVariable String sectionId,
+		@PathVariable String key);
 
 	@PostMapping(path = "/{municipalityId}/{namespace}/errands/{errandId}/investigations/{investigationId}/attachments/{attachmentId}", produces = ALL_VALUE)
 	ResponseEntity<Void> linkInvestigationAttachment(

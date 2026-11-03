@@ -46,6 +46,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.havingExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -86,6 +87,7 @@ class MigrationIT extends AbstractAppTest {
 	private static String dryRunId;
 	private static String assetOfTheInterruptedPermit;
 	private static String decisionOfTheInterruptedPermit;
+	private static String permitOfTheInterruptedDecision;
 
 	static {
 		SourceDatabaseContainer.start();
@@ -229,12 +231,15 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(companyParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
 			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Ägarbolag")),
 				tuple("organizationNumber", List.of("559988-7766")));
-		final var decision = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/decisions"))).getFirst().getBodyAsString();
-		final List<String> decisionParameters = JsonPath.read(decision, "$.parameters[*].key");
-		assertThat(decisionParameters)
-			.as("The decision has the parameters of the permit, but its legal basis and conditions, which are a field and a term of the decision (decision 70)")
-			.contains("permitHolderName", "servingHours", "decisionText", "decisionDate", "validFrom")
-			.doesNotContain("legalBasis", "conditions");
+		final var permit = wiremock.findAll(putRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/decisions/decision-1/json-parameters/permit")))
+			.getFirst().getBodyAsString();
+		final Map<String, Object> asset = JsonPath.read(wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString(),
+			"$.jsonParameters[0].value");
+		final Map<String, Object> decided = JsonPath.read(permit, "$.value");
+		assertThat(decided)
+			.as("The decision says of the permit what the post does, with the beverages and the serving hours as Draken decides them (decision 92)")
+			.containsAllEntriesOf(asset.entrySet().stream().filter(entry -> !List.of("beverages", "servingHours").contains(entry.getKey()))
+				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/1");
@@ -373,6 +378,8 @@ class MigrationIT extends AbstractAppTest {
 			.containsExactlyInAnyOrder(tuple("ritning våning 2.pdf", "Planritning"), tuple("44444444.rtf", "Beslut"));
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
 		decisionOfTheInterruptedPermit = writtenDecision(INTERRUPTED_ERRAND_ID);
+		permitOfTheInterruptedDecision = wiremock.findAll(putRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID
+			+ "/decisions/decision-1/json-parameters/permit"))).getFirst().getBodyAsString();
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/3");
@@ -397,6 +404,12 @@ class MigrationIT extends AbstractAppTest {
 			.withHeader("X-Trigger-Process", havingExactly("false"))
 			.withHeader("X-notify", havingExactly("false"))
 			.willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(Json.write(List.of(decision)))));
+		// What the decision says of the permit, as the interrupted run wrote it
+		final Map<String, Object> permit = JsonPath.read(permitOfTheInterruptedDecision, "$");
+		permit.put("version", 0);
+		wiremock.stubFor(get(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID + "/decisions/decision-1/json-parameters"))
+			.withHeader("X-Sent-By", havingExactly(DECISION_SENT_BY))
+			.willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(Json.write(List.of(permit)))));
 
 		migrateItem("ALKT/TILLSTAND/3", false);
 

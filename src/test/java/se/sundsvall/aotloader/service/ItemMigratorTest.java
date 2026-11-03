@@ -15,6 +15,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -49,10 +50,13 @@ import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementInt
 import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.AssetData;
+import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PartyType;
@@ -63,6 +67,7 @@ import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.source.files.FileArea;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.dept44.problem.Problem;
 
@@ -443,14 +448,18 @@ class ItemMigratorTest {
 		when(supportManagement.createInvestigation(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("investigation-1");
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(supportManagement.createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any())).thenReturn("section-1");
 
 		assertThat(migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false)).outcome()).isEqualTo(Outcome.MIGRERAD);
 
 		final var section = ArgumentCaptor.forClass(InvestigationSection.class);
-		verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
+		// What the section establishes is its JSON parameter, where Draken reads it (decision 92)
+		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal"));
 		assertThat(section.getValue().getSectionKey()).isEqualTo("premises");
 		assertThat(section.getValue().getAssessment()).isEqualTo("PENDING");
-		assertThat(section.getValue().getParameters()).extracting("key", "values").containsExactly(tuple("PREMISES_SERVING_AREA", List.of("Matsal")));
+		assertThat(section.getValue().getParameters()).isNull();
 	}
 
 	@Test
@@ -462,29 +471,32 @@ class ItemMigratorTest {
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID))
 			.thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))))
 			.thenReturn(List.of(new Investigation().id("investigation-1")));
+		when(supportManagement.getSectionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1")).thenReturn(List.of(premisesParameter("Matsal")));
+		when(supportManagement.createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any())).thenReturn("section-2");
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
 
-		// The section of an earlier run is found by its key in any case, and gets the parameters the source gives now
+		// The section of an earlier run is found by its key in any case, loses the parameters an earlier version of the
+		// migration gave it, and gets the JSON parameter the source gives now
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal och bar"), context(false));
-		// An investigation that lacks the section gets it
+		// An investigation that lacks the section gets it, with its JSON parameter
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
 
-		final var change = ArgumentCaptor.forClass(InvestigationSection.class);
-		verify(supportManagement).updateInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), eq("section-1"), change.capture());
-		assertThat(change.getValue().getSectionKey()).isNull();
-		assertThat(change.getValue().getParameters()).extracting("key", "values").containsExactly(tuple("PREMISES_SERVING_AREA", List.of("Matsal och bar")));
+		verify(supportManagement).updateInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", new InvestigationSection().parameters(List.of()));
+		verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal och bar"));
 		verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any());
+		verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal"));
 		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
 	}
 
 	@Test
-	void aSectionWithTheParametersTheSourceGivesIsLeftAsItIs() {
-		final var written = new InvestigationSection().id("section-1").sectionKey("premises")
-			.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("PREMISES_SERVING_AREA").displayName("Annan").values(List.of("Matsal"))));
+	void aSectionWithTheJsonParameterTheSourceGivesIsLeftAsItIs() {
+		final var written = new InvestigationSection().id("section-1").sectionKey("premises").parameters(List.of());
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
+		when(supportManagement.getSectionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1"))
+			.thenReturn(List.of(premisesParameter("Matsal").version(2L)));
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
 
@@ -492,6 +504,92 @@ class ItemMigratorTest {
 
 		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
 		verify(supportManagement, never()).createInvestigationSection(anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).writeSectionJsonParameter(anyString(), anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void theInvestigationOfAnInspectionGetsTheFieldsOfItsProtocolAsItsJsonParameter() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.createInvestigation(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("investigation-1");
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of(new Relation().id("existing")));
+
+		migrator.process(TestData.inspectionWithProtocol("700", permitKey, protocol("Bolaget AB")), context(false));
+
+		final var investigation = ArgumentCaptor.forClass(Investigation.class);
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).createInvestigation(eq(MUNICIPALITY_ID), eq(ERRAND_ID), investigation.capture());
+		order.verify(supportManagement).writeInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", protocolParameter("Bolaget AB"));
+		assertThat(investigation.getValue().getType()).isEqualTo("internal_inspection");
+		assertThat(investigation.getValue().getParameters()).isNull();
+	}
+
+	@Test
+	void theInvestigationOfAnInspectionAnEarlierRunCreatedGetsTheFieldsOfItsProtocolTheSourceGivesNow() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1")
+			.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("businessName").values(List.of("Bolaget AB"))))))
+			.thenReturn(List.of(new Investigation().id("investigation-1").parameters(List.of())));
+		when(supportManagement.getInvestigationJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1")).thenReturn(List.of(protocolParameter("Bolaget AB")))
+			.thenReturn(List.of(protocolParameter("Gamla bolaget AB")));
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of(new Relation().id("existing")));
+
+		// The fields as the source gives them now are kept, and the parameters, which the migration does not write, are
+		// removed
+		migrator.process(TestData.inspectionWithProtocol("700", permitKey, protocol("Bolaget AB")), context(false));
+		verify(supportManagement).updateInvestigation(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", new Investigation().parameters(List.of()));
+		verify(supportManagement, never()).writeInvestigationJsonParameter(anyString(), anyString(), anyString(), any());
+		// Other fields are written again
+		migrator.process(TestData.inspectionWithProtocol("700", permitKey, protocol("Bolaget AB")), context(false));
+		verify(supportManagement).writeInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", protocolParameter("Bolaget AB"));
+		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
+		verify(supportManagement, never()).deleteInvestigationJsonParameter(anyString(), anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void aJsonParameterTheSourceNoLongerGivesIsRemovedFromTheDraft() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSYN-700")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1")));
+		final var otherKey = new JsonParameter().key("annan").schemaId("2281_annan_1.0").value(protocol("Bolaget AB").value());
+		when(supportManagement.getInvestigationJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1")).thenReturn(List.of(protocolParameter("Bolaget AB"), otherKey));
+		when(relations.findRelations(MUNICIPALITY_ID, "LINK", PERMIT_ERRAND_ID, ERRAND_ID)).thenReturn(List.of(new Relation().id("existing")));
+
+		// A key the migration does not write goes, and the protocol stays as it is
+		migrator.process(TestData.inspectionWithProtocol("700", permitKey, protocol("Bolaget AB")), context(false));
+		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "annan");
+		verify(supportManagement, never()).writeInvestigationJsonParameter(anyString(), anyString(), anyString(), any());
+		// A protocol the source no longer has a field for goes too
+		migrator.process(TestData.inspectionWithProtocol("700", permitKey, new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().toNode())),
+			context(false));
+		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "inspectionProtocol");
+		verify(supportManagement, never()).updateInvestigation(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void aSectionKeepsOnlyTheJsonParameterTheSourceGives() {
+		final var written = new InvestigationSection().id("section-1").sectionKey("premises");
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
+		when(supportManagement.getSectionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1"))
+			.thenReturn(List.of(new JsonParameter().key("gammal").schemaId("2281_gammal_1.0").value(JsonFields.object().text("a", "b").toNode())));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+
+		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
+
+		verify(supportManagement).deleteSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", "gammal");
+		verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal"));
+		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
 	}
 
 	@Test
@@ -1338,14 +1436,19 @@ class ItemMigratorTest {
 		assertThat(draft.getOutcome()).isEqualTo("APPROVAL_WITH_CONDITIONS");
 		assertThat(draft.getDecidedBy()).isEqualTo("Anna Berg");
 		assertThat(draft.getInvestigationId()).isEqualTo("investigation-1");
-		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).contains("decisionText");
-		// As Draken writes a decision: the draft, its terms and its document, and the completion, all before the errand is
-		// activated, while no process or notice hears of it
+		assertThat(draft.getParameters()).isNull();
+		// As Draken writes a decision: the draft, its terms and its document, what it says of the permit, and the completion,
+		// all before the errand is activated, while no process or notice hears of it
+		final var permit = permitParameter(TestData.permitWithDecision("1"));
+		assertThat(permit.getKey()).isEqualTo("permit");
+		assertThat(permit.getSchemaId()).isEqualTo("2281_aot_alcohol_decision_1.0");
+		assertThat(permit.getValue().get("decision").get("decisionText").asString()).isEqualTo("Bifall med villkor");
 		final var order = inOrder(supportManagement, partyAssets);
 		order.verify(partyAssets).createAsset(eq(MUNICIPALITY_ID), anyString(), any());
 		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
 		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-1", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
 		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-beslut");
+		order.verify(supportManagement).writeDecisionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "decision-1", permit);
 		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
 			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
 		order.verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
@@ -1360,7 +1463,7 @@ class ItemMigratorTest {
 		final var candidate = TestData.permitWithDecision("1");
 		final var mapper = new TargetMapper(properties, CLOCK);
 		// As SupportManagement gives it back: with ids, its times in UTC and its account in capitals
-		final var found = mapper.toDecisionDraft(candidate, null, null, "Bifall med villkor")
+		final var found = mapper.toDecisionDraft(candidate, null, null)
 			.id("decision-1")
 			.status("COMPLETED")
 			.decidedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
@@ -1369,6 +1472,7 @@ class ItemMigratorTest {
 			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
 			.attachments(List.of(new ErrandAttachment().id("attachment-beslut")));
 		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(found));
+		when(supportManagement.getDecisionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "decision-1")).thenReturn(List.of(permitParameter(candidate).version(1L)));
 
 		final var result = migrator.process(candidate, contextWithOutcomes(false));
 
@@ -1380,6 +1484,33 @@ class ItemMigratorTest {
 		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
 		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
 		verify(supportManagement, never()).linkDecisionAttachment(anyString(), anyString(), anyString(), anyString());
+		verify(supportManagement, never()).writeDecisionJsonParameter(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void aDecisionAnEarlierRunCompletedWithoutWhatItSaysOfThePermitIsWrittenAgain() throws IOException {
+		withDecisions();
+		stubNewPermit();
+		final var candidate = TestData.permitWithDecision("1");
+		// As an earlier version of the migration wrote it, with no JSON parameter
+		final var found = new TargetMapper(properties, CLOCK).toDecisionDraft(candidate, null, null)
+			.id("decision-1")
+			.status("COMPLETED")
+			.completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00"))
+			.createdBy("ab12cde")
+			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
+			.attachments(List.of(new ErrandAttachment().id("attachment-beslut")));
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(found));
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("decision-2");
+
+		final var result = migrator.process(candidate, contextWithOutcomes(false));
+
+		assertThat(result.detail()).endsWith("Beslutet från en tidigare körning togs bort och skrevs på nytt med det källan ger nu");
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).getDecisionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "decision-1");
+		order.verify(supportManagement).deleteDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1");
+		order.verify(supportManagement).writeDecisionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "decision-2", permitParameter(candidate));
+		order.verify(supportManagement).updateDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("decision-2"), any());
 	}
 
 	@Test
@@ -1389,7 +1520,7 @@ class ItemMigratorTest {
 		final var candidate = TestData.permitWithDecision("1");
 		final var mapper = new TargetMapper(properties, CLOCK);
 		// Completed with a last day the source no longer gives, which a change could not empty
-		final var completed = mapper.toDecisionDraft(candidate, null, null, "Bifall med villkor")
+		final var completed = mapper.toDecisionDraft(candidate, null, null)
 			.id("decision-1")
 			.status("COMPLETED")
 			.validTo(LocalDate.of(2020, 12, 31))
@@ -1413,6 +1544,7 @@ class ItemMigratorTest {
 		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
 		order.verify(supportManagement).createDecisionTerm(MUNICIPALITY_ID, ERRAND_ID, "decision-3", new DecisionTerm().sortOrder(1).text("Mat ska serveras"));
 		order.verify(supportManagement).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-3", "attachment-beslut");
+		order.verify(supportManagement).writeDecisionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "decision-3", permitParameter(candidate));
 		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-3",
 			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2019-04-30T09:00+02:00")));
 		assertThat(decisionCaptor.getValue().getValidTo()).isNull();
@@ -1705,4 +1837,27 @@ class ItemMigratorTest {
 		return new Errand().id(ERRAND_ID).errandNumber("ALKT-2026-1").lifecycle(lifecycle);
 	}
 
+	/**
+	 * @return the JSON parameter of the section of the premises with the serving area, as the settings of the tests key it
+	 */
+	private static JsonParameter premisesParameter(final String servingArea) {
+		return new JsonParameter().key("premises").schemaId("2281_aot_investigation_premises_section_1.0").value(TestData.premisesSection(servingArea).value());
+	}
+
+	private static JsonContent protocol(final String businessName) {
+		return new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().text("businessName", businessName).toNode());
+	}
+
+	private static JsonParameter protocolParameter(final String businessName) {
+		return new JsonParameter().key("inspectionProtocol").schemaId("2281_aot_inspection_internal_1.0").value(protocol(businessName).value());
+	}
+
+	/**
+	 * @return the JSON parameter of the decision of {@link TestData#permitWithDecision(String)} on errand
+	 *         {@value #ERRAND_ID}
+	 */
+	private JsonParameter permitParameter(final Candidate candidate) {
+		final var content = new AssetMapper(properties).toDecisionContent(candidate, MUNICIPALITY_ID, ERRAND_ID, "Bifall med villkor").orElseThrow();
+		return new TargetMapper(properties, CLOCK).toJsonParameter(content);
+	}
 }

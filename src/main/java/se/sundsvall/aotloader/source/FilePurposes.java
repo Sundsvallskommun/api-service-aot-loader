@@ -44,8 +44,6 @@ public final class FilePurposes {
 	public static final String FLOOR_PLAN = "FLOOR_PLAN";
 	public static final String SALES_PREMISES_DRAWING = "SALES_PREMISES_DRAWING";
 	public static final String KITCHEN_FLOOR_PLAN = "KITCHEN_FLOOR_PLAN";
-	/** The purposes of the drawings the certificate of a serving permit refers to, as Draken picks them. */
-	public static final Set<String> SERVING_AREA_DRAWINGS = Set.of(FLOOR_PLAN, KITCHEN_FLOOR_PLAN);
 	public static final String DRINKS_MENU = "DRINKS_MENU";
 	public static final String MENU = "MENU";
 	public static final String FIRE_SAFETY_DOCUMENTATION = "FIRE_SAFETY_DOCUMENTATION";
@@ -68,7 +66,11 @@ public final class FilePurposes {
 		FIRE_SAFETY_DOCUMENTATION, POWER_OF_ATTORNEY, CERTIFICATE_OF_REGISTRATION, OWNERSHIP_INFORMATION, BANK_STATEMENT, BUDGET, BUSINESS_DESCRIPTION,
 		PURCHASE_AGREEMENT, TRANSFER_AGREEMENT, LEASE_OR_OWNERSHIP_PROOF, BUSINESS_AGREEMENT, POLICE_PERMIT);
 
-	private static final Set<String> DRAWINGS = Set.of(FLOOR_PLAN, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN);
+	/**
+	 * The purposes of the drawings, which the decision on a serving permit refers to as Draken picks them; of Draken's
+	 * four, those a file of the migration can get.
+	 */
+	public static final Set<String> DRAWINGS = Set.of(FLOOR_PLAN, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN);
 
 	/** The templates of the referrals, by source, in upper case. */
 	private static final Map<Source, Map<String, String>> REFERRAL_TEMPLATES = Map.of(

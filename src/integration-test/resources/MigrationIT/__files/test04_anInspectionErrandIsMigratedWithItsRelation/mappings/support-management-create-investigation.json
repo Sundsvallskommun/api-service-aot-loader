@@ -38,13 +38,10 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'businessName' && @.displayName == 'Verksamhetens namn' && @.values[0] == 'Testbolaget AB')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'businessOrgNumber' && @.values[0] == '556677-8899')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'inspectionDate' && @.values[0] == '2021-01-01')]"
+				"matchesJsonPath": {
+					"expression": "$.parameters",
+					"absent": true
+				}
 			}
 		]
 	},

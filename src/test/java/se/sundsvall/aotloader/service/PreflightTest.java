@@ -24,6 +24,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -41,6 +43,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FilePurpose;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
@@ -301,8 +304,11 @@ class PreflightTest {
 			"Klassificering saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Typ i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 20)",
 			"Namn i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 4)",
-			"Nyckel eller schema för JSON-parametern i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.json-parameters.tobacco-party-asset, beslut 87)",
-			"Nyckel eller schema för JSON-parametern i PartyAssets saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87)",
+			"Nyckel eller schema för JSON-parametern tobacco-party-asset saknas för TOBACCO_PERMIT (aot-loader.json-parameters.tobacco-party-asset, beslut 87 och 92)",
+			"Nyckel eller schema för JSON-parametern alcohol-party-asset saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87 och 92)",
+			"Nyckel eller schema för JSON-parametern premises-section saknas för SERVING_PERMIT (aot-loader.json-parameters.premises-section, beslut 87 och 92)",
+			"Nyckel eller schema för JSON-parametern internal-inspection-protocol saknas för ALCOHOL_INSPECTION (aot-loader.json-parameters.internal-inspection-protocol, beslut 87 och 92)",
+			"Nyckel eller schema för JSON-parametern serving-permit-protocol saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.serving-permit-protocol, beslut 87 och 92)",
 			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Etikett saknas för TOBACCO_PERMIT (aot-loader.errand-types, avsnitt 7.3.4)",
@@ -343,11 +349,44 @@ class PreflightTest {
 		assertThat(Stream.of(ErrandType.ALCOHOL_INSPECTION_VISIT, ErrandType.TOBACCO_INSPECTION_VISIT).map(type -> properties.errandType(type).measureType())).containsOnly("EXTERNAL");
 		// The holder must not see an inspection errand on Mina sidor (decision 27)
 		assertThat(properties.roles().inspectionHolder()).isEqualTo("CONTACT").isNotEqualTo(properties.roles().permitHolder());
-		// Every post has the JSON parameter of its schema, as the test environment registers it (decision 87)
+		// Every post has the JSON parameter of its schema, as the test environment registers it (decision 87), and the
+		// decisions, the section of the premises and the inspection protocols those Draken reads them by (decision 92)
 		assertThat(result.problems()).filteredOn(problem -> problem.contains("JSON-parametern")).isEmpty();
-		assertThat(properties.jsonParameter("alcohol-party-asset")).isEqualTo(new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"));
-		assertThat(properties.jsonParameter("tobacco-party-asset")).isEqualTo(new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
-		assertThat(properties.jsonParameter("unknown")).isEqualTo(new JsonParameterSettings(null, null));
+		assertThat(properties.jsonParameter(JsonParameterType.ALCOHOL_PARTY_ASSET)).isEqualTo(new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"));
+		assertThat(properties.jsonParameter(JsonParameterType.TOBACCO_PARTY_ASSET)).isEqualTo(new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
+		assertThat(properties.jsonParameter(JsonParameterType.ALCOHOL_DECISION)).isEqualTo(new JsonParameterSettings("permit", "2281_aot_alcohol_decision_1.0"));
+		assertThat(properties.jsonParameter(JsonParameterType.TOBACCO_DECISION)).isEqualTo(new JsonParameterSettings("permit", "2281_aot_tobacco_decision_1.0"));
+		assertThat(properties.jsonParameter(JsonParameterType.PREMISES_SECTION)).isEqualTo(new JsonParameterSettings("premises", "2281_aot_investigation_premises_section_1.0"));
+		assertThat(properties.jsonParameter(JsonParameterType.SERVING_PERMIT_PROTOCOL)).isEqualTo(new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_serving_permit_1.0"));
+		assertThat(properties.jsonParameter(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL)).isEqualTo(new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_internal_1.0"));
+	}
+
+	@Test
+	void aJsonParameterWithoutSettingsHasBothBlank() {
+		assertThat(new AotLoaderProperties("AOT", "sent-by", "user", "MIGRATION", "SOLVED", "CLOSED", new Roles("PRIMARY", "CONTACT", null, null), null, null, null, DataSize.ofMegabytes(50),
+			null, null, null).jsonParameter(JsonParameterType.ALCOHOL_DECISION)).isEqualTo(new JsonParameterSettings(null, null));
+	}
+
+	@ParameterizedTest
+	@EnumSource(ErrandType.class)
+	void theJsonParametersOfAnErrandTypeAreThoseItsErrandsGet(final ErrandType type) {
+		final var withDecision = new ErrandTypeSettings(null, null, null, null, null, null, null, null, false, "BESLUT", null);
+		final var withoutDecision = new ErrandTypeSettings(null, null, null, null, null, null, null, null, false, null, null);
+
+		final var expected = switch (type) {
+			case SERVING_PERMIT -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET, JsonParameterType.ALCOHOL_DECISION, JsonParameterType.PREMISES_SECTION);
+			case TOBACCO_PERMIT -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET, JsonParameterType.TOBACCO_DECISION);
+			case FOLKOL_SALES_NOTIFICATION, FOLKOL_SERVING_NOTIFICATION -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET, JsonParameterType.ALCOHOL_DECISION);
+			case ECIGARETTE_NOTIFICATION, TOBACCO_FREE_NICOTINE_NOTIFICATION -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET, JsonParameterType.TOBACCO_DECISION);
+			case ALCOHOL_INSPECTION, TOBACCO_INSPECTION -> List.of(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
+			case ALCOHOL_INSPECTION_VISIT -> List.of(JsonParameterType.SERVING_PERMIT_PROTOCOL);
+			case TOBACCO_INSPECTION_VISIT, ALCOHOL_DOCUMENTATION, TOBACCO_DOCUMENTATION -> List.<JsonParameterType>of();
+		};
+
+		assertThat(Preflight.jsonParametersOf(type, withDecision)).containsExactlyElementsOf(expected);
+		// Only an errand type whose errands get a decision gets the JSON parameter of the decision
+		assertThat(Preflight.jsonParametersOf(type, withoutDecision)).containsExactlyElementsOf(expected.stream()
+			.filter(jsonParameter -> jsonParameter != JsonParameterType.ALCOHOL_DECISION && jsonParameter != JsonParameterType.TOBACCO_DECISION).toList());
 	}
 
 	@Test

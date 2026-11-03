@@ -82,10 +82,10 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'decisionText' && @.values[0] == 'Bifall')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'premisesName' && @.values[0] == 'Krogen Två')]"
+				"matchesJsonPath": {
+					"expression": "$.parameters",
+					"absent": true
+				}
 			}
 		]
 	},

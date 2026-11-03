@@ -10,6 +10,7 @@ import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandAttachmentPurpose;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Label;
 import generated.se.sundsvall.supportmanagement.MeasureType;
 import generated.se.sundsvall.supportmanagement.PageErrand;
@@ -195,12 +196,44 @@ public class SupportManagementIntegration {
 	}
 
 	/**
+	 * Changes the investigation: what the change carries replaces what the investigation has, and the rest stays.
+	 */
+	public void updateInvestigation(final String municipalityId, final String errandId, final String investigationId, final Investigation investigation) {
+		client.updateInvestigation(municipalityId, namespace, errandId, investigationId, investigation);
+	}
+
+	/**
+	 * @return the JSON parameters of the investigation
+	 */
+	public List<JsonParameter> getInvestigationJsonParameters(final String municipalityId, final String errandId, final String investigationId) {
+		return Optional.ofNullable(client.getInvestigationJsonParameters(municipalityId, namespace, errandId, investigationId)).orElse(emptyList());
+	}
+
+	/**
+	 * Gives the investigation the JSON parameter, in place of one it has under the key.
+	 */
+	public void writeInvestigationJsonParameter(final String municipalityId, final String errandId, final String investigationId, final JsonParameter jsonParameter) {
+		client.writeInvestigationJsonParameter(municipalityId, namespace, errandId, investigationId, jsonParameter.getKey(), jsonParameter);
+	}
+
+	/**
+	 * Removes the JSON parameter of the investigation under the key; one that is gone already is no error.
+	 */
+	public void deleteInvestigationJsonParameter(final String municipalityId, final String errandId, final String investigationId, final String key) {
+		Fallbacks.unless(NOT_FOUND, false, () -> {
+			client.deleteInvestigationJsonParameter(municipalityId, namespace, errandId, investigationId, key);
+			return true;
+		});
+	}
+
+	/**
 	 * Creates a section of the investigation.
 	 *
+	 * @return                    the id of the section
 	 * @throws MigrationException when the response has no id
 	 */
-	public void createInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationSection section) {
-		Locations.idOf(client.createInvestigationSection(municipalityId, namespace, errandId, investigationId, section), "utredningens avsnitt");
+	public String createInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationSection section) {
+		return Locations.idOf(client.createInvestigationSection(municipalityId, namespace, errandId, investigationId, section), "utredningens avsnitt");
 	}
 
 	/**
@@ -208,6 +241,30 @@ public class SupportManagementIntegration {
 	 */
 	public void updateInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final String sectionId, final InvestigationSection section) {
 		client.updateInvestigationSection(municipalityId, namespace, errandId, investigationId, sectionId, section);
+	}
+
+	/**
+	 * @return the JSON parameters of the section of the investigation
+	 */
+	public List<JsonParameter> getSectionJsonParameters(final String municipalityId, final String errandId, final String investigationId, final String sectionId) {
+		return Optional.ofNullable(client.getSectionJsonParameters(municipalityId, namespace, errandId, investigationId, sectionId)).orElse(emptyList());
+	}
+
+	/**
+	 * Gives the section of the investigation the JSON parameter, in place of one it has under the key.
+	 */
+	public void writeSectionJsonParameter(final String municipalityId, final String errandId, final String investigationId, final String sectionId, final JsonParameter jsonParameter) {
+		client.writeSectionJsonParameter(municipalityId, namespace, errandId, investigationId, sectionId, jsonParameter.getKey(), jsonParameter);
+	}
+
+	/**
+	 * Removes the JSON parameter of the section of the investigation under the key; one that is gone already is no error.
+	 */
+	public void deleteSectionJsonParameter(final String municipalityId, final String errandId, final String investigationId, final String sectionId, final String key) {
+		Fallbacks.unless(NOT_FOUND, false, () -> {
+			client.deleteSectionJsonParameter(municipalityId, namespace, errandId, investigationId, sectionId, key);
+			return true;
+		});
 	}
 
 	/**
@@ -243,6 +300,20 @@ public class SupportManagementIntegration {
 			decisionClient.deleteDecision(municipalityId, namespace, errandId, decisionId);
 			return true;
 		});
+	}
+
+	/**
+	 * @return the JSON parameters of the decision
+	 */
+	public List<JsonParameter> getDecisionJsonParameters(final String municipalityId, final String errandId, final String decisionId) {
+		return Optional.ofNullable(decisionClient.getDecisionJsonParameters(municipalityId, namespace, errandId, decisionId)).orElse(emptyList());
+	}
+
+	/**
+	 * Gives the decision the JSON parameter, in place of one it has under the key.
+	 */
+	public void writeDecisionJsonParameter(final String municipalityId, final String errandId, final String decisionId, final JsonParameter jsonParameter) {
+		decisionClient.writeDecisionJsonParameter(municipalityId, namespace, errandId, decisionId, jsonParameter.getKey(), jsonParameter);
 	}
 
 	public void createDecisionTerm(final String municipalityId, final String errandId, final String decisionId, final DecisionTerm term) {

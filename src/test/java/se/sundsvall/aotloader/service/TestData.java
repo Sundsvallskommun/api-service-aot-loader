@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +26,8 @@ import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PermitLink;
@@ -58,9 +59,15 @@ public final class TestData {
 	public static final String INTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION";
 	public static final String EXTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION";
 	public static final String DOCUMENTATION = "CATEGORYROOT/DOCUMENTATION/DOCUMENTATION";
-	/** The keys and schemas of the JSON parameters of the posts, as the test environment has them. */
-	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.of("alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
-		"tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
+	/** The keys and schemas of the JSON parameters, as the test environment has them. */
+	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.of(
+		"alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
+		"tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"),
+		"alcohol-decision", new JsonParameterSettings("permit", "2281_aot_alcohol_decision_1.0"),
+		"tobacco-decision", new JsonParameterSettings("permit", "2281_aot_tobacco_decision_1.0"),
+		"premises-section", new JsonParameterSettings("premises", "2281_aot_investigation_premises_section_1.0"),
+		"serving-permit-protocol", new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_serving_permit_1.0"),
+		"internal-inspection-protocol", new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_internal_1.0"));
 
 	private static final List<FileReference> PERMIT_FILES = List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS),
 		new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS));
@@ -181,7 +188,8 @@ public final class TestData {
 	}
 
 	/**
-	 * @return a permit granted by a decision with a condition, whose document is the permit file beslut.rtf (decision 70)
+	 * @return a permit granted by a decision with a condition, whose document is the permit file beslut.rtf (decision 70),
+	 *         and which says of the permit what {@link #decisionContent(String)} gives
 	 */
 	public static Candidate permitWithDecision(final String objektId) {
 		return permitBuilder(objektId, "City")
@@ -189,8 +197,22 @@ public final class TestData {
 			.decision(new DecisionData("Anna Berg", "Anna Berg", LocalDateTime.of(2019, 4, 30, 9, 0), "Stadigvarande serveringstillstånd", "Tillstånd beviljas.", LocalDate.of(2019, 5, 1), null,
 				List.of("Mat ska serveras"), List.of(PERMIT_FILES.getFirst()))
 				.withCase("IAN-2019-" + objektId, "Anna Berg")
-				.withCertificate(certificate(objektId)))
+				.withContent(decisionContent(objektId)))
 			.build();
+	}
+
+	/**
+	 * @return what the decision of {@link #permitWithDecision(String)} says of the permit, as the source gives it: that of
+	 *         the post, with the beverages and the serving hours as Draken decides them
+	 */
+	public static ObjectNode decisionContent(final String objektId) {
+		final var content = permitContent(objektId);
+		content.setAll(JsonFields.object()
+			.texts("beverages", List.of("STRONG_BEER", "WINE"))
+			.object("decision", JsonFields.object().text("caseRegistrationNumber", "IAN-2019-" + objektId).text("outcome", "APPROVAL_WITH_CONDITIONS").date("decisionDate",
+				LocalDate.of(2019, 4, 30)))
+			.toNode());
+		return content;
 	}
 
 	/**
@@ -200,23 +222,15 @@ public final class TestData {
 		return permitBuilder(objektId, "City")
 			.investigation(new InvestigationData("Serveringstillstånd – Restaurang " + objektId, LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0),
 				InvestigationTexts.NONE)
-				.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor",
-					List.of(servingArea))))))
+				.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, premisesSection(servingArea))))
 			.build();
 	}
 
 	/**
-	 * @return the parameters of the certificate of the decision of {@link #permitWithDecision(String)}, under some of the
-	 *         keys Draken gives them
+	 * @return the JSON parameter of the section of the premises with the serving area
 	 */
-	private static Map<String, String> certificate(final String objektId) {
-		final var certificate = new LinkedHashMap<String, String>();
-		certificate.put("caseNumber", "IAN-2019-" + objektId);
-		certificate.put("decisionCaseNumber", "IAN-2019-" + objektId);
-		certificate.put("decisionMaker", "Anna Berg");
-		certificate.put("decisionDate", "2019-04-30");
-		certificate.put("validFrom", "2019-05-01");
-		return certificate;
+	public static JsonContent premisesSection(final String servingArea) {
+		return new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object().object("servingArea", JsonFields.object().text("description", servingArea)).toNode());
 	}
 
 	/**
@@ -274,6 +288,22 @@ public final class TestData {
 			.investigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2020, 3, 1, 0, 0), InvestigationTexts.NONE))
 			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
 			.permitLink(link)
+			.build();
+	}
+
+	/**
+	 * @return an inspection errand of 2020 related to the permit, whose investigation is an internal inspection with the
+	 *         fields of its protocol
+	 */
+	public static Candidate inspectionWithProtocol(final String arendeId, final ItemKey permitKey, final JsonContent fields) {
+		final var inspection = inspection(arendeId, permitKey, HOLDER_ID);
+		return Candidate.builder(inspection.key(), inspection.type())
+			.placeName("Restaurang 1")
+			.holder(inspection.holder())
+			.title("Tillsyn – Restaurang 1")
+			.investigation(inspection.investigation().withProtocol("internal_inspection", fields))
+			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
+			.permitLink(inspection.permitLink())
 			.build();
 	}
 

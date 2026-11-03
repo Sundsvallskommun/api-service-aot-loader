@@ -2,30 +2,38 @@ package se.sundsvall.aotloader.service.model;
 
 /**
  * The AoT schemas the JSON parameter of a post in PartyAssets follows, one for alcohol and one for tobacco (decision
- * 87). The key of the parameter and the id of the schema are the settings of the JSON parameter by the name of the
- * schema.
+ * 87), and the schema of the JSON parameter of the decision of a permit of the area, which extends it (decision 92).
  */
 public enum AssetSchema {
 
-	/** aot_alcohol_party_asset: serving permits and notifications of low-alcohol beer. */
-	ALCOHOL("alcohol-party-asset", "premises"),
+	/** aot_alcohol_party_asset: serving permits and notifications of low-alcohol beer; aot_alcohol_decision. */
+	ALCOHOL(JsonParameterType.ALCOHOL_PARTY_ASSET, JsonParameterType.ALCOHOL_DECISION, "premises"),
 
-	/** aot_tobacco_party_asset: tobacco permits and notifications of e-cigarettes and tobacco-free nicotine products. */
-	TOBACCO("tobacco-party-asset", "pointOfSale");
+	/** aot_tobacco_party_asset: tobacco permits and notifications of tobacco products; aot_tobacco_decision. */
+	TOBACCO(JsonParameterType.TOBACCO_PARTY_ASSET, JsonParameterType.TOBACCO_DECISION, "pointOfSale");
 
-	private final String settingsName;
+	private final JsonParameterType asset;
+	private final JsonParameterType decision;
 	private final String placeField;
 
-	AssetSchema(final String settingsName, final String placeField) {
-		this.settingsName = settingsName;
+	AssetSchema(final JsonParameterType asset, final JsonParameterType decision, final String placeField) {
+		this.asset = asset;
+		this.decision = decision;
 		this.placeField = placeField;
 	}
 
 	/**
-	 * @return the name of the settings of the JSON parameter, under aot-loader.json-parameters
+	 * @return the JSON parameter of the post in PartyAssets
 	 */
-	public String settingsName() {
-		return settingsName;
+	public JsonParameterType asset() {
+		return asset;
+	}
+
+	/**
+	 * @return the JSON parameter of the decision of a permit
+	 */
+	public JsonParameterType decision() {
+		return decision;
 	}
 
 	/**

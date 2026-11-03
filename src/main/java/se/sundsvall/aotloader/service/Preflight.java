@@ -27,6 +27,7 @@ import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementInt
 import se.sundsvall.aotloader.service.mapper.LabelPaths;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FilePurpose;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.ServingPermitSubtype;
 import se.sundsvall.aotloader.service.model.Source;
@@ -127,6 +128,7 @@ public class Preflight {
 			if (type.isWithAsset()) {
 				checkAsset(type, settings, problems);
 			}
+			jsonParametersOf(type, settings).forEach(jsonParameter -> checkJsonParameter(type, jsonParameter, problems));
 			if (type.getKind() == TILLSYNSBESOK && Texts.isBlank(settings.measureType())) {
 				problems.add("Åtgärdstyp för anmärkningarna saknas för %s (aot-loader.errand-types, beslut 57)".formatted(type));
 			}
@@ -135,20 +137,49 @@ public class Preflight {
 	}
 
 	/**
-	 * An errand type with a post in PartyAssets is to have the type and the name of the post, and the key and the schema
-	 * of its JSON parameter.
+	 * An errand type with a post in PartyAssets is to have the type and the name of the post.
 	 */
-	private void checkAsset(final ErrandType type, final ErrandTypeSettings settings, final List<String> problems) {
+	private static void checkAsset(final ErrandType type, final ErrandTypeSettings settings, final List<String> problems) {
 		if (Texts.isBlank(settings.assetType())) {
 			problems.add("Typ i PartyAssets saknas för %s (aot-loader.errand-types, beslut 20)".formatted(type));
 		}
 		if (Texts.isBlank(settings.assetTitle())) {
 			problems.add("Namn i PartyAssets saknas för %s (aot-loader.errand-types, beslut 4)".formatted(type));
 		}
-		final var name = type.getAssetSchema().settingsName();
-		final var jsonParameter = properties.jsonParameter(name);
-		if (Texts.isBlank(jsonParameter.key()) || Texts.isBlank(jsonParameter.schemaId())) {
-			problems.add("Nyckel eller schema för JSON-parametern i PartyAssets saknas för %s (aot-loader.json-parameters.%s, beslut 87)".formatted(type, name));
+	}
+
+	/**
+	 * @return the JSON parameters the errands of the type get (decisions 87 and 92): that of the post in PartyAssets, that
+	 *         of the decision of a permit whose errand gets one, that of the section of the premises of a serving permit,
+	 *         and that of the inspection protocol of an inspection errand or of a visit to a serving place
+	 */
+	static List<JsonParameterType> jsonParametersOf(final ErrandType type, final ErrandTypeSettings settings) {
+		final var types = new ArrayList<JsonParameterType>();
+		if (type.isWithAsset()) {
+			types.add(type.getAssetSchema().asset());
+			if (settings.withDecision()) {
+				types.add(type.getAssetSchema().decision());
+			}
+		}
+		switch (type) {
+			case SERVING_PERMIT -> types.add(JsonParameterType.PREMISES_SECTION);
+			case ALCOHOL_INSPECTION, TOBACCO_INSPECTION -> types.add(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
+			case ALCOHOL_INSPECTION_VISIT -> types.add(JsonParameterType.SERVING_PERMIT_PROTOCOL);
+			default -> {
+				// The others get no JSON parameter but that of their post
+			}
+		}
+		return types;
+	}
+
+	/**
+	 * A JSON parameter the migration writes is to have the key and the schema it is written with.
+	 */
+	private void checkJsonParameter(final ErrandType type, final JsonParameterType jsonParameter, final List<String> problems) {
+		final var settings = properties.jsonParameter(jsonParameter);
+		if (Texts.isBlank(settings.key()) || Texts.isBlank(settings.schemaId())) {
+			problems.add("Nyckel eller schema för JSON-parametern %s saknas för %s (aot-loader.json-parameters.%s, beslut 87 och 92)".formatted(jsonParameter.settingsName(), type,
+				jsonParameter.settingsName()));
 		}
 	}
 

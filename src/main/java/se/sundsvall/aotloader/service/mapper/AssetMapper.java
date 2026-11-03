@@ -5,18 +5,18 @@ import generated.se.sundsvall.partyassets.AssetCreateRequest;
 import generated.se.sundsvall.partyassets.AssetJsonParameter;
 import generated.se.sundsvall.partyassets.AssetUpdateRequest;
 import generated.se.sundsvall.partyassets.Status;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
-import se.sundsvall.aotloader.service.model.AssetData;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.support.JsonValues;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -33,20 +33,13 @@ import static se.sundsvall.aotloader.source.AssetContents.FIELD_MUNICIPALITY_ID;
 
 /**
  * Maps a candidate to its post in PartyAssets (section 7.4): its fields, and the JSON parameter that holds its content
- * by the AoT schema of its type (decision 87).
+ * by the AoT schema of its type (decision 87); and what the decision of a permit says of the permit (decision 92).
  */
 @Component
 public class AssetMapper {
 
 	// A description longer than PartyAssets stores is cut and points to the errand, where the whole text is
 	private static final String TRUNCATED_SUFFIX = " … (se ärendet)";
-	// A number read back from PartyAssets may be of another type than the one sent, such as a long for an int
-	private static final Comparator<JsonNode> NUMBERS_BY_VALUE = (one, other) -> {
-		if (one.isNumber() && other.isNumber()) {
-			return one.decimalValue().compareTo(other.decimalValue());
-		}
-		return one.equals(other) ? 0 : 1;
-	};
 
 	private final AotLoaderProperties properties;
 
@@ -72,7 +65,7 @@ public class AssetMapper {
 		final String decisionText) {
 		final var asset = Optional.ofNullable(candidate.asset()).orElseThrow(() -> new MigrationException("Ärendetypen har inget tillstånd i PartyAssets"));
 		final var settings = properties.errandType(candidate.type());
-		final var schema = properties.jsonParameter(asset.schema().settingsName());
+		final var schema = properties.jsonParameter(asset.schema().asset());
 		final var title = Texts.isBlank(asset.titleSuffix()) ? settings.assetTitle() : Texts.title(settings.assetTitle(), asset.titleSuffix());
 		return new AssetCreateRequest()
 			.assetId(errandId)
@@ -87,7 +80,28 @@ public class AssetMapper {
 			.jsonParameters(List.of(new AssetJsonParameter()
 				.key(schema.key())
 				.schemaId(schema.schemaId())
-				.value(jsonValue(asset, errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText))));
+				.value(jsonValue(asset.content(), asset.schema(), asset.legalBasis(), errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText))));
+	}
+
+	/**
+	 * Maps what the decision of a permit says of the permit to its JSON parameter by the decision schema of the area
+	 * (decision 92), written as the JSON parameter of the post is, since Draken reads it as what the permit says.
+	 *
+	 * @param  candidate      the permit, with its decision and its post, and the legal basis read from its documents
+	 * @param  municipalityId the municipality the run is started for
+	 * @param  errandId       the id of the errand
+	 * @param  decisionText   the display name of the outcome of the decision in the namespace, null when unknown
+	 * @return                the JSON parameter, empty when the permit has no decision or no post, or the decision says
+	 *                        nothing of the permit
+	 */
+	public Optional<JsonContent> toDecisionContent(final Candidate candidate, final String municipalityId, final String errandId, final String decisionText) {
+		final var asset = candidate.asset();
+		final var decision = candidate.decision();
+		if (asset == null || decision == null || !decision.hasContent()) {
+			return Optional.empty();
+		}
+		return Optional.of(new JsonContent(asset.schema().decision(),
+			jsonValue(decision.content(), asset.schema(), asset.legalBasis(), errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText)));
 	}
 
 	/**
@@ -95,18 +109,24 @@ public class AssetMapper {
 	 * in the field of the place, also of a post without a place, as every errand has it (decision 19), and with the text
 	 * of the outcome and the legal basis in the decision. A legal basis of a post without a decision gets a decision of its
 	 * own. Neither is cut, since the parameter has no limit of length.
+	 *
+	 * @param content    what the source gives, by the schema
+	 * @param schema     the schema
+	 * @param legalBasis the legal basis read from the documents of the permit, null when none is read
 	 */
-	static ObjectNode jsonValue(final AssetData asset, final String errandId, final String municipalityId, final String decisionText) {
+	static ObjectNode jsonValue(final ObjectNode content, final AssetSchema schema, final String legalBasis, final String errandId, final String municipalityId,
+		final String decisionText) {
 		final var value = JsonNodeFactory.instance.objectNode().put(FIELD_ERRAND_ID, errandId);
-		value.setAll(asset.content());
-		placeOf(value, asset.schema().placeField()).put(FIELD_MUNICIPALITY_ID, municipalityId);
-		final var legalBasis = Texts.trimToNull(asset.legalBasis());
+		// A copy, since the place gets the municipality in place
+		value.setAll(content.deepCopy());
+		placeOf(value, schema.placeField()).put(FIELD_MUNICIPALITY_ID, municipalityId);
+		final var basis = Texts.trimToNull(legalBasis);
 		final var text = Texts.trimToNull(decisionText);
 		if (value.get(FIELD_DECISION) instanceof final ObjectNode decision) {
 			Optional.ofNullable(text).ifPresent(outcome -> decision.put(FIELD_DECISION_TEXT, outcome));
-			Optional.ofNullable(legalBasis).ifPresent(basis -> decision.put(FIELD_LEGAL_BASIS, basis));
-		} else if (legalBasis != null) {
-			value.putObject(FIELD_DECISION).put(FIELD_LEGAL_BASIS, legalBasis);
+			Optional.ofNullable(basis).ifPresent(found -> decision.put(FIELD_LEGAL_BASIS, found));
+		} else if (basis != null) {
+			value.putObject(FIELD_DECISION).put(FIELD_LEGAL_BASIS, basis);
 		}
 		return value;
 	}
@@ -165,7 +185,7 @@ public class AssetMapper {
 	private static boolean sameJsonParameter(final AssetJsonParameter one, final AssetJsonParameter other) {
 		return Objects.equals(one.getKey(), other.getKey())
 			&& Objects.equals(one.getSchemaId(), other.getSchemaId())
-			&& (one.getValue() == null ? other.getValue() == null : other.getValue() != null && one.getValue().equals(NUMBERS_BY_VALUE, other.getValue()));
+			&& JsonValues.same(one.getValue(), other.getValue());
 	}
 
 	/**

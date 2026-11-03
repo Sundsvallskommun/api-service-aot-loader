@@ -8,6 +8,7 @@ import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
 import generated.se.sundsvall.supportmanagement.Stakeholder;
@@ -34,6 +35,8 @@ import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.JsonContent;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
@@ -43,7 +46,9 @@ import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.Person;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.Source;
+import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.MigrationException;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -459,43 +464,59 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void anInvestigationWithAnInspectionProtocolHasItsTemplateAsTypeAndItsFieldsAsParameters() {
+	void anInvestigationWithAnInspectionProtocolHasItsTemplateAsTypeAndNoParameters() {
 		final var investigation = mapper.toInvestigation(new InvestigationData("Tillsynsbesök – Krogen", null, null, InvestigationTexts.of(new Part("Anteckning", "Mycket folk.")))
-			.withProtocol("serving_permit", List.of(new Parameter("premisesName", "Restaurang", List.of("Krogen")), new Parameter("visitStartTime", "Inleds kl.", List.of("21:30")))));
+			.withProtocol("serving_permit", new JsonContent(JsonParameterType.SERVING_PERMIT_PROTOCOL, JsonFields.object().text("premisesName", "Krogen").toNode())));
 
 		assertThat(investigation.getType()).isEqualTo("serving_permit");
-		assertThat(investigation.getParameters()).extracting(p -> p.getKey(), p -> p.getDisplayName(), p -> p.getGroup(), p -> p.getValues())
-			.containsExactly(tuple("premisesName", "Restaurang", null, List.of("Krogen")), tuple("visitStartTime", "Inleds kl.", null, List.of("21:30")));
+		// The fields of the protocol are its JSON parameter, which SupportManagement takes through a resource of its own
+		assertThat(investigation.getParameters()).isNull();
 		// The texts are still its conclusion
 		assertThat(investigation.getConclusion()).isEqualTo("<p><strong>Anteckning</strong></p><p>Mycket folk.</p>");
 	}
 
 	@Test
 	void aSectionOfTheInvestigationIsNotAssessedAsDrakenStartsIt() {
-		final var section = TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5,
-			List.of(new Parameter("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsalen")))));
+		final var section = TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, TestData.premisesSection("Matsalen")));
 
 		assertThat(section.getSectionKey()).isEqualTo("premises");
 		assertThat(section.getHeading()).isEqualTo("Lokal och serveringsställe");
 		assertThat(section.getSortOrder()).isEqualTo(5);
 		assertThat(section.getAssessment()).isEqualTo("PENDING");
 		assertThat(section.getText()).isNull();
-		assertThat(section.getParameters()).extracting(p -> p.getKey(), p -> p.getDisplayName(), p -> p.getValues())
-			.containsExactly(tuple("PREMISES_SERVING_AREA", "Serveringsytor", List.of("Matsalen")));
+		assertThat(section.getParameters()).isNull();
 	}
 
 	@Test
-	void parametersAreTheSameByTheirKeysAndValues() {
-		final var one = List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("a").displayName("A").values(List.of("1")),
-			new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2")));
-		final var other = List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2")),
-			new generated.se.sundsvall.supportmanagement.Parameter().key("a").values(List.of("1")));
+	void aJsonParameterGetsTheKeyAndTheSchemaOfItsType() {
+		final var parameter = mapper.toJsonParameter(TestData.premisesSection("Matsalen"));
 
-		assertThat(TargetMapper.sameParameters(one, other)).isTrue();
-		assertThat(TargetMapper.sameParameters(null, List.of())).isTrue();
-		assertThat(TargetMapper.sameParameters(one, other.subList(0, 1))).isFalse();
-		assertThat(TargetMapper.sameParameters(one, List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("a").values(List.of("3")),
-			new generated.se.sundsvall.supportmanagement.Parameter().key("b").values(List.of("2"))))).isFalse();
+		assertThat(parameter.getKey()).isEqualTo("premises");
+		assertThat(parameter.getSchemaId()).isEqualTo("2281_aot_investigation_premises_section_1.0");
+		assertThat(parameter.getValue()).hasToString("""
+			{"servingArea":{"description":"Matsalen"}}""");
+		assertThat(mapper.toJsonParameter(new JsonContent(JsonParameterType.ALCOHOL_DECISION, JsonFields.object().text("a", "b").toNode())))
+			.extracting(JsonParameter::getKey, JsonParameter::getSchemaId).containsExactly("permit", "2281_aot_alcohol_decision_1.0");
+	}
+
+	@Test
+	void aJsonParameterIsWrittenWhenItIsFoundAsItIsWhateverTheTypeOfItsNumbersAndTheOrderOfItsFields() {
+		final var factory = JsonNodeFactory.instance;
+		final var wanted = new JsonParameter().key("permit").schemaId("schema").value(factory.objectNode().put("a", "x").put("seatsIndoor", 80));
+		final var readBack = new JsonParameter().key("permit").schemaId("schema").value(factory.objectNode().set("seatsIndoor", factory.numberNode(80L)).put("a", "x")).version(3L);
+		final var other = new JsonParameter().key("other").schemaId("schema").value(factory.objectNode());
+
+		assertThat(TargetMapper.hasParameter(List.of(other, readBack), wanted)).isTrue();
+		assertThat(TargetMapper.hasParameter(null, wanted)).isFalse();
+		assertThat(TargetMapper.hasParameter(List.of(new JsonParameter().key("permit").schemaId("another").value(wanted.getValue())), wanted)).isFalse();
+		assertThat(TargetMapper.hasParameter(List.of(new JsonParameter().key("permit").schemaId("schema").value(factory.objectNode().put("a", "y"))), wanted)).isFalse();
+		assertThat(TargetMapper.hasParameter(List.of(new JsonParameter().key("permit").schemaId("schema")), wanted)).isFalse();
+		// A decision is to have that one alone, or none when the migration writes none
+		assertThat(TargetMapper.hasOnly(List.of(readBack), wanted)).isTrue();
+		assertThat(TargetMapper.hasOnly(List.of(readBack, other), wanted)).isFalse();
+		assertThat(TargetMapper.hasOnly(List.of(), wanted)).isFalse();
+		assertThat(TargetMapper.hasOnly(null, null)).isTrue();
+		assertThat(TargetMapper.hasOnly(List.of(other), null)).isFalse();
 	}
 
 	@Test
@@ -516,7 +537,7 @@ class TargetMapperTest {
 		final var candidate = permit.withAsset(permit.asset().withLegalBasis("8 kap. 2 § alkohollagen"));
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
 
-		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor");
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1");
 
 		assertThat(draft.getType()).isEqualTo("SERVERINGSTILLSTAND");
 		assertThat(draft.getStatus()).isEqualTo("DRAFT");
@@ -533,10 +554,8 @@ class TargetMapperTest {
 		assertThat(draft.getValidFrom()).isEqualTo(LocalDate.of(2019, 5, 1));
 		assertThat(draft.getValidTo()).isNull();
 		assertThat(draft.getInvestigationId()).isEqualTo("investigation-1");
-		// The parameters of the certificate the source gives the decision, followed by the text of the outcome
-		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey, generated.se.sundsvall.supportmanagement.Parameter::getValues)
-			.containsExactly(tuple("caseNumber", List.of("IAN-2019-1")), tuple("decisionCaseNumber", List.of("IAN-2019-1")), tuple("decisionMaker", List.of("Anna Berg")),
-				tuple("decisionDate", List.of("2019-04-30")), tuple("validFrom", List.of("2019-05-01")), tuple("decisionText", List.of("Bifall med villkor")));
+		// What it says of the permit is its JSON parameter, and Draken writes no parameters on a decision (decision 92)
+		assertThat(draft.getParameters()).isNull();
 		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).extracting(DecisionTerm::getSortOrder, DecisionTerm::getText).containsExactly(tuple(1, "Mat ska serveras"));
 		final var completion = decisionMapper.toDecisionCompletion(candidate.decision());
 		assertThat(completion.getStatus()).isEqualTo("COMPLETED");
@@ -549,12 +568,11 @@ class TargetMapperTest {
 		final var permit = TestData.permitWithDecision("1");
 		final var decision = permit.decision();
 		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset())
-			.decision(new DecisionData("N".repeat(300), null, decision.decidedAt(), null, null, null, LocalDate.of(2024, 12, 31), List.of(), List.of())
-				.withCertificate(Map.of("decisionDate", "2019-04-30", "validFrom", " ")))
+			.decision(new DecisionData("N".repeat(300), null, decision.decidedAt(), null, null, null, LocalDate.of(2024, 12, 31), List.of(), List.of()))
 			.build();
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
 
-		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen; " + "x".repeat(300), null, null);
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen; " + "x".repeat(300), null);
 
 		assertThat(draft.getOutcome()).isEqualTo("APPROVAL");
 		assertThat(draft.getDecidedBy()).hasSize(255);
@@ -562,45 +580,26 @@ class TargetMapperTest {
 		assertThat(draft.getLegalBasis()).isEqualTo("8 kap. 2 § alkohollagen");
 		assertThat(draft.getValidTo()).isEqualTo(LocalDate.of(2024, 12, 31));
 		assertThat(draft.getInvestigationId()).isNull();
-		// Without the text of the outcome and a first day, those parameters are left out
-		assertThat(draft.getParameters()).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).containsExactly("decisionDate");
 		assertThat(TargetMapper.toDecisionTerms(candidate.decision())).isEmpty();
-		assertThat(decisionMapper.toDecisionDraft(candidate, " ", null, null).getLegalBasis()).isNull();
-	}
-
-	@Test
-	void whatThePermitWasGrantedWithComesLastWithTheLabelsAndTheGroupOfDraken() {
-		final var permit = TestData.permitWithDecision("1");
-		final var decided = List.of(new Parameter("decidedBeverages", "Alkoholdrycker som får serveras", "DECIDED", List.of("STRONG_BEER", "WINE")),
-			new Parameter("decidedServingHoursIndoorPublic", "Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
-		final var candidate = Candidate.builder(permit.key(), permit.type()).asset(permit.asset()).decision(permit.decision().withDecided(decided)).build();
-		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
-
-		final var parameters = decisionMapper.toDecisionDraft(candidate, null, null, "Bifall med villkor").getParameters();
-
-		assertThat(parameters).extracting(generated.se.sundsvall.supportmanagement.Parameter::getKey).endsWith("decisionText", "decidedBeverages", "decidedServingHoursIndoorPublic");
-		assertThat(parameters.subList(parameters.size() - 2, parameters.size()))
-			.extracting(generated.se.sundsvall.supportmanagement.Parameter::getDisplayName, generated.se.sundsvall.supportmanagement.Parameter::getGroup,
-				generated.se.sundsvall.supportmanagement.Parameter::getValues)
-			.containsExactly(tuple("Alkoholdrycker som får serveras", "DECIDED", List.of("STRONG_BEER", "WINE")),
-				tuple("Serveringstid inne (allmänheten)", "DECIDED", List.of("11:00", "01:00")));
+		assertThat(decisionMapper.toDecisionDraft(candidate, " ", null).getLegalBasis()).isNull();
 	}
 
 	@Test
 	void aDecisionIsWrittenOnlyWhenItHasAllThatTheMigrationWouldWriteNow() {
 		final var candidate = TestData.permitWithDecision("1");
 		final var decisionMapper = new TargetMapper(TestData.propertiesWithDecisions("documents", "attachments", "ab12cde"), CLOCK);
-		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor");
+		final var draft = decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1");
 		final var completion = decisionMapper.toDecisionCompletion(candidate.decision());
 		final var terms = TargetMapper.toDecisionTerms(candidate.decision());
 		final var documents = List.of("attachment-1", "attachment-2");
-		// As SupportManagement gives it back: its times in UTC, its parameters and attachments in another order
-		final Supplier<Decision> written = () -> decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1", "Bifall med villkor")
+		// As SupportManagement gives it back: its times in UTC, its attachments in another order, and an empty list of
+		// parameters
+		final Supplier<Decision> written = () -> decisionMapper.toDecisionDraft(candidate, "8 kap. 2 § alkohollagen", "investigation-1")
 			.id("decision-1")
 			.status("COMPLETED")
 			.decidedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
 			.completedAt(OffsetDateTime.parse("2019-04-30T07:00Z"))
-			.parameters(draft.getParameters().reversed())
+			.parameters(List.of())
 			.terms(List.of(new DecisionTerm().id("term-1").sortOrder(1).text("Mat ska serveras")))
 			.attachments(List.of(new ErrandAttachment().id("attachment-2"), new ErrandAttachment().id("attachment-1")))
 			.createdBy("ab12cde");
@@ -622,7 +621,9 @@ class TargetMapperTest {
 		changes.put("no first day", decision -> decision.validFrom(null));
 		changes.put("a last day", decision -> decision.validTo(LocalDate.of(2030, 1, 1)));
 		changes.put("no investigation", decision -> decision.investigationId(null));
-		changes.put("a parameter less", decision -> decision.parameters(decision.getParameters().subList(1, decision.getParameters().size())));
+		// The parameters an earlier version of the migration gave the decision
+		changes.put("a parameter", decision -> decision.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("decisionCaseNumber").values(List.of(
+			"IAN-2019-1")))));
 		changes.put("another term", decision -> decision.terms(List.of(new DecisionTerm().sortOrder(1).text("Annat villkor"))));
 		changes.put("a term more", decision -> decision.terms(List.of(new DecisionTerm().sortOrder(2).text("Mat ska serveras"), new DecisionTerm().sortOrder(1).text("Annat villkor"))));
 		changes.put("a document less", decision -> decision.attachments(List.of(new ErrandAttachment().id("attachment-1"))));

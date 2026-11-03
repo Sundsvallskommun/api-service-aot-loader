@@ -39,7 +39,7 @@ class PermitDecisionsTest {
 		assertThat(data.terms()).containsExactly("Mat ska serveras");
 		assertThat(data.documents()).containsExactly(new FileReference("beslut.rtf", DOCUMENTS), new FileReference("signerat.pdf", ATTACHMENTS));
 		assertThat(data.maker()).isEqualTo("Anna Berg");
-		assertThat(data).hasToString("DecisionData[decidedAt=2019-04-30T09:15, terms=1, documents=2, decided=0, certificate=[]]");
+		assertThat(data).hasToString("DecisionData[decidedAt=2019-04-30T09:15, terms=1, documents=2, content=[]]");
 	}
 
 	@Test

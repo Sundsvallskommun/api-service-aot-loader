@@ -1,0 +1,74 @@
+{
+	"name": "support-management-write-decision-json-parameter",
+	"request": {
+		"method": "PUT",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000005/decisions/decision-1/json-parameters/permit",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.key",
+					"equalTo": "permit"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.schemaId",
+					"equalTo": "2281_aot_alcohol_decision_1.0"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.errandId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000005"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.decision.decisionText",
+					"equalTo": "Bifall"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.premises.name",
+					"equalTo": "Krogen Två"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"key": "permit",
+			"schemaId": "2281_aot_alcohol_decision_1.0",
+			"value": {},
+			"version": 0
+		}
+	}
+}

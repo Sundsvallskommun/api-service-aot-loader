@@ -20,6 +20,7 @@ import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
 import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
 import se.sundsvall.aotloader.service.model.Outcome;
@@ -134,27 +135,8 @@ class AlkolCandidateFactoryTest {
 			"salesTypes":["RETAIL"],"salesPeriod":{"period":"INDEFINITE","from":"2019-07-02"},\
 			"decision":{"caseRegistrationNumber":"IAN-2019-100","outcome":"APPROVAL","decisionDate":"2019-07-01","executionDate":"2019-07-02","validFrom":"2019-07-02"},\
 			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
-		// AlkOL names nobody who made the decision, so the certificate has the diary number of the decision alone
-		assertThat(candidate.decision().certificate()).containsExactly(
-			Map.entry("permitHolderName", "Bolaget 10"),
-			Map.entry("permitHolderOrgNumber", "556677-8899"),
-			Map.entry("permitHolderStreet", "Gatan 1"),
-			Map.entry("permitHolderPostalAddress", "85230 Sundsvall"),
-			Map.entry("premisesName", "Butik 1"),
-			Map.entry("premisesStreet", "Gatan 1"),
-			Map.entry("premisesPostalAddress", "85230 Sundsvall"),
-			Map.entry("premisesPhone", "060-1"),
-			Map.entry("salesRetail", "true"),
-			Map.entry("salesWholesale", "false"),
-			Map.entry("salesOnline", "false"),
-			Map.entry("validityIndefinite", "true"),
-			Map.entry("validityTemporary", "false"),
-			Map.entry("caseNumber", "IAN-2019-100"),
-			Map.entry("executionDate", "2019-07-02"),
-			Map.entry("decisionOfficerAndCaseNumber", "IAN-2019-100"),
-			Map.entry("decisionCaseNumber", "IAN-2019-100"),
-			Map.entry("decisionDate", "2019-07-01"),
-			Map.entry("validFrom", "2019-07-02"));
+		// The decision says of the tobacco permit what the post does, as Draken writes it (decision 92)
+		assertThat(candidate.decision().content()).isEqualTo(candidate.asset().content());
 		assertThat(candidate.files().references()).containsExactly(
 			new FileReference("22222222.rtf", DOCUMENTS),
 			new FileReference("ansokan.pdf", ATTACHMENTS),
@@ -478,7 +460,8 @@ class AlkolCandidateFactoryTest {
 		assertThat(decision.terms()).isEmpty();
 		assertThat(decision.documents()).isEmpty();
 		// A tobacco decision has no beverages and no serving hours, which Draken would show as decided (decision 76)
-		assertThat(decision.decided()).isEmpty();
+		assertThat(decision.content().has("beverages")).isFalse();
+		assertThat(decision.content().has("servingHours")).isFalse();
 		// The place's events without an errand, also the one whose errand is missing, become documentation errands, those
 		// with a text or a file, but the one that registers the folköl of the place (decision 71)
 		final var documentation = data.factory().documentation().candidates();
@@ -726,9 +709,11 @@ class AlkolCandidateFactoryTest {
 		assertThat(external.investigation().texts()).isEqualTo(InvestigationTexts.of(new Part("Noteringar", "Klagomål"),
 			new Part("Händelser", "2020-01-10 Anteckningar (sekretess): Kontrollköp gjort\n2020-01-15 017 (diarienummer TIL-0)"),
 			new Part("Beslut", "2020-01-20 Varning, beslutsfattare XY: Varning meddelas.")));
-		// An inspection errand of AlkOL is an internal inspection too, and has the texts as parameters (decision 77)
+		// An inspection errand of AlkOL is an internal inspection too, with the fields of the protocol (decisions 77 and 92)
 		assertThat(external.investigation().protocol()).isEqualTo(InspectionProtocols.INTERNAL_INSPECTION);
-		assertThat(external.investigation().protocolParameters()).extracting(Parameter::key).containsExactly("businessName", "businessOrgNumber", "businessAddress", "inspectionType", "inspectionDate", "inspectorName");
+		assertThat(external.investigation().protocolFields().type()).isEqualTo(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
+		assertThat(external.investigation().protocolFields().value().propertyNames()).containsExactly("businessName", "businessOrgNumber", "businessAddress", "inspectionType",
+			"inspectionDate", "inspectorName");
 		assertThat(parameters(external)).containsEntry("noteringar", List.of("Klagomål")).containsEntry("beslutstexter", List.of("2020-01-20 Varning, beslutsfattare XY: Varning meddelas."));
 		final var internal = candidates.get(1);
 		assertThat(internal.investigation().texts()).isEqualTo(InvestigationTexts.NONE);
@@ -857,7 +842,7 @@ class AlkolCandidateFactoryTest {
 			new Part("Anmärkningar", "Påträngande reklam i butik")));
 		// Draken has no protocol for a visit to a sales place
 		assertThat(visit.investigation().protocol()).isNull();
-		assertThat(visit.investigation().protocolParameters()).isEmpty();
+		assertThat(visit.investigation().protocolFields()).isNull();
 		assertThat(visit.measures()).containsExactly(new MeasureData("Påträngande reklam i butik", null, LocalDateTime.of(2024, 5, 3, 22, 15)));
 		// Every file of the visit is material of its investigation (decision 60)
 		assertThat(visit.files().references()).allSatisfy(file -> assertThat(visit.files().detailsOf(file).investigation()).isTrue());

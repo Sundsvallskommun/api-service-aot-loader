@@ -12,6 +12,7 @@ import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
 import generated.se.sundsvall.supportmanagement.Investigation;
 import generated.se.sundsvall.supportmanagement.InvestigationSection;
+import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
 import java.time.Clock;
@@ -19,7 +20,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,16 +35,16 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
+import se.sundsvall.aotloader.service.model.JsonContent;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.ParameterList;
+import se.sundsvall.aotloader.support.JsonValues;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.DECISION_PARAMETER_TEXT;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_EMAIL;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_NAME;
 import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_PHONE;
@@ -182,9 +182,9 @@ public class TargetMapper {
 	/**
 	 * @return the investigation of an inspection errand, visit or permit, completed when the source tells when the
 	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source in
-	 *         its conclusion (decisions 44–46), and with the template and fields of its inspection protocol when it has one
-	 *         (decision 77); an end later than now, which the source has in error or for a planned inspection, leaves it
-	 *         active without an end
+	 *         its conclusion (decisions 44–46), and with the template of its inspection protocol when it has one (decision
+	 *         77), whose fields it gets as its JSON parameter; an end later than now, which the source has in error or
+	 *         for a planned inspection, leaves it active without an end
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
 		final var completedAt = untilNow(investigation.completedAt());
@@ -194,54 +194,72 @@ public class TargetMapper {
 			.conclusion(conclusion(investigation.texts()))
 			.startedAt(inSwedishTime(investigation.startedAt()))
 			.completedAt(completedAt)
-			.type(investigation.protocol())
-			.parameters(investigation.protocolParameters().isEmpty() ? null
-				: investigation.protocolParameters().stream()
-					.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).values(parameter.values()))
-					.toList());
+			.type(investigation.protocol());
 	}
 
 	/**
 	 * @return the section of the investigation, not yet assessed, as Draken writes a section when it starts an
-	 *         investigation, since the source has no assessment of it
+	 *         investigation, since the source has no assessment of it; what it establishes it gets as its JSON parameter
 	 */
 	public static InvestigationSection toInvestigationSection(final InvestigationData.Section section) {
 		return new InvestigationSection()
 			.sectionKey(section.key())
 			.heading(Texts.truncate(section.heading(), SECTION_HEADING_MAX_LENGTH, null))
 			.sortOrder(section.sortOrder())
-			.assessment(SECTION_NOT_ASSESSED)
-			.parameters(toParameters(section.parameters()));
+			.assessment(SECTION_NOT_ASSESSED);
 	}
 
 	/**
-	 * @return true when the parameters have the same values under the same keys, whatever their order and labels
+	 * @return the JSON parameter in SupportManagement, under the key and with the schema of the settings of its type
+	 *         (decision 92)
 	 */
-	public static boolean sameParameters(final List<generated.se.sundsvall.supportmanagement.Parameter> one, final List<generated.se.sundsvall.supportmanagement.Parameter> other) {
-		return parameterValues(one).equals(parameterValues(other));
+	public JsonParameter toJsonParameter(final JsonContent content) {
+		final var settings = properties.jsonParameter(content.type());
+		return new JsonParameter()
+			.key(settings.key())
+			.schemaId(settings.schemaId())
+			.value(content.value());
 	}
 
-	private static List<generated.se.sundsvall.supportmanagement.Parameter> toParameters(final List<Parameter> parameters) {
-		return parameters.stream()
-			.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).group(parameter.group())
-				.values(parameter.values()))
-			.toList();
+	/**
+	 * @param  found  the JSON parameters of a decision, an investigation or a section, as SupportManagement gives them
+	 * @param  wanted the one the migration would write now, null for none
+	 * @return        true when what is found is exactly what the migration would write: that one alone, under its key and
+	 *                with its schema and value, whatever type of number a value has
+	 */
+	public static boolean hasOnly(final List<JsonParameter> found, final JsonParameter wanted) {
+		final var parameters = Optional.ofNullable(found).orElse(List.of());
+		if (wanted == null) {
+			return parameters.isEmpty();
+		}
+		return parameters.size() == 1 && hasParameter(parameters, wanted);
+	}
+
+	/**
+	 * @param  found  the JSON parameters of an investigation or a section, as SupportManagement gives them
+	 * @param  wanted the one the migration writes
+	 * @return        true when what is found has it, under its key and with its schema and value
+	 */
+	public static boolean hasParameter(final List<JsonParameter> found, final JsonParameter wanted) {
+		return Optional.ofNullable(found).orElse(List.of()).stream()
+			.anyMatch(parameter -> Objects.equals(parameter.getKey(), wanted.getKey())
+				&& Objects.equals(parameter.getSchemaId(), wanted.getSchemaId())
+				&& JsonValues.same(parameter.getValue(), wanted.getValue()));
 	}
 
 	/**
 	 * Maps the decision a permit was granted by to the decision of its errand, as Draken writes a manual decision on a
 	 * permit (decision 70): of the type and with the heading of the errand type, an approval, with conditions when it has
-	 * terms, made by the decision maker of the source, and with the parameters of the permit and of the decision under the
-	 * keys Draken gives them. The terms and the documents are not part of it, since SupportManagement takes them through
-	 * their own resources.
+	 * terms, and made by the decision maker of the source. What it says of the permit, the terms and the documents are not
+	 * part of it, since SupportManagement takes them through their own resources; it has no parameters, as Draken writes
+	 * none (decision 92).
 	 *
 	 * @param  candidate       the permit, with its decision
 	 * @param  legalBasis      the legal basis read from the documents of the permit, null when none was found
 	 * @param  investigationId the investigation of the errand that the decision rests on, null when it has none
-	 * @param  outcomeText     the display name of the outcome in the namespace, null when unknown
 	 * @return                 the decision, as a draft
 	 */
-	public Decision toDecisionDraft(final Candidate candidate, final String legalBasis, final String investigationId, final String outcomeText) {
+	public Decision toDecisionDraft(final Candidate candidate, final String legalBasis, final String investigationId) {
 		final var decision = candidate.decision();
 		final var settings = properties.errandType(candidate.type());
 		return new Decision()
@@ -257,8 +275,7 @@ public class TargetMapper {
 			.justification(decision.justification())
 			.validFrom(decision.validFrom())
 			.validTo(decision.validTo())
-			.investigationId(investigationId)
-			.parameters(decisionParameters(candidate, outcomeText));
+			.investigationId(investigationId);
 	}
 
 	/**
@@ -300,15 +317,16 @@ public class TargetMapper {
 
 	/**
 	 * Tells whether a decision of the errand is the decision the migration would write now, so that it is kept as it is.
-	 * Every field the migration writes is compared, the times as instants and the parameters by key, as well as the terms
-	 * in their order and the attachments the decision links.
+	 * Every field the migration writes is compared, the times as instants, as well as the terms in their order and the
+	 * attachments the decision links. What it says of the permit is its JSON parameter, which the caller compares.
 	 *
 	 * @param  found       a decision of the errand, as SupportManagement gives it
 	 * @param  draft       the decision as {@link #toDecisionDraft} gives it
 	 * @param  completion  its completion, as {@link #toDecisionCompletion} gives it
 	 * @param  terms       its terms, as {@link #toDecisionTerms} gives them
 	 * @param  documentIds the attachments of the errand it is to link
-	 * @return             true when the decision found is completed and has all of it, and links no other attachment
+	 * @return             true when the decision found is completed and has all of it, links no other attachment and has no
+	 *                     parameters, since the migration writes none
 	 */
 	public static boolean isWritten(final Decision found, final Decision draft, final Decision completion, final List<DecisionTerm> terms, final Collection<String> documentIds) {
 		return DECISION_COMPLETED.equals(found.getStatus())
@@ -325,19 +343,13 @@ public class TargetMapper {
 			&& Objects.equals(found.getValidFrom(), draft.getValidFrom())
 			&& Objects.equals(found.getValidTo(), draft.getValidTo())
 			&& Objects.equals(found.getInvestigationId(), draft.getInvestigationId())
-			&& parameterValues(found.getParameters()).equals(parameterValues(draft.getParameters()))
+			&& Optional.ofNullable(found.getParameters()).orElse(List.of()).isEmpty()
 			&& termTexts(found.getTerms()).equals(termTexts(terms))
 			&& attachmentIds(found.getAttachments()).equals(Set.copyOf(documentIds));
 	}
 
 	private static boolean sameInstant(final OffsetDateTime one, final OffsetDateTime other) {
 		return one == null ? other == null : other != null && one.isEqual(other);
-	}
-
-	private static Map<String, List<String>> parameterValues(final List<generated.se.sundsvall.supportmanagement.Parameter> parameters) {
-		return Optional.ofNullable(parameters).orElse(List.of()).stream()
-			.collect(Collectors.toMap(parameter -> Texts.trimToNull(parameter.getKey()), parameter -> Optional.ofNullable(parameter.getValues()).orElse(List.of()), (one, other) -> Stream
-				.concat(one.stream(), other.stream()).toList()));
 	}
 
 	private static List<String> termTexts(final List<DecisionTerm> terms) {
@@ -349,27 +361,6 @@ public class TargetMapper {
 
 	private static Set<String> attachmentIds(final List<ErrandAttachment> attachments) {
 		return Optional.ofNullable(attachments).orElse(List.of()).stream().map(ErrandAttachment::getId).collect(Collectors.toSet());
-	}
-
-	/**
-	 * The parameters Draken gives a decision on a permit for its certificate (decision 87): those the source gives the
-	 * decision, and the text of the outcome, as the namespace names it. A parameter without a value is left out, as Draken
-	 * leaves it out. Last come the decided ones, such as the beverages and the serving hours, with the labels and the group
-	 * Draken gives them.
-	 */
-	private static List<generated.se.sundsvall.supportmanagement.Parameter> decisionParameters(final Candidate candidate, final String outcomeText) {
-		final var decision = candidate.decision();
-		final var values = new LinkedHashMap<>(decision.certificate());
-		values.put(DECISION_PARAMETER_TEXT, outcomeText);
-		final var certificate = values.entrySet().stream()
-			.filter(entry -> !Texts.isBlank(entry.getValue()))
-			.map(entry -> new generated.se.sundsvall.supportmanagement.Parameter().key(entry.getKey())
-				.values(List.of(Texts.truncate(entry.getValue().strip(), ERRAND_PARAMETER_MAX_LENGTH, null))));
-		// What the permit was granted with, under the keys, labels and group Draken shows them by (decision 76)
-		final var decided = decision.decided().stream()
-			.map(parameter -> new generated.se.sundsvall.supportmanagement.Parameter().key(parameter.key()).displayName(parameter.displayName()).group(parameter.group())
-				.values(parameter.values()));
-		return Stream.concat(certificate, decided).toList();
 	}
 
 	/**
