@@ -40,7 +40,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.assessment",
-					"absent": true
+					"equalTo": "PENDING"
 				}
 			},
 			{

@@ -458,9 +458,9 @@ class ItemMigratorTest {
 		// What the section establishes is its JSON parameter, where Draken reads it (decision 92)
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal"));
 		assertThat(section.getValue().getSectionKey()).isEqualTo("premises");
-		// The serving area is its text, which Draken shows on a migrated errand, and it has no assessment (decision 96)
+		// The serving area is its text, which Draken shows on a migrated errand (decision 96), and it is not assessed
 		assertThat(section.getValue().getText()).isEqualTo("<p>Matsal</p>");
-		assertThat(section.getValue().getAssessment()).isNull();
+		assertThat(section.getValue().getAssessment()).isEqualTo("PENDING");
 		assertThat(section.getValue().getParameters()).isNull();
 	}
 
@@ -477,8 +477,8 @@ class ItemMigratorTest {
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
 
-		// The section an earlier version of the migration wrote, found by its key in any case, with an assessment, no text
-		// and parameters, is removed with them and written anew, as a change cannot empty a field
+		// The section an earlier version of the migration wrote, found by its key in any case, without a text and with
+		// parameters, is removed with them and written anew, as a change cannot empty a field
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal och bar"), context(false));
 		// An investigation that lacks the section gets it, with its JSON parameter
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
@@ -491,7 +491,7 @@ class ItemMigratorTest {
 		order.verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-3", premisesParameter("Matsal"));
 		assertThat(section.getAllValues()).extracting(InvestigationSection::getSectionKey, InvestigationSection::getText, InvestigationSection::getAssessment)
-			.containsExactly(tuple("premises", "<p>Matsal och bar</p>", null), tuple("premises", "<p>Matsal</p>", null));
+			.containsExactly(tuple("premises", "<p>Matsal och bar</p>", "PENDING"), tuple("premises", "<p>Matsal</p>", "PENDING"));
 		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
 		verify(supportManagement, never()).getSectionJsonParameters(anyString(), anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
@@ -512,7 +512,7 @@ class ItemMigratorTest {
 		final var order = inOrder(supportManagement);
 		order.verify(supportManagement).deleteInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1");
 		order.verify(supportManagement).createInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", new InvestigationSection().sectionKey("premises")
-			.heading("Lokal och serveringsställe").sortOrder(5).text("<p>Matsal och bar</p>"));
+			.heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING").text("<p>Matsal och bar</p>"));
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal och bar"));
 	}
 
@@ -1876,7 +1876,8 @@ class ItemMigratorTest {
 	 * @return the section of the premises with the serving area as an earlier run wrote it, "section-1"
 	 */
 	private static InvestigationSection premisesSectionWritten(final String servingArea) {
-		return new InvestigationSection().id("section-1").sectionKey("premises").heading("Lokal och serveringsställe").sortOrder(5).text("<p>" + servingArea + "</p>");
+		return new InvestigationSection().id("section-1").sectionKey("premises").heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING")
+			.text("<p>" + servingArea + "</p>");
 	}
 
 	private static JsonContent protocol(final String businessName) {

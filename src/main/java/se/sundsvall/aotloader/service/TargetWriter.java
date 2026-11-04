@@ -396,9 +396,9 @@ class TargetWriter {
 	 * each with its text and its JSON parameter (decisions 92 and 96). It is called only while the errand is a draft,
 	 * whose investigation is the migration's own, so an investigation or section found gets exactly what the source gives
 	 * now: the JSON parameter the source gives, when it lacks it or has another value, no other JSON parameter, and no
-	 * parameters, which the migration does not write. A section found with another key, heading, place or text, or with
-	 * an assessment, is removed and written anew, since a change cannot empty a field. An errand without an investigation
-	 * in the candidate gets none.
+	 * parameters, which the migration does not write. A section found with another key, heading, place, assessment or
+	 * text is removed and written anew, since a change cannot empty a field. An errand without an investigation in the
+	 * candidate gets none.
 	 */
 	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
 		final var data = candidate.investigation();
