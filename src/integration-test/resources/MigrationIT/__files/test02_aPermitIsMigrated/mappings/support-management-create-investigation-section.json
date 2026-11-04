@@ -33,8 +33,14 @@
 			},
 			{
 				"matchesJsonPath": {
+					"expression": "$.text",
+					"equalTo": "<p>Matsal och bar</p>"
+				}
+			},
+			{
+				"matchesJsonPath": {
 					"expression": "$.assessment",
-					"equalTo": "PENDING"
+					"absent": true
 				}
 			},
 			{

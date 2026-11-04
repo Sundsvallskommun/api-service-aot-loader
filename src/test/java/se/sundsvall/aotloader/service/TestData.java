@@ -221,7 +221,7 @@ public final class TestData {
 		return permitBuilder(objektId, "City")
 			.investigation(new InvestigationData("Serveringstillstånd – Restaurang " + objektId, LocalDateTime.of(2019, 1, 15, 0, 0), LocalDateTime.of(2019, 5, 1, 0, 0),
 				InvestigationTexts.NONE)
-				.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, premisesSection(servingArea))))
+				.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, servingArea, premisesSection(servingArea))))
 			.build();
 	}
 

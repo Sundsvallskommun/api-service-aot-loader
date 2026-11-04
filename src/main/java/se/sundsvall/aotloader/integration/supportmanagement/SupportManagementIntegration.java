@@ -244,6 +244,16 @@ public class SupportManagementIntegration {
 	}
 
 	/**
+	 * Removes a section of the investigation, with its JSON parameters; one that is gone already is no error.
+	 */
+	public void deleteInvestigationSection(final String municipalityId, final String errandId, final String investigationId, final String sectionId) {
+		Fallbacks.unless(NOT_FOUND, false, () -> {
+			client.deleteInvestigationSection(municipalityId, namespace, errandId, investigationId, sectionId);
+			return true;
+		});
+	}
+
+	/**
 	 * @return the JSON parameters of the section of the investigation
 	 */
 	public List<JsonParameter> getSectionJsonParameters(final String municipalityId, final String errandId, final String investigationId, final String sectionId) {

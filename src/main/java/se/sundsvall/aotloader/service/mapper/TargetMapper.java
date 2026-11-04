@@ -70,7 +70,6 @@ public class TargetMapper {
 	private static final String INVESTIGATION_COMPLETED = "COMPLETED";
 	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
 	private static final int SECTION_HEADING_MAX_LENGTH = 255;
-	private static final String SECTION_NOT_ASSESSED = "PENDING";
 	private static final String MEASURE_COMPLETED = "COMPLETED";
 	private static final int MEASURE_TITLE_MAX_LENGTH = 255;
 	private static final int MEASURE_DESCRIPTION_MAX_LENGTH = 3000;
@@ -195,15 +194,29 @@ public class TargetMapper {
 	}
 
 	/**
-	 * @return the section of the investigation, not yet assessed, as Draken writes a section when it starts an
-	 *         investigation, since the source has no assessment of it; what it establishes it gets as its JSON parameter
+	 * @return the section of the investigation as Draken shows it on a migrated errand (decision 96): its heading, its
+	 *         place, and what the source says as its text in HTML, one paragraph per line; without an assessment, since
+	 *         the source has none. What it establishes it gets as its JSON parameter
 	 */
 	public static InvestigationSection toInvestigationSection(final InvestigationData.Section section) {
 		return new InvestigationSection()
 			.sectionKey(section.key())
 			.heading(Texts.truncate(section.heading(), SECTION_HEADING_MAX_LENGTH, null))
 			.sortOrder(section.sortOrder())
-			.assessment(SECTION_NOT_ASSESSED);
+			.text(Texts.paragraphs(section.text()));
+	}
+
+	/**
+	 * @return true when the section found has the key, heading, place and text {@link #toInvestigationSection} gives it,
+	 *         and no assessment; a blank text counts as none
+	 */
+	public static boolean isWritten(final InvestigationSection found, final InvestigationData.Section section) {
+		final var wanted = toInvestigationSection(section);
+		return Objects.equals(found.getSectionKey(), wanted.getSectionKey())
+			&& Objects.equals(found.getHeading(), wanted.getHeading())
+			&& Objects.equals(found.getSortOrder(), wanted.getSortOrder())
+			&& Objects.equals(Texts.trimToNull(found.getText()), wanted.getText())
+			&& Texts.trimToNull(found.getAssessment()) == null;
 	}
 
 	/**

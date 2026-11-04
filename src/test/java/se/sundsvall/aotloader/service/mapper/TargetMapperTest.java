@@ -8,6 +8,7 @@ import generated.se.sundsvall.supportmanagement.Errand.LifecycleEnum;
 import generated.se.sundsvall.supportmanagement.ErrandAttachment;
 import generated.se.sundsvall.supportmanagement.ErrandLabel;
 import generated.se.sundsvall.supportmanagement.ExternalTag;
+import generated.se.sundsvall.supportmanagement.InvestigationSection;
 import generated.se.sundsvall.supportmanagement.JsonParameter;
 import generated.se.sundsvall.supportmanagement.Measure;
 import generated.se.sundsvall.supportmanagement.Priority;
@@ -501,15 +502,41 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void aSectionOfTheInvestigationIsNotAssessedAsDrakenStartsIt() {
-		final var section = TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, TestData.premisesSection("Matsalen")));
+	void aSectionOfTheInvestigationHasWhatTheSourceSaysAsItsTextAndNoAssessment() {
+		final var section = TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, "Matsalen & baren\n\n Uteserveringen ",
+			TestData.premisesSection("Matsalen")));
 
 		assertThat(section.getSectionKey()).isEqualTo("premises");
 		assertThat(section.getHeading()).isEqualTo("Lokal och serveringsställe");
 		assertThat(section.getSortOrder()).isEqualTo(5);
-		assertThat(section.getAssessment()).isEqualTo("PENDING");
-		assertThat(section.getText()).isNull();
+		// HTML, which Draken shows on a migrated errand (decision 96), one paragraph per line that is not blank
+		assertThat(section.getText()).isEqualTo("<p>Matsalen &amp; baren</p><p>Uteserveringen</p>");
+		// The source has no assessment, and Draken would show the code of one as it is
+		assertThat(section.getAssessment()).isNull();
 		assertThat(section.getParameters()).isNull();
+		assertThat(TargetMapper.toInvestigationSection(new InvestigationData.Section("premises", "Lokal", 5, null, TestData.premisesSection("Matsalen"))).getText()).isNull();
+	}
+
+	@Test
+	void aSectionFoundIsWrittenWhenItIsWhatTheSourceGivesWithoutAnAssessment() {
+		final var section = new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, "Matsal", TestData.premisesSection("Matsal"));
+		final Supplier<InvestigationSection> written = () -> new InvestigationSection().id("section-1").sectionKey("premises").heading("Lokal och serveringsställe")
+			.sortOrder(5).text("<p>Matsal</p>");
+
+		assertThat(TargetMapper.isWritten(written.get(), section)).isTrue();
+		assertThat(TargetMapper.isWritten(written.get().assessment(" "), section)).isTrue();
+		assertThat(TargetMapper.isWritten(written.get().sectionKey("PREMISES"), section)).isFalse();
+		assertThat(TargetMapper.isWritten(written.get().heading("Lokal"), section)).isFalse();
+		assertThat(TargetMapper.isWritten(written.get().sortOrder(6), section)).isFalse();
+		assertThat(TargetMapper.isWritten(written.get().text("<p>Matsal och bar</p>"), section)).isFalse();
+		assertThat(TargetMapper.isWritten(written.get().text(null), section)).isFalse();
+		// A section an earlier version of the migration wrote, not assessed and without a text
+		assertThat(TargetMapper.isWritten(written.get().text(null).assessment("PENDING"), section)).isFalse();
+		assertThat(TargetMapper.isWritten(written.get().assessment("PENDING"), section)).isFalse();
+		// Without a text in the source, a blank text is none
+		final var withoutText = new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, null, TestData.premisesSection("Matsal"));
+		assertThat(TargetMapper.isWritten(written.get().text(" "), withoutText)).isTrue();
+		assertThat(TargetMapper.isWritten(written.get(), withoutText)).isFalse();
 	}
 
 	@Test

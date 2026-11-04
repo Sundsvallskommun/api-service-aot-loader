@@ -240,6 +240,20 @@ class SupportManagementIntegrationTest {
 	}
 
 	@Test
+	void aSectionThatIsGoneAlreadyIsNoErrorWhenItIsRemoved() {
+		when(client.deleteInvestigationSection(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s"))
+			.thenReturn(ResponseEntity.noContent().build())
+			.thenThrow(Problem.valueOf(NOT_FOUND, "Saknas"))
+			.thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
+
+		integration.deleteInvestigationSection(MUNICIPALITY_ID, "a", "i", "s");
+		integration.deleteInvestigationSection(MUNICIPALITY_ID, "a", "i", "s");
+
+		assertThatThrownBy(() -> integration.deleteInvestigationSection(MUNICIPALITY_ID, "a", "i", "s")).isInstanceOf(ThrowableProblem.class).hasMessageContaining("Fel");
+		verify(client, times(3)).deleteInvestigationSection(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s");
+	}
+
+	@Test
 	void theJsonParametersOfADecisionGoThroughTheClientOfTheDecisions() {
 		final var parameter = new JsonParameter().key("permit").schemaId("2281_aot_alcohol_decision_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
 		when(decisionClient.getDecisionJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "d")).thenReturn(List.of(parameter), null);

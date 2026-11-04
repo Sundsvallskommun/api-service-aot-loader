@@ -55,8 +55,10 @@ class PersonalDataTest {
 		assertHidden(new InvestigationData("Tillsyn – " + NAME, null, null, InvestigationTexts.NONE)
 			.withProtocol("internal_inspection", new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().text("businessName", NAME).text("businessOrgNumber",
 				NUMBER).toNode()))
-			.withSection(new InvestigationData.Section("premises", "Lokal", 5, new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object().text("previousBusiness", NAME)
-				.toNode()))));
+			.withSection(new InvestigationData.Section("premises", "Lokal", 5, NAME + " " + NUMBER, new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object()
+				.text("previousBusiness", NAME).toNode()))));
+		assertHidden(new InvestigationData.Section("premises", "Lokal", 5, NAME + " " + NUMBER, new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object()
+			.text("previousBusiness", NAME).toNode())));
 		assertHidden(new InvestigationTexts.Part("Beslut", NUMBER));
 		assertHidden(new Journal.Entry(null, "Anteckning", NAME + " " + NUMBER));
 	}

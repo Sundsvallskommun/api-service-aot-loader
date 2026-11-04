@@ -60,18 +60,25 @@ public record InvestigationData(String title, LocalDateTime startedAt, LocalDate
 
 	/**
 	 * A section of the investigation, as Draken writes the sections of the investigation of a permit, with what Draken
-	 * reads in it.
+	 * reads in it. Its text may name persons, and {@link #toString()} shows neither it nor its JSON parameter.
 	 *
 	 * @param key       the key of the section, by which Draken shows it
 	 * @param heading   its heading, as Draken heads it
 	 * @param sortOrder its place among the sections, as Draken orders them
+	 * @param text      what the source says in the section, as lines of plain text, which Draken shows on a migrated
+	 *                  errand (decision 96); null for none
 	 * @param content   what the section establishes, its JSON parameter as Draken reads it (decision 92)
 	 */
-	public record Section(String key, String heading, int sortOrder, JsonContent content) {
+	public record Section(String key, String heading, int sortOrder, String text, JsonContent content) {
 
 		public Section {
 			requireNonNull(key, "key");
 			requireNonNull(content, "content");
+		}
+
+		@Override
+		public String toString() {
+			return "Section[key=" + key + ", sortOrder=" + sortOrder + "]";
 		}
 	}
 }

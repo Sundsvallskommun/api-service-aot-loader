@@ -393,10 +393,12 @@ class TargetWriter {
 	/**
 	 * Gives an errand its investigation (decision 41), unless it has one, which an earlier run then created, with the
 	 * fields of its inspection protocol as its JSON parameter, and the investigation the sections the candidate gives it,
-	 * each with its JSON parameter (decision 92). It is called only while the errand is a draft, whose investigation is
-	 * the migration's own, so an investigation or section found gets exactly what the source gives now: the JSON
-	 * parameter the source gives, when it lacks it or has another value, no other JSON parameter, and no parameters,
-	 * which the migration does not write. An errand without an investigation in the candidate gets none.
+	 * each with its text and its JSON parameter (decisions 92 and 96). It is called only while the errand is a draft,
+	 * whose investigation is the migration's own, so an investigation or section found gets exactly what the source gives
+	 * now: the JSON parameter the source gives, when it lacks it or has another value, no other JSON parameter, and no
+	 * parameters, which the migration does not write. A section found with another key, heading, place or text, or with
+	 * an assessment, is removed and written anew, since a change cannot empty a field. An errand without an investigation
+	 * in the candidate gets none.
 	 */
 	void ensureInvestigation(final Candidate candidate, final String municipalityId, final String errandId) {
 		final var data = candidate.investigation();
@@ -439,6 +441,11 @@ class TargetWriter {
 
 	private void updateSection(final String municipalityId, final String errandId, final String investigationId, final InvestigationSection found, final InvestigationData.Section section) {
 		final var sectionId = found.getId();
+		if (!TargetMapper.isWritten(found, section)) {
+			supportManagement.deleteInvestigationSection(municipalityId, errandId, investigationId, sectionId);
+			createSection(municipalityId, errandId, investigationId, section);
+			return;
+		}
 		if (hasParameters(found.getParameters())) {
 			supportManagement.updateInvestigationSection(municipalityId, errandId, investigationId, sectionId, new InvestigationSection().parameters(List.of()));
 		}

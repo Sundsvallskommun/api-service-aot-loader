@@ -458,40 +458,67 @@ class ItemMigratorTest {
 		// What the section establishes is its JSON parameter, where Draken reads it (decision 92)
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal"));
 		assertThat(section.getValue().getSectionKey()).isEqualTo("premises");
-		assertThat(section.getValue().getAssessment()).isEqualTo("PENDING");
+		// The serving area is its text, which Draken shows on a migrated errand, and it has no assessment (decision 96)
+		assertThat(section.getValue().getText()).isEqualTo("<p>Matsal</p>");
+		assertThat(section.getValue().getAssessment()).isNull();
 		assertThat(section.getValue().getParameters()).isNull();
 	}
 
 	@Test
 	void theSectionsOfAnInvestigationAnEarlierRunCreatedGetWhatTheSourceGivesNow() {
-		final var written = new InvestigationSection().id("section-1").sectionKey("PREMISES")
+		final var written = new InvestigationSection().id("section-1").sectionKey("PREMISES").heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING")
 			.parameters(List.of(new generated.se.sundsvall.supportmanagement.Parameter().key("PREMISES_SERVING_AREA").values(List.of("Matsal"))));
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID))
 			.thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))))
 			.thenReturn(List.of(new Investigation().id("investigation-1")));
-		when(supportManagement.getSectionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1")).thenReturn(List.of(premisesParameter("Matsal")));
-		when(supportManagement.createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any())).thenReturn("section-2");
+		when(supportManagement.createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any())).thenReturn("section-2", "section-3");
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
 
-		// The section of an earlier run is found by its key in any case, loses the parameters an earlier version of the
-		// migration gave it, and gets the JSON parameter the source gives now
+		// The section an earlier version of the migration wrote, found by its key in any case, with an assessment, no text
+		// and parameters, is removed with them and written anew, as a change cannot empty a field
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal och bar"), context(false));
 		// An investigation that lacks the section gets it, with its JSON parameter
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
 
-		verify(supportManagement).updateInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", new InvestigationSection().parameters(List.of()));
-		verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal och bar"));
-		verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any());
-		verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal"));
+		final var section = ArgumentCaptor.forClass(InvestigationSection.class);
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).deleteInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1");
+		order.verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
+		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal och bar"));
+		order.verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
+		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-3", premisesParameter("Matsal"));
+		assertThat(section.getAllValues()).extracting(InvestigationSection::getSectionKey, InvestigationSection::getText, InvestigationSection::getAssessment)
+			.containsExactly(tuple("premises", "<p>Matsal och bar</p>", null), tuple("premises", "<p>Matsal</p>", null));
+		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).getSectionJsonParameters(anyString(), anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
 	}
 
 	@Test
-	void aSectionWithTheJsonParameterTheSourceGivesIsLeftAsItIs() {
-		final var written = new InvestigationSection().id("section-1").sectionKey("premises").parameters(List.of());
+	void aSectionWhoseTextTheSourceNoLongerGivesIsWrittenAnew() {
+		final var written = premisesSectionWritten("Matsal");
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
+		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
+		when(supportManagement.createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), any())).thenReturn("section-2");
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+
+		migrator.process(TestData.permitWithPremisesSection("1", "Matsal och bar"), context(false));
+
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).deleteInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1");
+		order.verify(supportManagement).createInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", new InvestigationSection().sectionKey("premises")
+			.heading("Lokal och serveringsställe").sortOrder(5).text("<p>Matsal och bar</p>"));
+		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal och bar"));
+	}
+
+	@Test
+	void aSectionWithTheTextAndJsonParameterTheSourceGivesIsLeftAsItIs() {
+		final var written = premisesSectionWritten("Matsal").parameters(List.of());
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
@@ -503,6 +530,7 @@ class ItemMigratorTest {
 		migrator.process(TestData.permitWithPremisesSection("1", "Matsal"), context(false));
 
 		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).deleteInvestigationSection(anyString(), anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createInvestigationSection(anyString(), anyString(), anyString(), any());
 		verify(supportManagement, never()).writeSectionJsonParameter(anyString(), anyString(), anyString(), anyString(), any());
 	}
@@ -576,7 +604,7 @@ class ItemMigratorTest {
 
 	@Test
 	void aSectionKeepsOnlyTheJsonParameterTheSourceGives() {
-		final var written = new InvestigationSection().id("section-1").sectionKey("premises");
+		final var written = premisesSectionWritten("Matsal");
 		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKT-TILLSTAND-1")).thenReturn(List.of(errand(LifecycleEnum.DRAFT)));
 		when(supportManagement.updateErrand(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn(errand(LifecycleEnum.DRAFT));
 		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(new Investigation().id("investigation-1").sections(List.of(written))));
@@ -1842,6 +1870,13 @@ class ItemMigratorTest {
 	 */
 	private static JsonParameter premisesParameter(final String servingArea) {
 		return new JsonParameter().key("premises").schemaId("2281_aot_investigation_premises_section_1.0").value(TestData.premisesSection(servingArea).value());
+	}
+
+	/**
+	 * @return the section of the premises with the serving area as an earlier run wrote it, "section-1"
+	 */
+	private static InvestigationSection premisesSectionWritten(final String servingArea) {
+		return new InvestigationSection().id("section-1").sectionKey("premises").heading("Lokal och serveringsställe").sortOrder(5).text("<p>" + servingArea + "</p>");
 	}
 
 	private static JsonContent protocol(final String businessName) {

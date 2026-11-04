@@ -151,12 +151,14 @@ class AlktCandidateFactoryTest {
 			Året runt: Ja
 			Villkor:
 			- Krav på bordsservering: Bord""");
-		// The serving area is in the JSON parameter of the section of the premises of the investigation, where Draken's
-		// examination of the premises reads it (decisions 82 and 92), and the serving staff are on the post only
+		// The serving area is the text of the section of the premises of the investigation, which Draken shows on a migrated
+		// errand (decision 96), and its JSON parameter, where Draken's examination of the premises reads it (decisions 82
+		// and 92), and the serving staff are on the post only
 		assertThat(candidate.investigation().sections()).singleElement().satisfies(section -> {
 			assertThat(section.key()).isEqualTo("premises");
 			assertThat(section.heading()).isEqualTo("Lokal och serveringsställe");
 			assertThat(section.sortOrder()).isEqualTo(5);
+			assertThat(section.text()).isEqualTo("Matsal");
 			assertThat(section.content().type()).isEqualTo(JsonParameterType.PREMISES_SECTION);
 			assertThat(JSON.writeValueAsString(section.content().value())).isEqualTo("""
 				{"servingArea":{"description":"Matsal"}}""");
@@ -1039,7 +1041,7 @@ class AlktCandidateFactoryTest {
 		assertThat(withErrands.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 1", LocalDateTime.of(2019, 1, 15, 0, 0),
 			LocalDateTime.of(2019, 5, 1, 0, 0), InvestigationTexts.of(new Part("Noteringar", "En notering\nAnsökan komplett"), new Part("Händelser", "2019-03-01 Anteckning: Remiss skickad"),
 				new Part("Beslut", "2019-05-01 Serveringstillstånd: Tillstånd beviljas.")))
-			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, TestData.premisesSection("Matsal"))));
+			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, "Matsal", TestData.premisesSection("Matsal"))));
 		// The events of the place without an errand become documentation errands filed under its permit, and the permit has
 		// neither their texts nor their files (decision 71)
 		assertThat(withErrands.files().references()).extracting(FileReference::name).doesNotContain("bilaga.pdf");
@@ -1065,7 +1067,7 @@ class AlktCandidateFactoryTest {
 		assertThat(withoutErrand.ruleHits()).extracting(RuleHit::rule).contains(NO_ISSUING_ERRAND);
 		assertThat(withoutErrand.investigation()).isEqualTo(new InvestigationData("Serveringstillstånd – Restaurang 2", null, LocalDateTime.of(2019, 5, 1, 0, 0),
 			InvestigationTexts.of(new Part("Noteringar", "En notering")))
-			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, TestData.premisesSection("Matsal"))));
+			.withSection(new InvestigationData.Section("premises", "Lokal och serveringsställe", 5, "Matsal", TestData.premisesSection("Matsal"))));
 		assertThat(withoutErrand.errand().description()).doesNotContain("Handläggare");
 	}
 

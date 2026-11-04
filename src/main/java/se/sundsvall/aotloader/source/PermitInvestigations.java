@@ -48,16 +48,17 @@ public final class PermitInvestigations {
 	}
 
 	/**
-	 * The section of Draken's examination of the premises, with the premises where the permit allows serving in its JSON
-	 * parameter, as Draken reads them (decisions 82 and 92). The source tells nothing else the section asks about: when
-	 * the premises were inspected, the right of disposal and the business before.
+	 * The section of Draken's examination of the premises, with the premises where the permit allows serving as its text,
+	 * which Draken shows on a migrated errand (decision 96), and in its JSON parameter, as Draken reads them (decisions 82
+	 * and 92). The source tells nothing else the section asks about: when the premises were inspected, the right of
+	 * disposal and the business before.
 	 *
 	 * @param  servingArea the premises where serving is allowed, as the source describes them
 	 * @return             the section, empty when the source does not describe them
 	 */
 	public static Optional<InvestigationData.Section> premisesSection(final String servingArea) {
 		return Optional.ofNullable(Texts.trimToNull(servingArea))
-			.map(text -> new InvestigationData.Section(PREMISES_SECTION, PREMISES_SECTION_HEADING, PREMISES_SECTION_SORT_ORDER,
+			.map(text -> new InvestigationData.Section(PREMISES_SECTION, PREMISES_SECTION_HEADING, PREMISES_SECTION_SORT_ORDER, text,
 				new JsonContent(JsonParameterType.PREMISES_SECTION, JsonFields.object().object("servingArea", JsonFields.object().text("description", text)).toNode())));
 	}
 }
