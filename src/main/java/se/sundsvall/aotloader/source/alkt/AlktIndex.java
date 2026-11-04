@@ -20,6 +20,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
+import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.DiaryNumberCounts;
 import se.sundsvall.aotloader.source.FileList;
@@ -45,6 +46,7 @@ import static se.sundsvall.aotloader.service.model.Source.ALKT;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_AREA;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_DECISION;
 import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_EVENT;
+import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GROUP;
 
 /**
  * The snapshot of AlkT indexed by place and errand, with what the serving permits and the inspections both read from
@@ -53,6 +55,7 @@ import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_EVENT;
  */
 final class AlktIndex {
 
+	private static final Set<String> PLACE_MARKINGS = Set.of("UNG", "UTOK");
 	private static final String PICTURE_HEADING = "Bild";
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
 		.comparing(PlaceDocument::tidpunkt, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
@@ -166,6 +169,19 @@ final class AlktIndex {
 	Place place(final PlaceRow place) {
 		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codeText(CODE_TYPE_AREA, place.omrade()),
 			place.restaurangBeteckning());
+	}
+
+	/**
+	 * @return the types of the place as one text, such as "Utpräglad matrestaurang, Hotellrestaurang": the texts of its
+	 *         groups in code list Q, in the order of ObjektGrupp1-3 and each once, without the markings UNG and UTOK, which
+	 *         are no types; null when it has none (decision 95)
+	 */
+	String placeTypes(final PlaceRow place) {
+		return Texts.join(", ", place.objektGrupper().stream()
+			.filter(group -> !CodeTexts.isOneOf(group, PLACE_MARKINGS))
+			.map(group -> Texts.trimToNull(snapshot.codeText(CODE_TYPE_PLACE_GROUP, group)))
+			.distinct()
+			.toList());
 	}
 
 	/**

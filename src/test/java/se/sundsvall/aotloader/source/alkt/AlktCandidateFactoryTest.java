@@ -186,7 +186,8 @@ class AlktCandidateFactoryTest {
 			"emailAddress":"info1@example.com","restaurantNumber":"12345678"},\
 			"servingTo":["PUBLIC"],"servingPeriods":[{"period":"ALL_YEAR"}],"servingHours":[{"from":"11:00","to":"01:00"}],"tasting":false,\
 			"additionalScopes":["OUTDOOR_SERVING"],"beverages":["WINE","STRONG_BEER"],\
-			"servingArea":{"description":"Matsal","drawingReference":"ritning.pdf","seatsIndoor":80,"maxPersons":200},"conditions":["Krav på bordsservering: Bord"],\
+			"servingArea":{"description":"Matsal","drawingReference":"ritning.pdf","seatsIndoor":80,"maxPersons":200},\
+			"businessOrientation":{"description":"Kvartersrestaurang"},"conditions":["Krav på bordsservering: Bord"],\
 			"decision":{"caseRegistrationNumber":"IAN-2019-1","outcome":"APPROVAL_WITH_CONDITIONS","decisionDate":"2019-04-20","executionDate":"2019-05-01",\
 			"validFrom":"2019-05-01","replacesDecision":"2015-01-01, SN 2015-1"},\
 			"migration":{"sourceSystem":"ALKT","issuedDateEstimated":false}}""");
@@ -208,7 +209,7 @@ class AlktCandidateFactoryTest {
 	void whatThePostCannotTakeIsLeftOutAndNamed() {
 		final var snapshot = snapshot()
 			.permit(permit(1).servingArea("ca 200", "80 st", "Matsal").build())
-			.place(new AlktSnapshot.PlaceRow(1, 10, "1234567", "Restaurang 1", "Storgatan 1", "852 3", "Sundsvall", "060-123456", "info@", "Sundsvall", null, null))
+			.place(new AlktSnapshot.PlaceRow(1, 10, "1234567", List.of(), "Restaurang 1", "Storgatan 1", "852 3", "Sundsvall", "060-123456", "info@", "Sundsvall", null, null))
 			.owner(owner(10, "556677-8899"))
 			.build();
 
@@ -867,6 +868,33 @@ class AlktCandidateFactoryTest {
 			.containsExactly("Starköl", "Vin", "Spritdrycker", "Andra jästa alkoholdrycker", "Alkoholdrycksliknande preparat");
 		assertThat(ServingPermits.servingTo(permit(1).servingTo(true, true).build())).containsExactly("Allmänheten", "Slutna sällskap");
 		assertThat(ServingPermits.scope(permit(1).scope(true, true, true, true).build())).containsExactly("Uteservering", "Catering", "Provsmakning", "Gårdsförsäljning");
+	}
+
+	@Test
+	void theTypesOfThePlaceAreTheDescriptionOfItsBusinessOrientation() {
+		// ObjektGrupp1-3 as the source has them: a marking in lower case with a blank, and two types
+		final var candidate = permitOnPlaceWithGroups(List.of("8", "ung ", "12"));
+
+		assertThat(JSON.writeValueAsString(candidate.asset().content().get("businessOrientation"))).isEqualTo("""
+			{"description":"Hotellrestaurang, Kvartersrestaurang"}""");
+	}
+
+	@Test
+	void aTypeWrittenTwiceIsThereOnceAndOneMissingInCodeListQStandsAsItsCode() {
+		assertThat(JSON.writeValueAsString(permitOnPlaceWithGroups(List.of("12", "17", "12")).asset().content().get("businessOrientation"))).isEqualTo("""
+			{"description":"Kvartersrestaurang, 17"}""");
+	}
+
+	@Test
+	void aPlaceWithMarkingsOnlyOrNoGroupsHasNoBusinessOrientation() {
+		assertThat(permitOnPlaceWithGroups(List.of("UNG", "utok")).asset().content().has("businessOrientation")).isFalse();
+		assertThat(permitOnPlaceWithGroups(List.of()).asset().content().has("businessOrientation")).isFalse();
+	}
+
+	private static Candidate permitOnPlaceWithGroups(final List<String> groups) {
+		final var place = new AlktSnapshot.PlaceRow(1, 10, "12345678", groups, "Krogen", null, null, null, null, null, null, null, null);
+		final var snapshot = snapshot().permit(permit(1).build()).place(place).owner(owner(10, "5566778899")).build();
+		return new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 	}
 
 	@Test

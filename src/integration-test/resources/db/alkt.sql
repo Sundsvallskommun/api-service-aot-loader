@@ -60,7 +60,8 @@ CREATE TABLE dbo.Klartext (Kodtyp varchar(2) NOT NULL, Kod varchar(5) NOT NULL, 
 GO
 INSERT INTO dbo.[Ägare] VALUES (10, '556677-8899', 'Testbolaget AB', 'Kontakt Person', 'Box 1', NULL, '85230', 'Sundsvall', '060-100', 'testbolaget@example.com')
 INSERT INTO dbo.[Ägare] VALUES (11, '556677-0001', 'Förra ägaren AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-INSERT INTO dbo.Objekt VALUES (1, 10, '12345678', '12', 'Krogen Ett', 'Storgatan 1', '85230', 'Sundsvall', '060-1', NULL, '01', 'skylt.jpg', NULL, NULL, NULL)
+-- The first place has a marking and a second type in ObjektGrupp2 and ObjektGrupp3 (decision 95)
+INSERT INTO dbo.Objekt VALUES (1, 10, '12345678', '12', 'Krogen Ett', 'Storgatan 1', '85230', 'Sundsvall', '060-1', NULL, '01', 'skylt.jpg', NULL, 'UNG', '8')
 INSERT INTO dbo.Objekt VALUES (2, 10, '12345679', '12', 'Krogen Två', 'Storgatan 2', '85230', 'Sundsvall', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, Vin, AretRunt, ServeringAllmanhet, Uteservering, ServeringStartTid1, ServeringSlutTid1,
     Utfardande_Datum, Utfardande_Diarienr, GTRestaurangBeteckning, BeslutsID, Noteringar, Serveringslokal)
@@ -88,6 +89,8 @@ INSERT INTO dbo.Klartext VALUES ('O', '0100', 'Krav på bordsservering')
 INSERT INTO dbo.Klartext VALUES ('P', 'VD', 'Verkställande direktör')
 INSERT INTO dbo.Klartext VALUES ('P', 'ÄB', 'Ägarbolag')
 INSERT INTO dbo.Klartext VALUES ('Q', '12', 'Kvartersrestaurang')
+INSERT INTO dbo.Klartext VALUES ('Q', '8', 'Hotellrestaurang')
+INSERT INTO dbo.Klartext VALUES ('Q', 'UNG', 'Ungdomlig målgrupp')
 -- A place whose files have Swedish letters in their names, in every table that names files, for the run interrupted at the activation
 INSERT INTO dbo.Objekt VALUES (3, 10, '12345680', '12', 'Krogen Tre', 'Storgatan 3', '85230', 'Sundsvall', NULL, NULL, '01', 'Översiktskarta.pdf', NULL, NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, AretRunt, ServeringAllmanhet, ServeringStartTid1, ServeringSlutTid1, Utfardande_Datum, Utfardande_Diarienr,

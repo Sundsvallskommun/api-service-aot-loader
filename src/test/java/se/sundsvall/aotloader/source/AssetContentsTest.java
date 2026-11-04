@@ -59,16 +59,26 @@ class AssetContentsTest {
 		// Addresses that the format email of the json-schema service refuses, and one with å it takes but the check does not
 		for (final var refused : List.of("info@firma.se,", "a..b@firma.se", ".a@firma.se", "info@-firma.se", "info@firma.s", "x@y.z1", "info;kalle@firma.se", "info@firma.com/",
 			"åsa@firma.se")) {
-			final var contents = new AssetContents(AssetSchema.TOBACCO).place(new Place("Butik", null, null, null, null, refused, null, null), null);
+			final var contents = new AssetContents(AssetSchema.TOBACCO).place(new Place("Butik", null, null, null, null, refused, null, null));
 
 			assertThat(contents.fields().toNode().get("pointOfSale").has("emailAddress")).as(refused).isFalse();
 			assertThat(contents.asset(null, null, null, null, List.of()).omitted()).as(refused).containsExactly("pointOfSale.emailAddress: har inte formen av en e-postadress");
 		}
 		for (final var taken : List.of("info@firma.se", "Info.Namn+tag@sub.firma.se", "a-b@firma-x.se", "info@firma.co.uk", "info@xn--rksmrgs-5wao1o.se")) {
-			final var contents = new AssetContents(AssetSchema.TOBACCO).place(new Place("Butik", null, null, null, null, taken, null, null), null);
+			final var contents = new AssetContents(AssetSchema.TOBACCO).place(new Place("Butik", null, null, null, null, taken, null, null));
 
 			assertThat(contents.fields().toNode().get("pointOfSale").get("emailAddress").asString()).isEqualTo(taken);
 		}
+	}
+
+	@Test
+	void theRestaurantNumberOfThePlaceIsWrittenByTheAlcoholSchemaOnly() {
+		final var place = new Place("Krogen", null, null, null, null, null, null, "12345678");
+
+		assertThat(json(new AssetContents(AssetSchema.ALCOHOL).place(place))).isEqualTo("""
+			{"premises":{"name":"Krogen","restaurantNumber":"12345678"}}""");
+		assertThat(json(new AssetContents(AssetSchema.TOBACCO).place(place))).isEqualTo("""
+			{"pointOfSale":{"name":"Krogen"}}""");
 	}
 
 	@Test

@@ -160,7 +160,7 @@ final class AlktPermits {
 		final var granted = Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files))
 			.map(data -> withCase(data, grant.orElse(null), errands, permit.utfardandeDiarienr()))
 			.orElse(null);
-		final var post = asset(content, subtype, holder, premises, restaurantNumber, drawings, granted)
+		final var post = asset(content, subtype, holder, premises, place == null ? null : index.placeTypes(place), drawings, granted)
 			.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files));
 		final var investigation = PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
 			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, permit.notes(), servingTimeTexts(permit)));
@@ -507,14 +507,16 @@ final class AlktPermits {
 	 * The JSON parameter of the permit by the alcohol schema (decision 87). Sittplatser2 is the number of seats indoors;
 	 * AlkT's number of seats outdoors is empty on every permit, so the post has none (analysis round 20).
 	 *
-	 * @param decision the decision the permit was granted by, null when it has none
+	 * @param placeTypes the types of the serving place as one text, which is the description of the business orientation,
+	 *                   since the schema's list of orientations is not AlkT's list of types (decision 95); null for none
+	 * @param decision   the decision the permit was granted by, null when it has none
 	 */
-	private AssetContents asset(final PermitContent content, final ServingPermitSubtype subtype, final Holder holder, final Place premises, final String restaurantNumber,
+	private AssetContents asset(final PermitContent content, final ServingPermitSubtype subtype, final Holder holder, final Place premises, final String placeTypes,
 		final List<String> drawings, final DecisionData decision) {
 		final var permit = content.permit();
 		final var contents = new AssetContents(ErrandType.SERVING_PERMIT.getAssetSchema()).caseRegistrationNumber(permit.utfardandeDiarienr());
 		contents.fields().text("servingPermitType", subtype == null ? null : subtype.name());
-		contents.permitHolder(holder).place(premises, restaurantNumber);
+		contents.permitHolder(holder).place(premises);
 		contents.fields()
 			.texts("servingTo", servingTo(permit))
 			.objects("servingPeriods", servingPeriods(permit, content.periods()))
@@ -527,7 +529,8 @@ final class AlktPermits {
 				.text("drawingReference", Texts.join(", ", drawings))
 				.number("seatsIndoor", contents.count("servingArea.seatsIndoor", permit.servingArea().sittplatser()))
 				.number("maxPersons", contents.count("servingArea.maxPersons", permit.servingArea().hogstaAntal())))
-			.objects(ServingStaff.KEY, ServingStaff.of(snapshot.staffOf(permit.objektId()), today));
+			.objects(ServingStaff.KEY, ServingStaff.of(snapshot.staffOf(permit.objektId()), today))
+			.object("businessOrientation", JsonFields.object().text("description", placeTypes));
 		return contents.conditions(content.conditions())
 			.decision(decision, permit.utfardandeDatum(), Texts.join(", ", Arrays.asList(SourceValues.format(permit.ersatterDatum()), permit.ersatterDiarienr())))
 			.migration(ALKT, false);

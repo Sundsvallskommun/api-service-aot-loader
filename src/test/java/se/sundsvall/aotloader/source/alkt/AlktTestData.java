@@ -35,7 +35,7 @@ final class AlktTestData {
 	private AlktTestData() {}
 
 	static PlaceRow place(final int objektId, final Integer agarId, final String restaurantNumber) {
-		return new PlaceRow(objektId, agarId, restaurantNumber, "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
+		return new PlaceRow(objektId, agarId, restaurantNumber, List.of("12"), "Restaurang " + objektId, "Storgatan " + objektId, "85230", "Sundsvall", "060-123456", "info" + objektId + "@example.com", "01", "ritning.pdf", null);
 	}
 
 	static ContactRow owner(final int agarId, final String number) {
@@ -54,7 +54,7 @@ final class AlktTestData {
 		texts.put("G", Map.of("01", "Centrum"));
 		texts.put("O", Map.of("0100", "Krav på bordsservering"));
 		texts.put("P", Map.of("VD", "Verkställande direktör"));
-		texts.put("Q", Map.of("12", "Kvartersrestaurang", "UNG", "Ungdomlig målgrupp"));
+		texts.put("Q", Map.of("8", "Hotellrestaurang", "12", "Kvartersrestaurang", "19", "Folkets Hus/föreningslokal", "UNG", "Ungdomlig målgrupp", "UTOK", "Utökad tillsyn"));
 		texts.put("L", Map.of("04", "Rutintillsyn"));
 		texts.put("V", Map.of("05", "Servering till minderårig"));
 		return texts;

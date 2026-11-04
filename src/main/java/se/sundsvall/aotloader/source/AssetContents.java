@@ -88,13 +88,11 @@ public final class AssetContents {
 	}
 
 	/**
-	 * Adds the serving place or sales place, the field of the schema: its name, address, phone, email address and, for a
-	 * serving place, its restaurant number. Its municipality is added when the post is written.
-	 *
-	 * @param restaurantNumber the restaurant number, null for none, and for a sales place of the tobacco schema, which has
-	 *                         no such field
+	 * Adds the serving place or sales place, the field of the schema: its name, address, phone, email address and, by the
+	 * alcohol schema, its restaurant number; the tobacco schema has no such field. Its municipality is added when the post
+	 * is written.
 	 */
-	public AssetContents place(final Place place, final String restaurantNumber) {
+	public AssetContents place(final Place place) {
 		if (place == null) {
 			return this;
 		}
@@ -105,7 +103,7 @@ public final class AssetContents {
 			.text("phoneNumber", place.phone())
 			.text("emailAddress", checked(field + ".emailAddress", place.email(), EMAIL_ADDRESS, "har inte formen av en e-postadress"));
 		if (schema == AssetSchema.ALCOHOL) {
-			fields.text("restaurantNumber", checked(field + ".restaurantNumber", restaurantNumber, RESTAURANT_NUMBER, "har inte åtta siffror"));
+			fields.text("restaurantNumber", checked(field + ".restaurantNumber", place.restaurantNumber(), RESTAURANT_NUMBER, "har inte åtta siffror"));
 		}
 		root.object(field, fields);
 		return this;

@@ -128,6 +128,18 @@
 			},
 			{
 				"matchesJsonPath": {
+					"expression": "$.value.businessOrientation.description",
+					"equalTo": "Kvartersrestaurang, Hotellrestaurang"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.businessOrientation.types",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
 					"expression": "$.value.conditions[0]",
 					"equalTo": "Krav på bordsservering: Mat ska serveras"
 				}

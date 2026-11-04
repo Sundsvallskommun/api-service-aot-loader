@@ -101,7 +101,7 @@ final class AlkolNotifications {
 		final var asset = new AssetContents(type.getAssetSchema())
 			.caseRegistrationNumber(diaryNumber)
 			.permitHolder(holder)
-			.place(premises, null)
+			.place(premises)
 			.migration(ALKOL, notified.estimated());
 
 		return Candidate.builder(new ItemKey(ALKOL, ANMALAN, notificationId(place, product.code())), type)

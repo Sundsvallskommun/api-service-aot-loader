@@ -355,7 +355,7 @@ final class AlkolPermits {
 		final var contents = new AssetContents(ErrandType.TOBACCO_PERMIT.getAssetSchema())
 			.caseRegistrationNumber(diaryNumber)
 			.permitHolder(holder)
-			.place(premises, null);
+			.place(premises);
 		final var salesPeriod = JsonFields.object();
 		if (decision == null || decision.validTo() == null) {
 			salesPeriod.text("period", "INDEFINITE").date("from", decision == null ? null : decision.validFrom());

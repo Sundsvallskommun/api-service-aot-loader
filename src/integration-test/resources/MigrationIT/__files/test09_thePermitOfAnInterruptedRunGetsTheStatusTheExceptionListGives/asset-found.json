@@ -50,6 +50,9 @@
 					"beverages": [
 						"STRONG_BEER"
 					],
+					"businessOrientation": {
+						"description": "Kvartersrestaurang"
+					},
 					"decision": {
 						"caseRegistrationNumber": "IAN-2020-2",
 						"outcome": "APPROVAL",
