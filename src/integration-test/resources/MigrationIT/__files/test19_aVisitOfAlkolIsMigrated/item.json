@@ -1,0 +1,14 @@
+{
+	"source": "ALKOL",
+	"kind": "TILLSYNSBESOK",
+	"sourceId": "950",
+	"errandType": "TOBACCO_INSPECTION_VISIT",
+	"status": "KLAR",
+	"placeName": "Kiosken",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000011",
+	"errandNumber": "ALKT-2026-11",
+	"relationId": "relation-11",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

@@ -1,0 +1,16 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "1",
+	"errandType": "SERVING_PERMIT",
+	"status": "KLAR",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"municipalityId": "2281",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000001",
+	"errandNumber": "ALKT-2026-1",
+	"assetId": "11111111-aaaa-bbbb-cccc-000000000001",
+	"partyAssetsId": "asset-internal-1",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

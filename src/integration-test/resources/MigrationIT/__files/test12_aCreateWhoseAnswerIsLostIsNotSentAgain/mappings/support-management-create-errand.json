@@ -1,0 +1,56 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "ALCOHOL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "FOLKOL_SALES_NOTIFICATION"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKOL-ANMALAN-1-FOLKOL')]"
+			}
+		]
+	},
+	"response": {
+		"fault": "CONNECTION_RESET_BY_PEER"
+	}
+}

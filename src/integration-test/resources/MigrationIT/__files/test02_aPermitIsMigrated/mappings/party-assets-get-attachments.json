@@ -1,0 +1,23 @@
+{
+	"name": "party-assets-get-attachments",
+	"request": {
+		"method": "GET",
+		"url": "/party-assets/2281/assets/asset-internal-1/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": []
+	}
+}

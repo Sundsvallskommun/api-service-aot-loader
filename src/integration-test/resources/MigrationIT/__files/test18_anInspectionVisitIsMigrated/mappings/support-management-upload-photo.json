@@ -1,0 +1,49 @@
+{
+	"name": "support-management-upload-photo",
+	"priority": 1,
+	"scenarioName": "attachments",
+	"newScenarioState": "Uploaded",
+	"request": {
+		"method": "POST",
+		"urlPath": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/attachments",
+		"multipartPatterns": [
+			{
+				"matchingType": "ANY",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "filename=\"foto.jpg\""
+					}
+				}
+			}
+		],
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/attachments/y"
+		}
+	}
+}

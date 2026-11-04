@@ -1,0 +1,23 @@
+{
+	"name": "party-assets-read-again",
+	"request": {
+		"method": "GET",
+		"url": "/party-assets/2281/assets/asset-internal-5",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"bodyFileName": "test09_thePermitOfAnInterruptedRunGetsTheStatusTheExceptionListGives/asset-expired.json"
+	}
+}

@@ -1,0 +1,18 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "3",
+	"errandType": "SERVING_PERMIT",
+	"status": "FEL",
+	"placeNumber": "12345680",
+	"placeName": "Krogen Tre",
+	"municipalityId": "2281",
+	"failedStep": "AKTIVERA",
+	"reason": "${json-unit.regex}RetryableException: Connection reset executing PATCH http://localhost:\\d+/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006",
+	"errandId": "11111111-aaaa-bbbb-cccc-000000000006",
+	"errandNumber": "ALKT-2026-6",
+	"assetId": "11111111-aaaa-bbbb-cccc-000000000006",
+	"partyAssetsId": "asset-internal-6",
+	"lastRunId": "${json-unit.any-string}",
+	"modified": "${json-unit.any-string}"
+}

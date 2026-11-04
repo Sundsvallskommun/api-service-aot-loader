@@ -57,3 +57,6 @@ application-default.*
 /CLAUDE.md
 /.claude/
 /build.log
+
+# Local status database of the migration
+/data/

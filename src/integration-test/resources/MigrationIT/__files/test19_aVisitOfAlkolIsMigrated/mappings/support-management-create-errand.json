@@ -1,0 +1,104 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Tillsynsbesök – Kiosken"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "EXTERNAL_INSPECTION"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKOL-TILLSYNSBESOK-950')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-external-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-tobacco-inspection')]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.* 2024-05-03\\.<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tid: 14:00–14:20<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynsart: Kontrollköp<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>- Påträngande reklam i butik<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Kontrollant: Per Eriksson, 7, PE<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Anteckning: Köpet nekades\\.<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynsomgång: Kontrollköp vecka 18, 2024-05-03<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynen gällde: Tobak, E-cigaretter<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Anmält besök: Ja<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$[?(@.measures.length() == 1)]"
+			},
+			{
+				"matchesJsonPath": "$.measures[?(@.type == 'EXTERNAL' && @.title == 'Påträngande reklam i butik' && @.status == 'COMPLETED' && @.addedByRole == 'PRIMARY')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.measures[0].completedAt",
+					"matches": "2024-05-03T(14:20(:00)?\\+02:00|12:20(:00)?Z)"
+				}
+			},
+			{
+				"doesNotMatch": "(?s).*\"role\".*"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000011"
+		}
+	}
+}

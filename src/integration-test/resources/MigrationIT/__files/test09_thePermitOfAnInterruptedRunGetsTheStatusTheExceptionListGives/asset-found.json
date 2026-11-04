@@ -1,0 +1,72 @@
+[
+	{
+		"id": "asset-internal-5",
+		"assetId": "11111111-aaaa-bbbb-cccc-000000000005",
+		"origin": "SUPPORTMANAGEMENT",
+		"partyId": "22222222-aaaa-bbbb-cccc-000000000001",
+		"type": "AlcoholServingPermit",
+		"title": "Beslut om serveringstillstånd",
+		"description": "Serveringstillstånd för Krogen Två",
+		"issued": "2020-01-01",
+		"status": "ACTIVE",
+		"jsonParameters": [
+			{
+				"key": "aot_alcohol_party_asset",
+				"schemaId": "2281_aot_alcohol_party_asset_0.1",
+				"value": {
+					"errandId": "11111111-aaaa-bbbb-cccc-000000000005",
+					"caseRegistrationNumber": "IAN-2020-2",
+					"externalCaseRegistrationNumber": "IAN-2020-2",
+					"servingPermitType": "PERMANENT_SERVING",
+					"permitHolder": {
+						"name": "Testbolaget AB",
+						"organizationNumber": "556677-8899",
+						"address": {
+							"street": "Box 1",
+							"postalCode": "85230",
+							"city": "Sundsvall"
+						},
+						"phoneNumber": "060-100"
+					},
+					"premises": {
+						"name": "Krogen Två",
+						"address": {
+							"street": "Storgatan 2",
+							"postalCode": "85230",
+							"city": "Sundsvall"
+						},
+						"restaurantNumber": "12345679",
+						"municipalityId": "2281"
+					},
+					"servingTo": [
+						"PUBLIC"
+					],
+					"servingPeriods": [
+						{
+							"period": "ALL_YEAR"
+						}
+					],
+					"tasting": false,
+					"beverages": [
+						"STRONG_BEER"
+					],
+					"businessOrientation": {
+						"description": "Kvartersrestaurang"
+					},
+					"decision": {
+						"caseRegistrationNumber": "IAN-2020-2",
+						"outcome": "APPROVAL",
+						"decisionDate": "2020-01-01",
+						"executionDate": "2020-01-01",
+						"validFrom": "2020-01-01",
+						"decisionText": "Bifall"
+					},
+					"migration": {
+						"sourceSystem": "ALKT",
+						"issuedDateEstimated": false
+					}
+				}
+			}
+		]
+	}
+]

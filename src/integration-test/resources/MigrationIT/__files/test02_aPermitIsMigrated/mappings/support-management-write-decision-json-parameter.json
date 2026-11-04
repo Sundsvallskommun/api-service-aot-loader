@@ -1,0 +1,191 @@
+{
+	"name": "support-management-write-decision-json-parameter",
+	"request": {
+		"method": "PUT",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/decisions/decision-1/json-parameters/permit",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.key",
+					"equalTo": "permit"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.schemaId",
+					"equalTo": "2281_aot_alcohol_decision_1.0"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.errandId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.caseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.premises.name",
+					"equalTo": "Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.premises.address.postalCode",
+					"equalTo": "85230"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.premises.restaurantNumber",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.premises.municipalityId",
+					"equalTo": "2281"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.beverages.length()",
+					"equalTo": "2"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.beverages[0]",
+					"equalTo": "WINE"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.beverages[1]",
+					"equalTo": "STRONG_BEER"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.servingHours.length()",
+					"equalTo": "1"
+				}
+			},
+			{
+				"matchesJsonPath": "$.value.servingHours[?(@.audience == 'PUBLIC' && @.location == 'INDOOR' && @.from == '11:00' && @.to == '01:00')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.servingHours[0].description",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.servingArea.description",
+					"equalTo": "Matsal och bar"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.responsibleServingStaff.length()",
+					"equalTo": "2"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.businessOrientation.description",
+					"equalTo": "Kvartersrestaurang, Hotellrestaurang"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.businessOrientation.types",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.conditions[0]",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.decision.outcome",
+					"equalTo": "APPROVAL_WITH_CONDITIONS"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.decision.decisionText",
+					"equalTo": "Bifall med villkor"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.decision.executionDate",
+					"equalTo": "2019-05-01"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.decision.legalBasis",
+					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.migration.sourceSystem",
+					"equalTo": "ALKT"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"key": "permit",
+			"schemaId": "2281_aot_alcohol_decision_1.0",
+			"value": {},
+			"version": 0
+		}
+	}
+}
