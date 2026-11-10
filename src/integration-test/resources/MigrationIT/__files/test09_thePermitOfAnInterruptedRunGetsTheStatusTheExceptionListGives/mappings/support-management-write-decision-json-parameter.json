@@ -2,7 +2,7 @@
 	"name": "support-management-write-decision-json-parameter",
 	"request": {
 		"method": "PUT",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000005/decisions/decision-1/json-parameters/permit",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000005/decisions/decision-1/json-parameters/aot_alcohol_decision",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -30,13 +30,13 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.key",
-					"equalTo": "permit"
+					"equalTo": "aot_alcohol_decision"
 				}
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.schemaId",
-					"equalTo": "2281_aot_alcohol_decision_1.0"
+					"equalTo": "2281_aot_alcohol_decision_1.2"
 				}
 			},
 			{
@@ -65,8 +65,8 @@
 			"Content-Type": "application/json"
 		},
 		"jsonBody": {
-			"key": "permit",
-			"schemaId": "2281_aot_alcohol_decision_1.0",
+			"key": "aot_alcohol_decision",
+			"schemaId": "2281_aot_alcohol_decision_1.2",
 			"value": {},
 			"version": 0
 		}

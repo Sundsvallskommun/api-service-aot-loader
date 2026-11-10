@@ -868,6 +868,8 @@ class AlktCandidateFactoryTest {
 	void drinksAndScope() {
 		assertThat(ServingPermits.drinks(permit(1).drinks(true, true, true, true, true).build()))
 			.containsExactly("Starköl", "Vin", "Spritdrycker", "Andra jästa alkoholdrycker", "Alkoholdrycksliknande preparat");
+		assertThat(ServingPermits.beverages(permit(1).drinks(true, true, true, true, true).build()))
+			.containsExactly("SPIRITS", "WINE", "STRONG_BEER", "OTHER_FERMENTED_BEVERAGES", "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS");
 		assertThat(ServingPermits.servingTo(permit(1).servingTo(true, true).build())).containsExactly("Allmänheten", "Slutna sällskap");
 		assertThat(ServingPermits.scope(permit(1).scope(true, true, true, true).build())).containsExactly("Uteservering", "Catering", "Provsmakning", "Gårdsförsäljning");
 	}
@@ -1212,10 +1214,12 @@ class AlktCandidateFactoryTest {
 		final var visit = candidates.getFirst();
 		assertThat(visit.type()).isEqualTo(ErrandType.ALCOHOL_INSPECTION_VISIT);
 		assertThat(visit.ruleHits()).isEmpty();
-		assertThat(visit.holder()).isNull();
 		// A visit after the permit was issued concerned its holder (decision 61), one without a day cannot tell, and the
 		// permit of a place that is missing may be another owner's
 		assertThat(candidates).extracting(candidate -> candidate.permitLink().basis()).containsExactly(Basis.AFTER_ISSUE, Basis.NO_DATE, Basis.ISSUED_TO_OTHER);
+		// So only the first gets the holder of the permit, the current owner (decision 103)
+		assertThat(candidates).extracting(Candidate::holder).extracting(holder -> holder == null ? null : holder.legalId())
+			.containsExactly(new LegalId("5566778899", ENTERPRISE), null, null);
 		assertThat(visit.placeName()).isEqualTo("Restaurang 1");
 		assertThat(visit.placeNumber()).isEqualTo("12345678");
 		assertThat(visit.errand().title()).isEqualTo("Tillsynsbesök – Restaurang 1");

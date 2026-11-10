@@ -96,31 +96,50 @@ class TargetMapperTest {
 		assertThat(errand.getAssignedUserId()).isNull();
 		assertThat(errand.getExternalTags()).extracting(ExternalTag::getKey, ExternalTag::getValue)
 			.containsExactly(tuple("migreringsid", "ALKT-TILLSTAND-1"), tuple("diarienummer", "IAN-2019-1"));
-		// Only the parameters Draken and pw-alkt read (decision 94): the place under their keys, with the display names
-		// Draken writes, and the municipality
-		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(
-			tuple("premisesName", "Serveringsställets namn", List.of("Restaurang 1")),
-			tuple("premisesStreetAddress", "Serveringsställets gatuadress", List.of("Storgatan 1")),
-			tuple("premisesPostalCode", "Serveringsställets postnummer", List.of("85230")),
-			tuple("premisesPostalArea", "Serveringsställets postort", List.of("Sundsvall")),
-			tuple("restaurantNumber", "Valt restaurangnummer", List.of("12345678")),
-			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+		// Only the parameter Draken and pw-alkt read (decision 100), and no errand data, as the form of an application is not
+		// filled (decision 98)
+		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+		assertThat(errand.getJsonParameters()).isEmpty();
 	}
 
 	@Test
-	void aSalesPlaceIsNamedSoAndItsPostalCodeHasNoBlanks() {
-		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
-			.place(new Place("Kiosken", "Torget 2", "852 31", "Sundsvall", null, "kiosk@example.com", null, null))
+	void theFormOfTheErrandTypeIsAJsonParameterUnderTheNameOfItsSchema() {
+		final var inspection = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "1"), ErrandType.ALCOHOL_INSPECTION)
+			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
+			.labelPath(TestData.INTERNAL_INSPECTION)
+			.place(new Place("Restaurang 1", "Storgatan 1", "852 30", "Timrå", null, null, " timrå ", "12345678"))
+			.build();
+		final var visit = Candidate.builder(new ItemKey(Source.ALKOL, Kind.TILLSYNSBESOK, "1"), ErrandType.TOBACCO_INSPECTION_VISIT)
+			.labelPath(TestData.EXTERNAL_INSPECTION)
+			.place(new Place("Kiosken", "Torget 2", "852 31", "Sundsvall", null, null, null, null))
 			.build();
 
-		final var parameters = mapper.toNewDraft(candidate, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getParameters();
+		final var inspectionErrand = mapper.toNewDraft(inspection, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
+		final var visitErrand = mapper.toNewDraft(visit, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
 
-		assertThat(parameters).extracting("key", "displayName", "values").containsExactly(
-			tuple("premisesName", "Försäljningsställets namn", List.of("Kiosken")),
-			tuple("premisesStreetAddress", "Försäljningsställets gatuadress", List.of("Torget 2")),
-			tuple("premisesPostalCode", "Försäljningsställets postnummer", List.of("85231")),
-			tuple("premisesPostalArea", "Försäljningsställets postort", List.of("Sundsvall")),
-			tuple("premisesMunicipalityId", "Kommun", List.of("2281")));
+		// Under the name of the schema of the form, as Draken fills it when it starts an inspection of a place (decision 98)
+		assertThat(inspectionErrand.getJsonParameters()).extracting("key", "schemaId")
+			.containsExactly(tuple("aot_inspection_internal_inspection", "2281_aot_inspection_internal_inspection_1.2"));
+		assertThat(visitErrand.getJsonParameters()).extracting("key", "schemaId")
+			.containsExactly(tuple("aot_inspection_external_inspection", "2281_aot_inspection_external_inspection_1.2"));
+		assertThat(inspectionErrand.getJsonParameters().getFirst().getValue())
+			.hasToString(new ErrandFormMapper(TestData.properties()).toForm(inspection, MUNICIPALITY_ID).orElseThrow().value().toString());
+		assertThat(inspectionErrand.getParameters()).extracting("key", "values").containsExactly(tuple("premisesMunicipalityId", List.of("2262")));
+	}
+
+	@Test
+	void anErrandWithoutAPlaceOrWithoutTheLabelOfAFormGetsAnEmptyListOfJsonParameters() {
+		final var withoutPlace = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "1"), ErrandType.ALCOHOL_INSPECTION)
+			.labelPath(TestData.INTERNAL_INSPECTION)
+			.build();
+		final var documentation = Candidate.builder(new ItemKey(Source.ALKT, Kind.DOKUMENTATION, "1"), ErrandType.ALCOHOL_DOCUMENTATION)
+			.labelPath(TestData.DOCUMENTATION)
+			.place(new Place("Restaurang 1", null, null, null, null, null, null, null))
+			.build();
+
+		// An empty list, so that an update of a draft takes away what an earlier run gave it
+		assertThat(mapper.toNewDraft(withoutPlace, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getJsonParameters()).isNotNull().isEmpty();
+		assertThat(mapper.toNewDraft(documentation, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds()).getJsonParameters()).isNotNull().isEmpty();
 	}
 
 	@Test
@@ -392,17 +411,18 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void aDraftUpdateHasNoReporterAndALongParameterValueIsSplit() {
+	void aDraftUpdateHasNoReporterAndReplacesTheErrandDataAlsoWithNone() {
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
 			.labelPath("TAGROOT/MIGRATED_ERRAND")
-			.place(new Place("a".repeat(3000) + " " + "b".repeat(10), null, null, null, null, null, null, null))
+			.place(new Place("Kiosken", null, null, null, null, null, null, null))
 			.build();
 
 		final var errand = mapper.toDraftUpdate(candidate, MUNICIPALITY_ID, new PartyIds(null, null), TestData.labelIds());
 
-		assertThat(errand.getParameters().getFirst().getValues()).containsExactly("a".repeat(3000), "b".repeat(10));
 		// A place without an area belongs to the municipality of the run
-		assertThat(errand.getParameters().getLast()).extracting("key", "values").containsExactly("premisesMunicipalityId", List.of("2281"));
+		assertThat(errand.getParameters()).extracting("key", "values").containsExactly(tuple("premisesMunicipalityId", List.of("2281")));
+		// An empty list, as a missing one would leave what an earlier run gave the draft
+		assertThat(errand.getJsonParameters()).isNotNull().isEmpty();
 		assertThat(errand.getLabels()).extracting(ErrandLabel::getId).containsExactly("label-migrated");
 		assertThat(errand.getLifecycle()).isNull();
 		assertThat(errand.getReporterUserId()).isNull();
@@ -542,12 +562,12 @@ class TargetMapperTest {
 	void aJsonParameterGetsTheKeyAndTheSchemaOfItsType() {
 		final var parameter = mapper.toJsonParameter(TestData.premisesSection("Matsalen"));
 
-		assertThat(parameter.getKey()).isEqualTo("premises");
+		assertThat(parameter.getKey()).isEqualTo("aot_investigation_premises_section");
 		assertThat(parameter.getSchemaId()).isEqualTo("2281_aot_investigation_premises_section_1.0");
 		assertThat(parameter.getValue()).hasToString("""
 			{"servingArea":{"description":"Matsalen"}}""");
 		assertThat(mapper.toJsonParameter(new JsonContent(JsonParameterType.ALCOHOL_DECISION, JsonFields.object().text("a", "b").toNode())))
-			.extracting(JsonParameter::getKey, JsonParameter::getSchemaId).containsExactly("permit", "2281_aot_alcohol_decision_1.0");
+			.extracting(JsonParameter::getKey, JsonParameter::getSchemaId).containsExactly("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2");
 	}
 
 	@Test

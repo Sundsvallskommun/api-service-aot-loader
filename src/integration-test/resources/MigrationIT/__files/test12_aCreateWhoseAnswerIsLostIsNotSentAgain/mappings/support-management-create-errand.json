@@ -42,11 +42,20 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.type",
-					"equalTo": "FOLKOL_SALES_NOTIFICATION"
+					"equalTo": "FOLKOL"
 				}
 			},
 			{
 				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKOL-ANMALAN-1-FOLKOL')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_alcohol_folkol_folkol_sales_notification' && @.schemaId == '2281_aot_alcohol_folkol_folkol_sales_notification_1.1' && @.value.invoiceAddressSameAsCompany == 'NO' && @.value.invoiceRecipient.careOf == 'Ekonomibyrån AB' && @.value.invoiceRecipient.postalCode == '85299' && @.value.invoiceReference == 'Kalle Kassör' && @.value.premisesName == 'Kiosken' && @.value.premisesAddressSameAsCompany == 'NO' && @.value.premisesAddress.street == 'Torget 1' && @.value.hasPermanentFoodSales == 'YES' && @.value.producesLowAlcoholBeerOnPremises == 'NO' && @.value.canShowDocumentationAtInspection[0] == 'CAN_SHOW_DOCUMENTATION')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "1"
+				}
 			}
 		]
 	},

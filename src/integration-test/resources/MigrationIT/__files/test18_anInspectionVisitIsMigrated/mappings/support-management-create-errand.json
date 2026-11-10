@@ -88,7 +88,13 @@
 				"matchesJsonPath": "$[?(@.description =~ /.*<p>Serveringspersonal: Ägaren på plats, Personal registrerad vid besöket<\\/p>.*/)]"
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.values[0] == '12345678')]"
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_inspection_external_inspection' && @.schemaId == '2281_aot_inspection_external_inspection_1.2' && @.value.premises.name == 'Krogen Ett' && @.value.premises.address.postalCode == '85230' && @.value.premises.restaurantNumber == '12345678' && @.value.premises.municipalityId == '2281')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters.length()",
+					"equalTo": "1"
+				}
 			},
 			{
 				"matchesJsonPath": "$[?(@.description =~ /.*<p>Tillsynsomgång: Krogrunda, 2023-11-04 – 2023-11-05<\\/p>.*/)]"
@@ -112,7 +118,16 @@
 				"matches": "(?s).*Anteckning: Mycket folk i baren[.].*"
 			},
 			{
-				"doesNotMatch": "(?s).*\"role\".*"
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.organizationName == 'Testbolaget AB')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person' && @.externalIdType == 'PRIVATE')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.stakeholders.length()",
+					"equalTo": "2"
+				}
 			}
 		]
 	},

@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
+import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
@@ -101,8 +102,12 @@ final class AlkolNotifications {
 		final var asset = new AssetContents(type.getAssetSchema())
 			.caseRegistrationNumber(diaryNumber)
 			.permitHolder(holder)
-			.place(premises)
-			.migration(ALKOL, notified.estimated());
+			.place(premises);
+		if (type.getAssetSchema() == AssetSchema.TOBACCO) {
+			// Sold until further notice from the day of the notification, as pw-alkt writes it (decisions 102 and 105)
+			asset.salesPeriod(notified.date(), null);
+		}
+		asset.migration(ALKOL, notified.estimated());
 
 		return Candidate.builder(new ItemKey(ALKOL, ANMALAN, notificationId(place, product.code())), type)
 			.placeName(place.namn())

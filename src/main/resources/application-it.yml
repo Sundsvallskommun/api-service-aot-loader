@@ -59,10 +59,10 @@ aot-loader:
       type: SALES_PERMIT_APPLICATION
     folkol-sales-notification:
       category: ALCOHOL
-      type: FOLKOL_SALES_NOTIFICATION
+      type: FOLKOL
     folkol-serving-notification:
       category: ALCOHOL
-      type: FOLKOL_SERVING_NOTIFICATION
+      type: FOLKOL
     ecigarette-notification:
       category: TOBACCO
       type: ECIGARETTE_SALES_NOTIFICATION

@@ -51,6 +51,7 @@ import se.sundsvall.aotloader.service.mapper.AssetMapper;
 import se.sundsvall.aotloader.service.mapper.TargetMapper;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.ItemKey;
@@ -62,6 +63,7 @@ import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PartyType;
 import se.sundsvall.aotloader.service.model.PermitLink;
 import se.sundsvall.aotloader.service.model.Person;
+import se.sundsvall.aotloader.service.model.Place;
 import se.sundsvall.aotloader.service.model.PlacePermit;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.service.model.Source;
@@ -91,6 +93,7 @@ import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCU
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
+import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
@@ -171,6 +174,35 @@ class ItemMigratorTest {
 		assertThat(migrator.process(candidate, context(true)).detail())
 			.isEqualTo("Utelämnat i JSON-parametern i PartyAssets, eftersom det inte följer schemat: premises.emailAddress: har inte formen av en e-postadress; "
 				+ "servingArea.seatsIndoor: inte ett heltal");
+	}
+
+	@Test
+	void aDryRunTellsWhatTheErrandDataOfAnInspectionLeavesOut() {
+		final var visit = Candidate.builder(new ItemKey(Source.ALKOL, TILLSYNSBESOK, "1"), ErrandType.TOBACCO_INSPECTION_VISIT)
+			.labelPath(TestData.EXTERNAL_INSPECTION)
+			.place(new Place("Kiosken", null, "852", null, null, "kiosken på torget", null, null))
+			.build();
+
+		assertThat(migrator.process(visit, context(true)).detail())
+			.isEqualTo("Utelämnat i ärendeuppgifterna, eftersom det inte följer schemat: pointOfSale.address.postalCode: har inte fem siffror; "
+				+ "pointOfSale.emailAddress: har inte formen av en e-postadress");
+	}
+
+	@Test
+	void aRealRunTellsWhatTheErrandDataOfAnInspectionLeavesOut() {
+		final var visit = Candidate.builder(new ItemKey(Source.ALKOL, TILLSYNSBESOK, "1"), ErrandType.TOBACCO_INSPECTION_VISIT)
+			.labelPath(TestData.EXTERNAL_INSPECTION)
+			.place(new Place("Kiosken", null, "852", null, null, "kiosken på torget", null, null))
+			.build();
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKOL-TILLSYNSBESOK-1")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+
+		final var result = migrator.process(visit, context(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).contains("Utelämnat i ärendeuppgifterna, eftersom det inte följer schemat: pointOfSale.address.postalCode: har inte fem siffror; "
+			+ "pointOfSale.emailAddress: har inte formen av en e-postadress");
 	}
 
 	@Test
@@ -598,7 +630,7 @@ class ItemMigratorTest {
 		// A protocol the source no longer has a field for goes too
 		migrator.process(TestData.inspectionWithProtocol("700", permitKey, new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().toNode())),
 			context(false));
-		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "inspectionProtocol");
+		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "aot_inspection_internal");
 		verify(supportManagement, never()).updateInvestigation(anyString(), anyString(), anyString(), any());
 	}
 
@@ -1468,8 +1500,8 @@ class ItemMigratorTest {
 		// As Draken writes a decision: the draft, its terms and its document, what it says of the permit, and the completion,
 		// all before the errand is activated, while no process or notice hears of it
 		final var permit = permitParameter(TestData.permitWithDecision("1"));
-		assertThat(permit.getKey()).isEqualTo("permit");
-		assertThat(permit.getSchemaId()).isEqualTo("2281_aot_alcohol_decision_1.0");
+		assertThat(permit.getKey()).isEqualTo("aot_alcohol_decision");
+		assertThat(permit.getSchemaId()).isEqualTo("2281_aot_alcohol_decision_1.2");
 		assertThat(permit.getValue().get("decision").get("decisionText").asString()).isEqualTo("Bifall med villkor");
 		final var order = inOrder(supportManagement, partyAssets);
 		order.verify(partyAssets).createAsset(eq(MUNICIPALITY_ID), anyString(), any());
@@ -1869,7 +1901,7 @@ class ItemMigratorTest {
 	 * @return the JSON parameter of the section of the premises with the serving area, as the settings of the tests key it
 	 */
 	private static JsonParameter premisesParameter(final String servingArea) {
-		return new JsonParameter().key("premises").schemaId("2281_aot_investigation_premises_section_1.0").value(TestData.premisesSection(servingArea).value());
+		return new JsonParameter().key("aot_investigation_premises_section").schemaId("2281_aot_investigation_premises_section_1.0").value(TestData.premisesSection(servingArea).value());
 	}
 
 	/**
@@ -1885,7 +1917,7 @@ class ItemMigratorTest {
 	}
 
 	private static JsonParameter protocolParameter(final String businessName) {
-		return new JsonParameter().key("inspectionProtocol").schemaId("2281_aot_inspection_internal_1.0").value(protocol(businessName).value());
+		return new JsonParameter().key("aot_inspection_internal").schemaId("2281_aot_inspection_internal_1.0").value(protocol(businessName).value());
 	}
 
 	/**

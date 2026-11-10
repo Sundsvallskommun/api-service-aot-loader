@@ -41,6 +41,7 @@ import se.sundsvall.aotloader.configuration.AotLoaderProperties.FileAreaDirector
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.JsonParameterSettings;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.Roles;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.mapper.ErrandFormMapper;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.JsonParameterType;
@@ -53,6 +54,7 @@ import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -136,10 +138,12 @@ class PreflightTest {
 		final var preflight = new Preflight(TestData.properties(directory.toString(), directory.toString()), supportManagement, sourceDatabases);
 		final var visits = Map.of(Source.ALKT, Set.of(TILLSYNSBESOK));
 
-		// SupportManagement refuses a measure added by a role the namespace lacks
-		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY")));
-		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems())
-			.containsExactly("Rollen MEASURER finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)");
+		// SupportManagement refuses a measure added by a role the namespace lacks, and a visit also gives the holder it
+		// concerned and its contact person their roles (decision 103)
+		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenReturn(List.of(new Role().name("PRIMARY"), new Role().name("CONTACT")));
+		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly(
+			"Rollen INSPECTED finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)",
+			"Rollen MEASURER finns inte i namnrymden, och ärendena kan inte få den (aot-loader.roles)");
 
 		when(supportManagement.getRoles(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		assertThat(preflight.check(MUNICIPALITY_ID, visits).problems()).containsExactly("Rollerna i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
@@ -304,15 +308,16 @@ class PreflightTest {
 			"Klassificering saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 5)",
 			"Typ i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 20)",
 			"Namn i PartyAssets saknas för TOBACCO_PERMIT (aot-loader.errand-types, beslut 4)",
-			"Nyckel eller schema för JSON-parametern tobacco-party-asset saknas för TOBACCO_PERMIT (aot-loader.json-parameters.tobacco-party-asset, beslut 87 och 92)",
-			"Nyckel eller schema för JSON-parametern alcohol-party-asset saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87 och 92)",
-			"Nyckel eller schema för JSON-parametern premises-section saknas för SERVING_PERMIT (aot-loader.json-parameters.premises-section, beslut 87 och 92)",
-			"Nyckel eller schema för JSON-parametern internal-inspection-protocol saknas för ALCOHOL_INSPECTION (aot-loader.json-parameters.internal-inspection-protocol, beslut 87 och 92)",
-			"Nyckel eller schema för JSON-parametern serving-permit-protocol saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.serving-permit-protocol, beslut 87 och 92)",
+			"Nyckel eller schema för JSON-parametern tobacco-party-asset saknas för TOBACCO_PERMIT (aot-loader.json-parameters.tobacco-party-asset, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern alcohol-party-asset saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern premises-section saknas för SERVING_PERMIT (aot-loader.json-parameters.premises-section, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern internal-inspection-protocol saknas för ALCOHOL_INSPECTION (aot-loader.json-parameters.internal-inspection-protocol, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern serving-permit-protocol saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.serving-permit-protocol, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern external-inspection-form saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.external-inspection-form, beslut 87, 92 och 98)",
 			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
 			"Etikett saknas för TOBACCO_PERMIT (aot-loader.errand-types, avsnitt 7.3.4)",
-			"Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)",
+			"Rollen för tillståndshavaren på tillsynsärenden, tillsynsbesök och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8, beslut 103)",
 			"Etiketten för ärendetyp '09' i AlkT är inte bestämd (aot-loader.errand-types, avsnitt 7.7)",
 			"Inga ärendetyper i AlkOL är angivna som tillsynsärenden (aot-loader.errand-types, avsnitt 7.7)",
 			"Källdatabasen för AlkT är inte konfigurerad",
@@ -323,9 +328,10 @@ class PreflightTest {
 			"Etiketten TAGROOT/MIGRATED_ERRAND saknar attributet processBlocked=true, som spärrar processer (beslut 17)",
 			"Kommunkoden '22620' för området 'timrå' är inte fyra siffror (aot-loader.municipalities, beslut 19)");
 		assertThat(result.problems()).filteredOn(problem -> problem.startsWith("Etiketten för undertypen")).hasSize(ServingPermitSubtype.values().length);
-		// The holder of a documentation errand gets the same role as that of an inspection errand
-		assertThat(preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(DOKUMENTATION))).problems())
-			.contains("Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)");
+		// The holder of a documentation errand and of a visit gets the same role as that of an inspection errand
+		assertThat(Stream.of(DOKUMENTATION, TILLSYNSBESOK).map(kind -> preflight.check(MUNICIPALITY_ID, Map.of(Source.ALKOL, Set.of(kind))).problems()))
+			.allSatisfy(problems -> assertThat(problems).contains(
+				"Rollen för tillståndshavaren på tillsynsärenden, tillsynsbesök och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8, beslut 103)"));
 	}
 
 	@Test
@@ -349,16 +355,53 @@ class PreflightTest {
 		assertThat(Stream.of(ErrandType.ALCOHOL_INSPECTION_VISIT, ErrandType.TOBACCO_INSPECTION_VISIT).map(type -> properties.errandType(type).measureType())).containsOnly("EXTERNAL");
 		// The holder must not see an inspection errand on Mina sidor (decision 27)
 		assertThat(properties.roles().inspectionHolder()).isEqualTo("CONTACT").isNotEqualTo(properties.roles().permitHolder());
-		// Every post has the JSON parameter of its schema, as the test environment registers it (decision 87), and the
-		// decisions, the section of the premises and the inspection protocols those Draken reads them by (decision 92)
+		// The notifications of low-alcohol beer under the type FOLKOL, as the e-service files them (decision 99)
+		assertThat(Stream.of(ErrandType.FOLKOL_SALES_NOTIFICATION, ErrandType.FOLKOL_SERVING_NOTIFICATION).map(properties::errandType))
+			.extracting(ErrandTypeSettings::category, ErrandTypeSettings::type, ErrandTypeSettings::labels)
+			.containsExactly(tuple("ALCOHOL", "FOLKOL", List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION")),
+				tuple("ALCOHOL", "FOLKOL", List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION")));
+		// Every JSON parameter under the name of its schema, as Draken and pw-alkt store it, by the version the test
+		// environment registers and Draken writes (decisions 87, 92, 97, 98 and 102)
 		assertThat(result.problems()).filteredOn(problem -> problem.contains("JSON-parametern")).isEmpty();
-		assertThat(properties.jsonParameter(JsonParameterType.ALCOHOL_PARTY_ASSET)).isEqualTo(new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"));
-		assertThat(properties.jsonParameter(JsonParameterType.TOBACCO_PARTY_ASSET)).isEqualTo(new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"));
-		assertThat(properties.jsonParameter(JsonParameterType.ALCOHOL_DECISION)).isEqualTo(new JsonParameterSettings("permit", "2281_aot_alcohol_decision_1.0"));
-		assertThat(properties.jsonParameter(JsonParameterType.TOBACCO_DECISION)).isEqualTo(new JsonParameterSettings("permit", "2281_aot_tobacco_decision_1.0"));
-		assertThat(properties.jsonParameter(JsonParameterType.PREMISES_SECTION)).isEqualTo(new JsonParameterSettings("premises", "2281_aot_investigation_premises_section_1.0"));
-		assertThat(properties.jsonParameter(JsonParameterType.SERVING_PERMIT_PROTOCOL)).isEqualTo(new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_serving_permit_1.0"));
-		assertThat(properties.jsonParameter(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL)).isEqualTo(new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_internal_1.0"));
+		assertThat(Stream.of(JsonParameterType.values()).map(properties::jsonParameter)).containsExactly(
+			new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
+			new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"),
+			new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2"),
+			new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2"),
+			new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0"),
+			new JsonParameterSettings("aot_inspection_serving_permit", "2281_aot_inspection_serving_permit_1.0"),
+			new JsonParameterSettings("aot_inspection_internal", "2281_aot_inspection_internal_1.0"),
+			new JsonParameterSettings("aot_inspection_internal_inspection", "2281_aot_inspection_internal_inspection_1.2"),
+			new JsonParameterSettings("aot_inspection_external_inspection", "2281_aot_inspection_external_inspection_1.2"),
+			new JsonParameterSettings("aot_alcohol_folkol_folkol_sales_notification", "2281_aot_alcohol_folkol_folkol_sales_notification_1.1"),
+			new JsonParameterSettings("aot_alcohol_folkol_folkol_serving_notification", "2281_aot_alcohol_folkol_folkol_serving_notification_1.1"),
+			new JsonParameterSettings("aot_tobacco_ecigarette_sales_notification", "2281_aot_tobacco_ecigarette_sales_notification_0.10"),
+			new JsonParameterSettings("aot_tobacco_tobacco_free_nicotine_sales_notification", "2281_aot_tobacco_tobacco_free_nicotine_sales_notification_0.8"));
+		// Each errand type gets the form whose type label its settings give, the same label as the form has
+		final var forms = new EnumMap<ErrandType, List<JsonParameterType>>(ErrandType.class);
+		Stream.of(ErrandType.values()).forEach(type -> forms.put(type, ErrandFormMapper.formsOf(properties.errandType(type).allLabels())));
+		assertThat(forms).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+			entry(ErrandType.SERVING_PERMIT, List.of()),
+			entry(ErrandType.TOBACCO_PERMIT, List.of()),
+			entry(ErrandType.FOLKOL_SALES_NOTIFICATION, List.of(JsonParameterType.FOLKOL_SALES_NOTIFICATION_FORM)),
+			entry(ErrandType.FOLKOL_SERVING_NOTIFICATION, List.of(JsonParameterType.FOLKOL_SERVING_NOTIFICATION_FORM)),
+			entry(ErrandType.ECIGARETTE_NOTIFICATION, List.of(JsonParameterType.ECIGARETTE_NOTIFICATION_FORM)),
+			entry(ErrandType.TOBACCO_FREE_NICOTINE_NOTIFICATION, List.of(JsonParameterType.TOBACCO_FREE_NICOTINE_NOTIFICATION_FORM)),
+			entry(ErrandType.ALCOHOL_INSPECTION, List.of(JsonParameterType.INTERNAL_INSPECTION_FORM)),
+			entry(ErrandType.TOBACCO_INSPECTION, List.of(JsonParameterType.INTERNAL_INSPECTION_FORM)),
+			entry(ErrandType.ALCOHOL_INSPECTION_VISIT, List.of(JsonParameterType.EXTERNAL_INSPECTION_FORM)),
+			entry(ErrandType.TOBACCO_INSPECTION_VISIT, List.of(JsonParameterType.EXTERNAL_INSPECTION_FORM)),
+			entry(ErrandType.ALCOHOL_DOCUMENTATION, List.of()),
+			entry(ErrandType.TOBACCO_DOCUMENTATION, List.of())));
+	}
+
+	@Test
+	void anErrandTypeGetsTheFormOfEveryTypeLabelOfItsSettings() {
+		final var settings = new ErrandTypeSettings(null, null, null, null, null, List.of("/categoryroot/inspection/external_inspection/", "TAGROOT/ALCOHOL_INSPECTION"), null,
+			Map.of("07", TestData.INTERNAL_INSPECTION, "09", ""), false, null, null);
+
+		assertThat(Preflight.jsonParametersOf(ErrandType.ALCOHOL_INSPECTION, settings))
+			.containsExactly(JsonParameterType.INTERNAL_INSPECTION_FORM, JsonParameterType.EXTERNAL_INSPECTION_FORM, JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
 	}
 
 	@Test
@@ -413,7 +456,8 @@ class PreflightTest {
 	static List<Label> labelTree(final boolean processBlocked) {
 		final var paths = new ArrayList<String>(List.of(
 			"TAGROOT/MIGRATED_ERRAND", "TAGROOT/ALCOHOL_INSPECTION", "TAGROOT/TOBACCO_INSPECTION",
-			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION", "CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION", "CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION",
+			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION", "CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION", "CATEGORYROOT/ALCOHOL/FOLKOL", "CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION",
+			"CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION",
 			"CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION", "CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION",
 			"CATEGORYROOT/INSPECTION/INTERNAL_INSPECTION", "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION"));
 		Arrays.stream(ServingPermitSubtype.values()).forEach(subtype -> paths.add("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/" + subtype.name()));

@@ -25,9 +25,11 @@ import static se.sundsvall.aotloader.Constants.ASSET_TEXT_MAX_LENGTH;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_CASE_REGISTRATION_NUMBER;
 import static se.sundsvall.aotloader.source.AssetContents.FIELD_DECISION;
 import static se.sundsvall.aotloader.source.AssetContents.FIELD_DECISION_TEXT;
 import static se.sundsvall.aotloader.source.AssetContents.FIELD_ERRAND_ID;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_EXTERNAL_CASE_REGISTRATION_NUMBER;
 import static se.sundsvall.aotloader.source.AssetContents.FIELD_LEGAL_BASIS;
 import static se.sundsvall.aotloader.source.AssetContents.FIELD_MUNICIPALITY_ID;
 
@@ -85,7 +87,10 @@ public class AssetMapper {
 
 	/**
 	 * Maps what the decision of a permit says of the permit to its JSON parameter by the decision schema of the area
-	 * (decision 92), written as the JSON parameter of the post is, since Draken reads it as what the permit says.
+	 * (decisions 92 and 97), written as the JSON parameter of the post is, since Draken reads it as what the permit says.
+	 * The decision schema has no diary number of the errand that granted the permit, and its external diary number is the
+	 * one the decision was registered under, which Draken shows as the diary number of the decision: the number of the
+	 * errand the decision was made in, or else the one the post has.
 	 *
 	 * @param  candidate      the permit, with its decision and its post, and the legal basis read from its documents
 	 * @param  municipalityId the municipality the run is started for
@@ -100,8 +105,13 @@ public class AssetMapper {
 		if (asset == null || decision == null || !decision.hasContent()) {
 			return Optional.empty();
 		}
-		return Optional.of(new JsonContent(asset.schema().decision(),
-			jsonValue(decision.content(), asset.schema(), asset.legalBasis(), errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText)));
+		final var value = jsonValue(decision.content(), asset.schema(), asset.legalBasis(), errandId, properties.premisesMunicipalityOf(candidate.place(), municipalityId), decisionText);
+		value.remove(FIELD_CASE_REGISTRATION_NUMBER);
+		final var registeredUnder = value.path(FIELD_DECISION).path(FIELD_CASE_REGISTRATION_NUMBER);
+		if (registeredUnder.isString()) {
+			value.put(FIELD_EXTERNAL_CASE_REGISTRATION_NUMBER, registeredUnder.asString());
+		}
+		return Optional.of(new JsonContent(asset.schema().decision(), value));
 	}
 
 	/**

@@ -91,7 +91,13 @@
 				}
 			},
 			{
-				"doesNotMatch": "(?s).*\"role\".*"
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.organizationName == 'Testbolaget AB')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.stakeholders.length()",
+					"equalTo": "1"
+				}
 			}
 		]
 	},

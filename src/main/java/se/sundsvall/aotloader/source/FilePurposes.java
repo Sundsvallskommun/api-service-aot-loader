@@ -58,13 +58,14 @@ public final class FilePurposes {
 	public static final String LEASE_OR_OWNERSHIP_PROOF = "LEASE_OR_OWNERSHIP_PROOF";
 	public static final String BUSINESS_AGREEMENT = "BUSINESS_AGREEMENT";
 	public static final String POLICE_PERMIT = "POLICE_PERMIT";
+	public static final String PRODUCT_LIST = "PRODUCT_LIST";
 
 	/** Every purpose a file can get, which the namespace must have. */
 	public static final Set<String> ALL = Set.of(POLICE_REQUEST, POLICE_RESPONSE, TAX_AGENCY_REQUEST, TAX_AGENCY_RESPONSE, ENFORCEMENT_AUTHORITY_REQUEST,
 		ENFORCEMENT_AUTHORITY_RESPONSE, RESCUE_SERVICE_REQUEST, RESCUE_SERVICE_RESPONSE, ENVIRONMENT_OFFICE_REQUEST, ENVIRONMENT_OFFICE_RESPONSE, CREDIT_REPORT_RESPONSE,
 		STATEMENT_REQUEST, STATEMENT_RESPONSE, SELF_MONITORING_PROGRAM, FLOOR_PLAN, SALES_PREMISES_DRAWING, KITCHEN_FLOOR_PLAN, DRINKS_MENU, MENU,
 		FIRE_SAFETY_DOCUMENTATION, POWER_OF_ATTORNEY, CERTIFICATE_OF_REGISTRATION, OWNERSHIP_INFORMATION, BANK_STATEMENT, BUDGET, BUSINESS_DESCRIPTION,
-		PURCHASE_AGREEMENT, TRANSFER_AGREEMENT, LEASE_OR_OWNERSHIP_PROOF, BUSINESS_AGREEMENT, POLICE_PERMIT);
+		PURCHASE_AGREEMENT, TRANSFER_AGREEMENT, LEASE_OR_OWNERSHIP_PROOF, BUSINESS_AGREEMENT, POLICE_PERMIT, PRODUCT_LIST);
 
 	/**
 	 * The purposes of the drawings, which the decision on a serving permit refers to as Draken picks them; of Draken's
@@ -124,6 +125,7 @@ public final class FilePurposes {
 		entry(Pattern.compile("kontoutdrag"), BANK_STATEMENT),
 		entry(Pattern.compile("budget"), BUDGET),
 		entry(Pattern.compile("verksamhetsbeskrivning"), BUSINESS_DESCRIPTION),
+		entry(Pattern.compile("produkt(lista|f[oö]rteckning)|sortimentslista"), PRODUCT_LIST),
 		entry(Pattern.compile("k[oö]pe?avtal"), PURCHASE_AGREEMENT),
 		entry(Pattern.compile("[oö]verl[aå]telseavtal"), TRANSFER_AGREEMENT),
 		entry(Pattern.compile("hyres(avtal|kontrakt)"), LEASE_OR_OWNERSHIP_PROOF),

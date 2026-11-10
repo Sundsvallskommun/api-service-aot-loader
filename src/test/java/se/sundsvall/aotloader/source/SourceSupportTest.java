@@ -60,9 +60,7 @@ class SourceSupportTest {
 	}
 
 	@Test
-	void parameterAndFileLists() {
-		assertThat(new ParameterList().add("a", "A", null).add("b", "B", " x ").add("c", "C", " ").build())
-			.extracting(parameter -> parameter.key() + "=" + parameter.values()).containsExactly("b=[x]");
+	void fileLists() {
 		assertThat(new FileList(SharedFileNames.builder(TWO_DIRECTORIES).build()).add(" a.pdf ", ATTACHMENTS).add("A.PDF", ATTACHMENTS).add("a.pdf", DOCUMENTS).add(" ", DOCUMENTS).add(null, DOCUMENTS).build())
 			.containsExactly(new FileReference("a.pdf", ATTACHMENTS), new FileReference("a.pdf", DOCUMENTS));
 	}

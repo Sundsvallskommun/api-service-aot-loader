@@ -106,42 +106,18 @@
 				}
 			},
 			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'premisesName' && @.displayName == 'Serveringsställets namn' && @.values[0] == 'Krogen Ett')]"
-			},
-			{
-				"matchesJsonPath": "$.parameters[?(@.key == 'restaurantNumber' && @.displayName == 'Valt restaurangnummer')]"
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'premisesStreetAddress')].values[0]",
-					"equalTo": "Storgatan 1"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'premisesPostalCode')].values[0]",
-					"equalTo": "85230"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'premisesPostalArea')].values[0]",
-					"equalTo": "Sundsvall"
-				}
-			},
-			{
-				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'restaurantNumber')].values[0]",
-					"equalTo": "12345678"
-				}
-			},
-			{
 				"matchesJsonPath": "$[?(@.description =~ /.*<p>- Krav på bordsservering: Mat ska serveras<\\/p>.*/)]"
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.parameters.length()",
-					"equalTo": "6"
+					"equalTo": "1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "0"
 				}
 			},
 			{

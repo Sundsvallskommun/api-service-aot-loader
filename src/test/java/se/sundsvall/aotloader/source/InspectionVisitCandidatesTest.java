@@ -7,12 +7,20 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.ErrandType;
+import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
+import se.sundsvall.aotloader.service.model.ItemKey;
+import se.sundsvall.aotloader.service.model.Kind;
+import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.MeasureData;
+import se.sundsvall.aotloader.service.model.PartyType;
+import se.sundsvall.aotloader.service.model.PlacePermit;
+import se.sundsvall.aotloader.service.model.Source;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RoundRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows.StaffMarks;
@@ -117,7 +125,7 @@ class InspectionVisitCandidatesTest {
 		final var visits = new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, TestData.properties(), "okänt serveringsställe", "tillsynsbesöket saknar serveringsställe",
 			LocalDate.of(2026, 10, 23));
 
-		final var candidate = visits.builder(visit, rows, null, null).build();
+		final var candidate = visits.builder(visit, rows, null, null, null).build();
 
 		// As in AlkT, which may name the police, the rescue service or the environment office as well as a handler (decisions
 		// 66 and 67)
@@ -127,6 +135,56 @@ class InspectionVisitCandidatesTest {
 			Kontrollant: Polisen
 			Anmärkningar: Inga anmärkningar registrerade
 			Serveringspersonal: Ägaren på plats""");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+		"2020-01-01", "2023-11-04", "2024-12-31"
+	})
+	void aVisitMadeWhileThePermitHeldConcernsTheCurrentOwner(final LocalDate date) {
+		final var holder = holderOf(date, permit(true), owner());
+
+		assertThat(holder).isNotNull();
+		assertThat(holder.legalId()).isEqualTo(new LegalId("5566778899", PartyType.ENTERPRISE));
+		assertThat(holder.name()).isEqualTo("Krogen AB");
+		assertThat(holder.contactPerson()).isEqualTo("Kim Krögare");
+	}
+
+	@ParameterizedTest
+	@CsvSource(nullValues = "-", value = {
+		"2019-12-31, true", "2025-01-01, true", "-, true", "2023-11-04, false"
+	})
+	void aVisitOfAnotherTimeOrUnderAPermitThatMayBeAnothersConcernsNoKnownHolder(final LocalDate date, final boolean issuedToOwner) {
+		assertThat(holderOf(date, permit(issuedToOwner), owner())).isNull();
+	}
+
+	@Test
+	void aVisitToAPlaceWithoutPermitOrOwnerConcernsNoKnownHolder() {
+		final var date = LocalDate.of(2023, 11, 4);
+
+		assertThat(holderOf(date, null, owner())).isNull();
+		assertThat(holderOf(date, permit(true), null)).isNull();
+	}
+
+	/**
+	 * @return the holder of a visit on the day to a place with the permit and the owner
+	 */
+	private static Holder holderOf(final LocalDate date, final PlacePermit permit, final ContactRow owner) {
+		final var visit = VisitTestRows.visit(900, 1, date, null, null, "04", null, null, null);
+		final var rows = VisitTestRows.visits(List.of(visit), Map.of(), Map.of(), Map.of(), Map.of());
+		return new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, TestData.properties(), "okänt serveringsställe", "tillsynsbesöket saknar serveringsställe",
+			LocalDate.of(2026, 10, 23)).builder(visit, rows, null, permit, owner).build().holder();
+	}
+
+	/**
+	 * @return the permit of the place from 2020 through 2024
+	 */
+	private static PlacePermit permit(final boolean issuedToOwner) {
+		return new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), LocalDate.of(2020, 1, 1), LocalDate.of(2024, 12, 31), issuedToOwner);
+	}
+
+	private static ContactRow owner() {
+		return new ContactRow(10, "556677-8899", "Krogen AB", "Kim Krögare", "Gatan 1", null, "852 30", "Sundsvall", "060-1", "krogen@example.com");
 	}
 
 	@Test

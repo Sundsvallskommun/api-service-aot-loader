@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import se.sundsvall.aotloader.service.model.Invoicing;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
@@ -101,7 +102,7 @@ public record AlkolSnapshot(
 	}
 
 	/**
-	 * A row of FörsäljningsStällen.
+	 * A row of FörsäljningsStällen. The invoice columns are the place's invoicing, null when they are all blank.
 	 */
 	public record SalesPlaceRow(
 		Integer fsId,
@@ -120,7 +121,8 @@ public record AlkolSnapshot(
 		boolean ecigaretter,
 		boolean tobaksfriNikotin,
 		boolean upphort,
-		Integer agarId) {
+		Integer agarId,
+		Invoicing invoicing) {
 
 		@Override
 		public String toString() {

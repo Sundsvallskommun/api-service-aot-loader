@@ -18,6 +18,7 @@ import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.InvestigationData;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.InvestigationTexts.Part;
+import se.sundsvall.aotloader.service.model.Invoicing;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.JsonParameterType;
 import se.sundsvall.aotloader.service.model.LegalId;
@@ -575,6 +576,18 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
+	void theSalesPlaceOfANotificationHasItsInvoicing() {
+		final var invoicing = new Invoicing("Ekonomibyrån AB", "Box 12", "852 99", "Sundsvall", "Kalle Kassör");
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false).withInvoicing(invoicing))
+			.owner(owner(10, "5566778899"))
+			.errand(AlkolTestRows.errand(100, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null));
+
+		assertThat(data.factory().notifications().candidates()).singleElement()
+			.satisfies(notification -> assertThat(notification.place().invoicing()).isEqualTo(invoicing));
+	}
+
+	@Test
 	void notificationsOfFolkol() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, false, false, false))
@@ -598,7 +611,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(latestServing.ruleHits()).isEmpty();
 		assertThat(latestServing.errand().title()).isEqualTo("Anmälan om servering av folköl – Butik 1");
 		assertThat(latestServing.errand().description()).startsWith("Anmälan om servering av folköl för Butik 1.\n");
-		assertThat(latestServing.errand().labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION");
+		assertThat(latestServing.errand().labelPaths()).containsExactly("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION");
 		assertThat(latestServing.errand().externalTags()).containsExactly(Map.entry("alkolAnmalan", "1-FOLKOL"), Map.entry("diarienummer", "IAN-2015-1"));
 		assertThat(latestServing.errand().description()).contains("\nAnmäld: 2010-01-01\n").doesNotContain("uppskattat");
 		assertThat(latestServing.asset().issued()).isEqualTo(LocalDate.of(2010, 1, 1));
@@ -651,13 +664,16 @@ class AlkolCandidateFactoryTest {
 		assertThat(result.candidates().get(0).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().title()).isEqualTo("Anmälan om försäljning av tobaksfria nikotinprodukter – Butik 1");
-		// A notification of tobacco products follows the tobacco schema, with its sales place as the point of sale
+		// A notification of tobacco products follows the tobacco schema, with its sales place as the point of sale, sold until
+		// further notice from the day of the notification, which this one lacks (decision 105)
 		assertThat(result.candidates()).extracting(candidate -> candidate.asset().schema()).containsOnly(AssetSchema.TOBACCO);
 		assertThat(JSON.writeValueAsString(result.candidates().get(0).asset().content())).isEqualTo("""
 			{"caseRegistrationNumber":"IAN-1","externalCaseRegistrationNumber":"IAN-1",\
 			"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
 			"pointOfSale":{"name":"Butik 1","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
-			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
+			"salesPeriod":{"period":"INDEFINITE"},"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
+		assertThat(result.candidates().get(1).asset().content().get("salesPeriod")).hasToString("""
+			{"period":"INDEFINITE","from":"2022-03-04"}""");
 		assertThat(result.notices()).singleElement().satisfies(notice -> {
 			assertThat(notice.key()).isEqualTo(new ItemKey(ALKOL, ANMALAN, "2-INGEN"));
 			assertThat(notice.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);
@@ -850,6 +866,26 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
+	void aVisitMadeWhileTheTobaccoPermitHeldGetsTheOwnerAsItsHolder() {
+		final var data = new Data()
+			.place(place(1, 10))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.errand(AlkolTestRows.errand(100, 1, "WADE", "IAN-2019-1", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.decision(AlkolTestRows.decision(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null))
+			.visit(VisitTestRows.visit(900, 1, LocalDate.of(2024, 5, 3), null, null, "Kontr", null, null, null))
+			.visit(VisitTestRows.visit(901, 1, LocalDate.of(2018, 5, 3), null, null, "Kontr", null, null, null));
+
+		final var candidates = data.factory().visits().candidates();
+
+		// The visit after the permit was granted concerned its holder, the current owner, and the one before may have
+		// concerned another (decision 103)
+		assertThat(candidates).extracting(candidate -> candidate.permitLink().basis()).containsExactly(Basis.AFTER_ISSUE, Basis.BEFORE_ISSUE);
+		assertThat(candidates).extracting(Candidate::holder).extracting(holder -> holder == null ? null : holder.legalId())
+			.containsExactly(new LegalId("5566778899", ENTERPRISE), null);
+	}
+
+	@Test
 	void theRegistrationsOfAFormerHolderStayOnTheErrand() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, false, false, false))
@@ -1023,6 +1059,7 @@ class AlkolCandidateFactoryTest {
 		private String category = "LBK";
 		private String ownerCopy;
 		private String note;
+		private Invoicing invoicing;
 
 		private PlaceBuilder(final int fsId, final Integer agarId) {
 			this.fsId = fsId;
@@ -1058,8 +1095,13 @@ class AlkolCandidateFactoryTest {
 			return this;
 		}
 
+		PlaceBuilder withInvoicing(final Invoicing value) {
+			invoicing = value;
+			return this;
+		}
+
 		SalesPlaceRow build() {
-			return new SalesPlaceRow(fsId, "Butik " + fsId, "Gatan " + fsId, "85230", "Sundsvall", "060-1", "butik@example.com", "12", category, ownerCopy, note, folkol, tobak, ecig, tobaksfri, upphort, agarId);
+			return new SalesPlaceRow(fsId, "Butik " + fsId, "Gatan " + fsId, "85230", "Sundsvall", "060-1", "butik@example.com", "12", category, ownerCopy, note, folkol, tobak, ecig, tobaksfri, upphort, agarId, invoicing);
 		}
 	}
 

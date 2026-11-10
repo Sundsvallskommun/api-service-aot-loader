@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
+import se.sundsvall.aotloader.service.model.Invoicing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -26,6 +27,21 @@ class AlkolRepositoryTest {
 		assertThat(AlkolRepository.time(rs, "StartTid")).isEqualTo("14:05");
 		assertThat(AlkolRepository.time(rs, "SlutTid")).isNull();
 		assertThat(AlkolRepository.time(rs, "Saknas")).isNull();
+	}
+
+	@Test
+	void theInvoicingOfASalesPlaceIsNoneWhenAllItsColumnsAreBlank() throws SQLException {
+		final var rs = mock(ResultSet.class);
+		when(rs.getString("FaktureraNamn")).thenReturn(" Ekonomibyrån AB ");
+		when(rs.getString("FaktureraGatuAdress")).thenReturn("Box 12");
+		when(rs.getString("FaktureraPostNummer")).thenReturn("852 99");
+		when(rs.getString("FaktureraPostOrt")).thenReturn("Sundsvall");
+		when(rs.getString("FaktureraKontaktPerson")).thenReturn(" ");
+		final var blank = mock(ResultSet.class);
+		when(blank.getString("FaktureraNamn")).thenReturn(" ");
+
+		assertThat(AlkolRepository.invoicing(rs)).isEqualTo(new Invoicing("Ekonomibyrån AB", "Box 12", "852 99", "Sundsvall", null));
+		assertThat(AlkolRepository.invoicing(blank)).isNull();
 	}
 
 	@Test

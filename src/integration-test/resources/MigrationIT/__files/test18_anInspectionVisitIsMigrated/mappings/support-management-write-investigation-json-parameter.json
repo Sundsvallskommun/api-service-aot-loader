@@ -2,7 +2,7 @@
 	"name": "support-management-write-investigation-json-parameter",
 	"request": {
 		"method": "PUT",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations/investigation-1/json-parameters/inspectionProtocol",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000010/investigations/investigation-1/json-parameters/aot_inspection_serving_permit",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -16,7 +16,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.key",
-					"equalTo": "inspectionProtocol"
+					"equalTo": "aot_inspection_serving_permit"
 				}
 			},
 			{
@@ -63,7 +63,7 @@
 			"Content-Type": "application/json"
 		},
 		"jsonBody": {
-			"key": "inspectionProtocol",
+			"key": "aot_inspection_serving_permit",
 			"schemaId": "2281_aot_inspection_serving_permit_1.0",
 			"value": {},
 			"version": 0

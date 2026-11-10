@@ -94,6 +94,9 @@ class FilePurposesTest {
 		ALKOL | 016   | hyreskontrakt lokal.pdf               | LEASE_OR_OWNERSHIP_PROOF
 		ALKT  | BILAG | Samarbetsavtal.pdf                    | BUSINESS_AGREEMENT
 		ALKT  | HAND  | Polistillstånd.pdf                    | POLICE_PERMIT
+		ALKOL | 016   | Produktlista e-cigaretter.pdf         | PRODUCT_LIST
+		ALKOL | 016   | produktforteckning.pdf                | PRODUCT_LIST
+		ALKOL | 016   | Sortimentslista 2024.xlsx             | PRODUCT_LIST
 		ALKT  | -     | Hyresavtal.pdf                        | LEASE_OR_OWNERSHIP_PROOF
 		ALKT  | ANST  | Ansökan alkoholdrycker - 123456.pdf   | -
 		ALKT  | HAND  | avtal.pdf                             | -

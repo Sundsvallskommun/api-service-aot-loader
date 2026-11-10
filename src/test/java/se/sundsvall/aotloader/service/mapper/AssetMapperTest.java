@@ -8,6 +8,7 @@ import generated.se.sundsvall.partyassets.Status;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetData;
@@ -106,11 +107,11 @@ class AssetMapperTest {
 		final var content = mapper.toDecisionContent(withLegalBasis, MUNICIPALITY_ID, ERRAND_ID, "Bifall med villkor");
 
 		// What the decision says, with what the post gets when it is written: the errand, the municipality, the text of the
-		// outcome and the legal basis
+		// outcome and the legal basis; by the decision schema without the diary number of the errand that granted the permit
 		assertThat(content).hasValueSatisfying(json -> {
 			assertThat(json.type()).isEqualTo(JsonParameterType.ALCOHOL_DECISION);
 			assertThat(JSON.writeValueAsString(json.value())).isEqualTo("""
-				{"errandId":"11111111-1111-1111-1111-111111111111","caseRegistrationNumber":"IAN-2019-1","externalCaseRegistrationNumber":"IAN-2019-1",\
+				{"errandId":"11111111-1111-1111-1111-111111111111","externalCaseRegistrationNumber":"IAN-2019-1",\
 				"migration":{"sourceSystem":"ALKT","issuedDateEstimated":false},"beverages":["STRONG_BEER","WINE"],\
 				"decision":{"caseRegistrationNumber":"IAN-2019-1","outcome":"APPROVAL_WITH_CONDITIONS","decisionDate":"2019-04-30","decisionText":"Bifall med villkor",\
 				"legalBasis":"8 kap. 2 § alkohollagen (2010:1622)"},"premises":{"municipalityId":"2281"}}""");
@@ -120,6 +121,32 @@ class AssetMapperTest {
 			.decision(candidate.decision())
 			.build();
 		assertThat(mapper.toDecisionContent(tobacco, MUNICIPALITY_ID, ERRAND_ID, null)).map(JsonContent::type).contains(JsonParameterType.TOBACCO_DECISION);
+	}
+
+	@Test
+	void theDecisionIsRegisteredUnderTheDiaryNumberOfItsOwnErrandOrElseUnderThatOfThePost() {
+		final var candidate = TestData.permitWithDecision("1");
+		final Function<JsonFields, Candidate> deciding = decision -> Candidate.builder(candidate.key(), candidate.type())
+			.asset(candidate.asset())
+			.decision(candidate.decision().withContent(JsonFields.object()
+				.text("caseRegistrationNumber", "IAN-2019-1")
+				.text("externalCaseRegistrationNumber", "IAN-2019-1")
+				.object("decision", decision)
+				.toNode()))
+			.build();
+
+		final var ownErrand = mapper.toDecisionContent(deciding.apply(JsonFields.object().text("caseRegistrationNumber", "IAN-2020-7")), MUNICIPALITY_ID, ERRAND_ID, null);
+		final var noErrand = mapper.toDecisionContent(deciding.apply(JsonFields.object().text("outcome", "APPROVAL")), MUNICIPALITY_ID, ERRAND_ID, null);
+
+		assertThat(ownErrand).hasValueSatisfying(json -> {
+			assertThat(json.value().has("caseRegistrationNumber")).isFalse();
+			assertThat(json.value().get("externalCaseRegistrationNumber").asString()).isEqualTo("IAN-2020-7");
+			assertThat(json.value().get("decision").get("caseRegistrationNumber").asString()).isEqualTo("IAN-2020-7");
+		});
+		assertThat(noErrand).hasValueSatisfying(json -> {
+			assertThat(json.value().has("caseRegistrationNumber")).isFalse();
+			assertThat(json.value().get("externalCaseRegistrationNumber").asString()).isEqualTo("IAN-2019-1");
+		});
 	}
 
 	@Test

@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import se.sundsvall.aotloader.service.model.Invoicing;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.InspectionVisitRows.RemarkRow;
@@ -50,7 +51,8 @@ public class AlkolRepository {
 
 	private static final String SELECT_PLACES = """
 		SELECT f.FSID, f.Namn, f.GatuAdress, f.PostNummer, f.PostOrt, f.Telefon1, f.Email, f.[Område], f.Kategori,
-		       f.[ÄgareOrgNr], f.Notering, f.OLTYP, f.TOBAKTYP, f.ECIGTYP, f.TobaksfriNikotinTyp, f.Upphort, f.Agarid
+		       f.[ÄgareOrgNr], f.Notering, f.OLTYP, f.TOBAKTYP, f.ECIGTYP, f.TobaksfriNikotinTyp, f.Upphort, f.Agarid,
+		       f.FaktureraNamn, f.FaktureraGatuAdress, f.FaktureraPostNummer, f.FaktureraPostOrt, f.FaktureraKontaktPerson
 		FROM dbo.[FörsäljningsStällen] f
 		ORDER BY f.FSID
 		""";
@@ -264,7 +266,18 @@ public class AlkolRepository {
 			flag(rs, "ECIGTYP"),
 			flag(rs, "TobaksfriNikotinTyp"),
 			flag(rs, "Upphort"),
-			integer(rs, "Agarid"));
+			integer(rs, "Agarid"),
+			invoicing(rs));
+	}
+
+	/**
+	 * @return where the invoices of the sales place go, null when the place has neither a recipient, an address nor a
+	 *         person to mark them for
+	 */
+	static Invoicing invoicing(final ResultSet rs) throws SQLException {
+		final var invoicing = new Invoicing(text(rs, "FaktureraNamn"), text(rs, "FaktureraGatuAdress"), text(rs, "FaktureraPostNummer"), text(rs, "FaktureraPostOrt"),
+			text(rs, "FaktureraKontaktPerson"));
+		return Stream.of(invoicing.name(), invoicing.address(), invoicing.zipCode(), invoicing.city(), invoicing.contactPerson()).allMatch(Objects::isNull) ? null : invoicing;
 	}
 
 	static PermitViewRow toPermitView(final ResultSet rs) throws SQLException {

@@ -59,22 +59,30 @@ public final class TestData {
 	public static final String EXTERNAL_INSPECTION = "CATEGORYROOT/INSPECTION/EXTERNAL_INSPECTION";
 	public static final String DOCUMENTATION = "CATEGORYROOT/DOCUMENTATION/DOCUMENTATION";
 	/** The keys and schemas of the JSON parameters, as the test environment has them. */
-	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.of(
-		"alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
-		"tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"),
-		"alcohol-decision", new JsonParameterSettings("permit", "2281_aot_alcohol_decision_1.0"),
-		"tobacco-decision", new JsonParameterSettings("permit", "2281_aot_tobacco_decision_1.0"),
-		"premises-section", new JsonParameterSettings("premises", "2281_aot_investigation_premises_section_1.0"),
-		"serving-permit-protocol", new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_serving_permit_1.0"),
-		"internal-inspection-protocol", new JsonParameterSettings("inspectionProtocol", "2281_aot_inspection_internal_1.0"));
+	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.ofEntries(
+		Map.entry("alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1")),
+		Map.entry("tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1")),
+		Map.entry("alcohol-decision", new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2")),
+		Map.entry("tobacco-decision", new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2")),
+		Map.entry("premises-section", new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0")),
+		Map.entry("serving-permit-protocol", new JsonParameterSettings("aot_inspection_serving_permit", "2281_aot_inspection_serving_permit_1.0")),
+		Map.entry("internal-inspection-protocol", new JsonParameterSettings("aot_inspection_internal", "2281_aot_inspection_internal_1.0")),
+		Map.entry("internal-inspection-form", new JsonParameterSettings("aot_inspection_internal_inspection", "2281_aot_inspection_internal_inspection_1.2")),
+		Map.entry("external-inspection-form", new JsonParameterSettings("aot_inspection_external_inspection", "2281_aot_inspection_external_inspection_1.2")),
+		Map.entry("folkol-sales-notification-form", new JsonParameterSettings("aot_alcohol_folkol_folkol_sales_notification", "2281_aot_alcohol_folkol_folkol_sales_notification_1.1")),
+		Map.entry("folkol-serving-notification-form",
+			new JsonParameterSettings("aot_alcohol_folkol_folkol_serving_notification", "2281_aot_alcohol_folkol_folkol_serving_notification_1.1")),
+		Map.entry("ecigarette-notification-form", new JsonParameterSettings("aot_tobacco_ecigarette_sales_notification", "2281_aot_tobacco_ecigarette_sales_notification_0.10")),
+		Map.entry("tobacco-free-nicotine-notification-form",
+			new JsonParameterSettings("aot_tobacco_tobacco_free_nicotine_sales_notification", "2281_aot_tobacco_tobacco_free_nicotine_sales_notification_0.8")));
 
 	private static final List<FileReference> PERMIT_FILES = List.of(new FileReference("beslut.rtf", FileReference.FileFolder.DOCUMENTS),
 		new FileReference("ansokan.pdf", FileReference.FileFolder.ATTACHMENTS));
 
 	private static final Map<ErrandType, List<String>> LABELS = Map.ofEntries(
 		Map.entry(ErrandType.TOBACCO_PERMIT, List.of("CATEGORYROOT/TOBACCO/SALES_PERMIT_APPLICATION")),
-		Map.entry(ErrandType.FOLKOL_SALES_NOTIFICATION, List.of("CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION")),
-		Map.entry(ErrandType.FOLKOL_SERVING_NOTIFICATION, List.of("CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION")),
+		Map.entry(ErrandType.FOLKOL_SALES_NOTIFICATION, List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION")),
+		Map.entry(ErrandType.FOLKOL_SERVING_NOTIFICATION, List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION")),
 		Map.entry(ErrandType.ECIGARETTE_NOTIFICATION, List.of("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION")),
 		Map.entry(ErrandType.TOBACCO_FREE_NICOTINE_NOTIFICATION, List.of("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION")),
 		Map.entry(ErrandType.ALCOHOL_INSPECTION, List.of("TAGROOT/ALCOHOL_INSPECTION")),
@@ -325,6 +333,8 @@ public final class TestData {
 			"TAGROOT/MIGRATED_ERRAND", "label-migrated",
 			"CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING", "label-permanent-serving",
 			"TAGROOT/ALCOHOL_INSPECTION", "label-alcohol-inspection",
+			INTERNAL_INSPECTION, "label-internal-inspection",
+			EXTERNAL_INSPECTION, "label-external-inspection",
 			DOCUMENTATION, "label-documentation");
 	}
 

@@ -100,33 +100,58 @@ aot-loader:
   decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
   # The channel Draken shows as "Migrerat ärende"
   channel: MIGRATION
-  # The JSON parameters the migration writes, by the name of their type (decisions 87 and 92): the key each is stored under
-  # and the id of its schema in the json-schema service, which the target system validates it by and which must be
-  # registered for the municipality of the run. Every post in PartyAssets gets the one of the AoT schema of its type, at
-  # version 0.1 in the test environment. The decision of a permit, the section of the premises and the inspection
-  # protocols get theirs under the keys Draken reads them by, with the schemas Draken writes them with.
+  # The JSON parameters the migration writes, by the name of their type (decisions 87, 92, 97, 98 and 102): the key each is
+  # stored under and the id of its schema in the json-schema service, which the target system validates it by and which
+  # must be registered for the municipality of the run. Draken and pw-alkt store each under the name of its schema, and
+  # write it by the version here, so a new version is taken into use by changing the schema id.
   json-parameters:
+    # The post in PartyAssets of a permit or a notification, at version 0.1 in the test environment, as pw-alkt
     alcohol-party-asset:
       key: aot_alcohol_party_asset
       schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_0.1}
     tobacco-party-asset:
       key: aot_tobacco_party_asset
       schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_0.1}
+    # What the decision of a permit says of the permit
     alcohol-decision:
-      key: permit
-      schema-id: ${AOT_LOADER_ALCOHOL_DECISION_SCHEMA_ID:2281_aot_alcohol_decision_1.0}
+      key: aot_alcohol_decision
+      schema-id: ${AOT_LOADER_ALCOHOL_DECISION_SCHEMA_ID:2281_aot_alcohol_decision_1.2}
     tobacco-decision:
-      key: permit
-      schema-id: ${AOT_LOADER_TOBACCO_DECISION_SCHEMA_ID:2281_aot_tobacco_decision_1.0}
+      key: aot_tobacco_decision
+      schema-id: ${AOT_LOADER_TOBACCO_DECISION_SCHEMA_ID:2281_aot_tobacco_decision_1.2}
+    # What the investigation of a serving permit establishes of the premises
     premises-section:
-      key: premises
+      key: aot_investigation_premises_section
       schema-id: ${AOT_LOADER_PREMISES_SECTION_SCHEMA_ID:2281_aot_investigation_premises_section_1.0}
+    # The inspection protocols of an inspection errand and of a visit to a serving place
     serving-permit-protocol:
-      key: inspectionProtocol
+      key: aot_inspection_serving_permit
       schema-id: ${AOT_LOADER_SERVING_PERMIT_PROTOCOL_SCHEMA_ID:2281_aot_inspection_serving_permit_1.0}
     internal-inspection-protocol:
-      key: inspectionProtocol
+      key: aot_inspection_internal
       schema-id: ${AOT_LOADER_INTERNAL_INSPECTION_PROTOCOL_SCHEMA_ID:2281_aot_inspection_internal_1.0}
+    # The errand data (Ärendeuppgifter) of an inspection errand and of a visit: the form of the errand type, which names
+    # the place
+    internal-inspection-form:
+      key: aot_inspection_internal_inspection
+      schema-id: ${AOT_LOADER_INTERNAL_INSPECTION_FORM_SCHEMA_ID:2281_aot_inspection_internal_inspection_1.2}
+    external-inspection-form:
+      key: aot_inspection_external_inspection
+      schema-id: ${AOT_LOADER_EXTERNAL_INSPECTION_FORM_SCHEMA_ID:2281_aot_inspection_external_inspection_1.2}
+    # The errand data of a notification: the form of its type, with what the source gives and the answers decided for
+    # what it does not (decision 102)
+    folkol-sales-notification-form:
+      key: aot_alcohol_folkol_folkol_sales_notification
+      schema-id: ${AOT_LOADER_FOLKOL_SALES_NOTIFICATION_FORM_SCHEMA_ID:2281_aot_alcohol_folkol_folkol_sales_notification_1.1}
+    folkol-serving-notification-form:
+      key: aot_alcohol_folkol_folkol_serving_notification
+      schema-id: ${AOT_LOADER_FOLKOL_SERVING_NOTIFICATION_FORM_SCHEMA_ID:2281_aot_alcohol_folkol_folkol_serving_notification_1.1}
+    ecigarette-notification-form:
+      key: aot_tobacco_ecigarette_sales_notification
+      schema-id: ${AOT_LOADER_ECIGARETTE_NOTIFICATION_FORM_SCHEMA_ID:2281_aot_tobacco_ecigarette_sales_notification_0.10}
+    tobacco-free-nicotine-notification-form:
+      key: aot_tobacco_tobacco_free_nicotine_sales_notification
+      schema-id: ${AOT_LOADER_TOBACCO_FREE_NICOTINE_NOTIFICATION_FORM_SCHEMA_ID:2281_aot_tobacco_tobacco_free_nicotine_sales_notification_0.8}
   # The closed status of the migrated errands, the one AOT has (decision 5)
   errand-status: SOLVED
   # The resolution Draken closes an errand of AOT with, shown as "Avslutat"
@@ -152,7 +177,8 @@ aot-loader:
     permit-holder: PRIMARY
     # The persons with significant influence (decision 15), with the parameter PBI = true on each
     contact: CONTACT
-    # The holder on an inspection errand. Not PRIMARY, which would show the errand on Mina sidor (decision 27)
+    # The holder on an inspection errand, visit or documentation errand. Not PRIMARY, which would show the errand on Mina
+    # sidor (decision 27)
     inspection-holder: CONTACT
     # The role the measures of the inspection visits are added by, the one Draken gives every measure (decision 57)
     measure-added-by: PRIMARY
@@ -189,18 +215,19 @@ aot-loader:
       asset-title: Tillstånd för tobaksförsäljning
       decision-type: TOBAKSFORSALJNING
       decision-title: Beslut om ansökan om försäljning av tobaksvaror
+    # Under the type FOLKOL, as the e-service files a notification of low-alcohol beer (decision 99)
     folkol-sales-notification:
       category: ALCOHOL
-      type: FOLKOL_SALES_NOTIFICATION
+      type: FOLKOL
       labels:
-        - CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION
+        - CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION
       asset-type: LowAlcoholBeerSalesNotification
       asset-title: Anmälan om försäljning av folköl
     folkol-serving-notification:
       category: ALCOHOL
-      type: FOLKOL_SERVING_NOTIFICATION
+      type: FOLKOL
       labels:
-        - CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION
+        - CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION
       asset-type: LowAlcoholBeerServingNotification
       asset-title: Anmälan om servering av folköl
     ecigarette-notification:

@@ -22,7 +22,7 @@ import se.sundsvall.aotloader.support.Texts;
  */
 public final class InspectionProtocols {
 
-	/** The protocol of a visit to a place with a serving permit, "Serveringstillstånd – tillsyn". */
+	/** The protocol of a visit to a place with a serving permit, "Yttre tillsyn". */
 	public static final String SERVING_PERMIT = "serving_permit";
 	/** The protocol of an inspection of the permit holder without a visit, "Inre tillsyn". */
 	public static final String INTERNAL_INSPECTION = "internal_inspection";

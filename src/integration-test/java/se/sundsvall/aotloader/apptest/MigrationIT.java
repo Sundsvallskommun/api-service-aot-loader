@@ -238,14 +238,15 @@ class MigrationIT extends AbstractAppTest {
 		assertThat(companyParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
 			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Ägarbolag")),
 				tuple("organizationNumber", List.of("559988-7766")));
-		final var permit = wiremock.findAll(putRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/decisions/decision-1/json-parameters/permit")))
+		final var permit = wiremock.findAll(putRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/decisions/decision-1/json-parameters/aot_alcohol_decision")))
 			.getFirst().getBodyAsString();
 		final Map<String, Object> asset = JsonPath.read(wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString(),
 			"$.jsonParameters[0].value");
 		final Map<String, Object> decided = JsonPath.read(permit, "$.value");
 		assertThat(decided)
-			.as("The decision says of the permit what the post does, with the beverages and the serving hours as Draken decides them (decision 92)")
-			.containsAllEntriesOf(asset.entrySet().stream().filter(entry -> !List.of("beverages", "servingHours").contains(entry.getKey()))
+			.as("The decision says of the permit what the post does, with the beverages and the serving hours as Draken decides them (decision 92), and without the diary number of the errand that granted the permit (decision 97)")
+			.doesNotContainKey("caseRegistrationNumber")
+			.containsAllEntriesOf(asset.entrySet().stream().filter(entry -> !List.of("beverages", "servingHours", "caseRegistrationNumber").contains(entry.getKey()))
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
 		verifyStubs();
 
@@ -386,7 +387,7 @@ class MigrationIT extends AbstractAppTest {
 		assetOfTheInterruptedPermit = wiremock.findAll(postRequestedFor(urlPathEqualTo("/party-assets/2281/assets"))).getFirst().getBodyAsString();
 		decisionOfTheInterruptedPermit = writtenDecision(INTERRUPTED_ERRAND_ID);
 		permitOfTheInterruptedDecision = wiremock.findAll(putRequestedFor(urlEqualTo("/support-management/2281/AOT/errands/" + INTERRUPTED_ERRAND_ID
-			+ "/decisions/decision-1/json-parameters/permit"))).getFirst().getBodyAsString();
+			+ "/decisions/decision-1/json-parameters/aot_alcohol_decision"))).getFirst().getBodyAsString();
 		verifyStubs();
 
 		itemIs("ALKT/TILLSTAND/3");
@@ -454,9 +455,9 @@ class MigrationIT extends AbstractAppTest {
 
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + VISIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName()).containsExactlyInAnyOrder("besöksrapport.pdf", "foto.jpg");
-		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets)/.*"))))
-			.as("A visit has no holder to look up and no permit; its day relates it to the permit errand (decision 61)")
-			.isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party-assets/.*")))).as("A visit has no permit; its day relates it to the permit errand (decision 61)").isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party/.*")))).as("Made while the permit held, it concerned the current owner, whose partyId is looked up (decision 103)")
+			.hasSize(1);
 		assertThat(investigationTimes(VISIT_ERRAND_ID)).as("The visit from 21.30 to 23:00 in winter time")
 			.containsExactly(Instant.parse("2023-11-04T20:30:00Z"), Instant.parse("2023-11-04T22:00:00Z"));
 		verifyStubs();
@@ -469,7 +470,8 @@ class MigrationIT extends AbstractAppTest {
 		// AlkOL keeps the times of a visit as datetime, and its remarks have no note
 		migrateItem("ALKOL/TILLSYNSBESOK/950", false);
 
-		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(party|party-assets)/.*")))).isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party-assets/.*")))).isEmpty();
+		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/party/.*")))).hasSize(1);
 		assertThat(investigationTimes("11111111-aaaa-bbbb-cccc-000000000011")).as("The visit from 14:00 to 14:20 in summer time")
 			.containsExactly(Instant.parse("2024-05-03T12:00:00Z"), Instant.parse("2024-05-03T12:20:00Z"));
 		verifyStubs();

@@ -61,12 +61,16 @@
 					"resourcePath": "/CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/TASTING"
 				},
 				{
+					"id": "label-folkol",
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL"
+				},
+				{
 					"id": "label-folkol-sales",
-					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL_SALES_NOTIFICATION"
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION"
 				},
 				{
 					"id": "label-folkol-serving",
-					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL_SERVING_NOTIFICATION"
+					"resourcePath": "/CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION"
 				},
 				{
 					"id": "label-tobacco-permit",

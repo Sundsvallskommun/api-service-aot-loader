@@ -19,6 +19,7 @@ import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.RelationPlanner.RelationPlan;
 import se.sundsvall.aotloader.service.TargetWriter.DecisionWrite;
 import se.sundsvall.aotloader.service.TargetWriter.PostLookup;
+import se.sundsvall.aotloader.service.mapper.ErrandFormMapper;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
@@ -235,6 +236,7 @@ public class ItemMigrator {
 		private ItemResult rehearse(final String municipalityId) {
 			final var uploadable = fileUploader.check(candidate, context, notes);
 			legalBasisReader.withLegalBasis(candidate, context, notes);
+			noteForm();
 			noteOmitted();
 			if (wasActivated(municipalityId)) {
 				noteDecisionOfActiveErrand();
@@ -265,6 +267,7 @@ public class ItemMigrator {
 			saveAs(ARENDE_SKAPAT);
 			final var active = errand.getLifecycle() == LifecycleEnum.ACTIVE;
 			if (!active) {
+				noteForm();
 				targets.ensureInvestigation(candidate, municipalityId, errand.getId());
 			}
 
@@ -330,6 +333,14 @@ public class ItemMigrator {
 		private void noteOmitted() {
 			Optional.ofNullable(candidate.asset()).map(AssetData::omitted).filter(omitted -> !omitted.isEmpty())
 				.ifPresent(omitted -> notes.line("Utelämnat i JSON-parametern i PartyAssets, eftersom det inte följer schemat: " + String.join("; ", omitted)));
+		}
+
+		/**
+		 * Tells in the report why the errand gets no errand data although its type has a form, and what the source has but the
+		 * form leaves out, since it does not follow the schema (decisions 98 and 102), without any value.
+		 */
+		private void noteForm() {
+			ErrandFormMapper.reportLines(candidate).forEach(notes::line);
 		}
 
 		/**

@@ -201,7 +201,7 @@ class SupportManagementIntegrationTest {
 
 	@Test
 	void theJsonParametersOfAnInvestigationAndOfItsSections() {
-		final var parameter = new JsonParameter().key("premises").schemaId("2281_aot_investigation_premises_section_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
+		final var parameter = new JsonParameter().key("aot_investigation_premises_section").schemaId("2281_aot_investigation_premises_section_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
 		final var change = new Investigation().parameters(List.of());
 		when(client.getInvestigationJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "i")).thenReturn(List.of(parameter), null);
 		when(client.getSectionJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s")).thenReturn(List.of(parameter), null);
@@ -215,8 +215,8 @@ class SupportManagementIntegrationTest {
 		integration.updateInvestigation(MUNICIPALITY_ID, "a", "i", change);
 
 		// Under the key of the parameter, which SupportManagement wants also in the path
-		verify(client).writeInvestigationJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "premises", parameter);
-		verify(client).writeSectionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s", "premises", parameter);
+		verify(client).writeInvestigationJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "aot_investigation_premises_section", parameter);
+		verify(client).writeSectionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "i", "s", "aot_investigation_premises_section", parameter);
 		verify(client).updateInvestigation(MUNICIPALITY_ID, NAMESPACE, "a", "i", change);
 	}
 
@@ -255,14 +255,14 @@ class SupportManagementIntegrationTest {
 
 	@Test
 	void theJsonParametersOfADecisionGoThroughTheClientOfTheDecisions() {
-		final var parameter = new JsonParameter().key("permit").schemaId("2281_aot_alcohol_decision_1.0").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
+		final var parameter = new JsonParameter().key("aot_alcohol_decision").schemaId("2281_aot_alcohol_decision_1.2").value(JsonNodeFactory.instance.objectNode().put("a", "b"));
 		when(decisionClient.getDecisionJsonParameters(MUNICIPALITY_ID, NAMESPACE, "a", "d")).thenReturn(List.of(parameter), null);
 
 		assertThat(integration.getDecisionJsonParameters(MUNICIPALITY_ID, "a", "d")).containsExactly(parameter);
 		assertThat(integration.getDecisionJsonParameters(MUNICIPALITY_ID, "a", "d")).isEmpty();
 		integration.writeDecisionJsonParameter(MUNICIPALITY_ID, "a", "d", parameter);
 
-		verify(decisionClient).writeDecisionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "d", "permit", parameter);
+		verify(decisionClient).writeDecisionJsonParameter(MUNICIPALITY_ID, NAMESPACE, "a", "d", "aot_alcohol_decision", parameter);
 	}
 
 	@Test

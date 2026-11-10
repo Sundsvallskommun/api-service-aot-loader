@@ -4,7 +4,9 @@ CREATE TABLE dbo.[FörsäljningsStällen] (
     FSID int NOT NULL PRIMARY KEY, Namn varchar(100) NULL, GatuAdress nvarchar(50) NULL, PostNummer nvarchar(10) NULL, PostOrt nvarchar(30) NULL,
     Telefon1 nvarchar(50) NULL, Email nvarchar(50) NULL, [Område] varchar(50) NULL, Kategori nvarchar(50) NULL, [ÄgareOrgNr] nvarchar(50) NULL,
     Notering varchar(6000) NULL, OLTYP bit NOT NULL DEFAULT 0, TOBAKTYP bit NOT NULL DEFAULT 0, ECIGTYP bit NOT NULL DEFAULT 0,
-    TobaksfriNikotinTyp bit NOT NULL DEFAULT 0, Upphort bit NULL, Agarid int NULL
+    TobaksfriNikotinTyp bit NOT NULL DEFAULT 0, Upphort bit NULL, Agarid int NULL,
+    FaktureraNamn nvarchar(50) NULL, FaktureraGatuAdress nvarchar(50) NULL, FaktureraPostNummer nvarchar(10) NULL, FaktureraPostOrt nvarchar(30) NULL,
+    FaktureraKontaktPerson nvarchar(50) NULL
 )
 GO
 CREATE TABLE dbo.FS_GT_Tobak (FSID int NULL, GTDE bit NULL, GTPH bit NULL, GTDI bit NULL)
@@ -50,8 +52,9 @@ GO
 CREATE TABLE dbo.PBI_Roller (ID int IDENTITY(1, 1) NOT NULL, Kod varchar(8) NULL, Klartext varchar(50) NULL, Passiv bit NULL)
 GO
 INSERT INTO dbo.[Ägare] VALUES (10, '556677-8899', 'Testbolaget AB', NULL, 'Box 1', NULL, '85230', 'Sundsvall', NULL, NULL)
-INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, PostOrt, [Område], Kategori, [ÄgareOrgNr], Notering, OLTYP, TOBAKTYP, Upphort, Agarid)
-    VALUES (1, 'Kiosken', 'Torget 1', '85230', 'Sundsvall', '12', 'KIO', '556677-8899', 'Öppet alla dagar', 1, 1, 0, 10)
+INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, PostOrt, [Område], Kategori, [ÄgareOrgNr], Notering, OLTYP, TOBAKTYP, Upphort, Agarid, FaktureraNamn, FaktureraGatuAdress, FaktureraPostNummer, FaktureraPostOrt,
+    FaktureraKontaktPerson)
+    VALUES (1, 'Kiosken', 'Torget 1', '85230', 'Sundsvall', '12', 'KIO', '556677-8899', 'Öppet alla dagar', 1, 1, 0, 10, 'Ekonomibyrån AB', 'Box 12', '852 99', 'Sundsvall', 'Kalle Kassör')
 INSERT INTO dbo.[FörsäljningsStällen] (FSID, Namn, GatuAdress, PostNummer, PostOrt, [Område], Kategori, [ÄgareOrgNr], Notering, OLTYP, TOBAKTYP, Upphort, Agarid)
     VALUES (2, 'Timråkiosken', 'Storgatan 2', '86130', 'Timrå', '13', 'KIO', '556677-8899', NULL, 1, 0, 0, 10)
 INSERT INTO dbo.FS_GT_Tobak VALUES (1, 1, 0, 0)

@@ -210,6 +210,12 @@
 				"name": "POLICE_PERMIT",
 				"displayName": "Polistillstånd",
 				"deprecated": false
+			},
+			{
+				"id": "purpose-PRODUCT_LIST",
+				"name": "PRODUCT_LIST",
+				"displayName": "Produktlista",
+				"deprecated": false
 			}
 		]
 	}

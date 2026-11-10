@@ -197,7 +197,8 @@ public final class AlkolCandidateFactory {
 
 	private Candidate visit(final VisitRow visit, final InspectionVisitCandidates visits) {
 		final var place = index.salesPlace(visit.objektId());
-		return visits.builder(visit, index.snapshot().visits(), place == null ? null : index.place(place), index.placePermit(visit.objektId()), index.sharedFileNames())
+		return visits.builder(visit, index.snapshot().visits(), place == null ? null : index.place(place), index.placePermit(visit.objektId()),
+			place == null ? null : index.ownerOf(place), index.sharedFileNames())
 			.build();
 	}
 }

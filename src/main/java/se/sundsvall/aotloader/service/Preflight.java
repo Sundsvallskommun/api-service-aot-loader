@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.mapper.ErrandFormMapper;
 import se.sundsvall.aotloader.service.mapper.LabelPaths;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FilePurpose;
@@ -43,7 +44,6 @@ import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CO
 import static se.sundsvall.aotloader.Constants.LABEL_ATTRIBUTE_PROCESS_BLOCKED;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
 import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
-import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
@@ -149,12 +149,13 @@ public class Preflight {
 	}
 
 	/**
-	 * @return the JSON parameters the errands of the type get (decisions 87 and 92): that of the post in PartyAssets, that
-	 *         of the decision of a permit whose errand gets one, that of the section of the premises of a serving permit,
-	 *         and that of the inspection protocol of an inspection errand or of a visit to a serving place
+	 * @return the JSON parameters the errands of the type get (decisions 87, 92 and 98): that of the post in PartyAssets,
+	 *         that of the decision of a permit whose errand gets one, that of the section of the premises of a serving
+	 *         permit, that of the inspection protocol of an inspection errand or of a visit to a serving place, and the
+	 *         form of each errand type whose label the settings give
 	 */
 	static List<JsonParameterType> jsonParametersOf(final ErrandType type, final ErrandTypeSettings settings) {
-		final var types = new ArrayList<JsonParameterType>();
+		final var types = new ArrayList<>(ErrandFormMapper.formsOf(settings.allLabels()));
 		if (type.isWithAsset()) {
 			types.add(type.getAssetSchema().asset());
 			if (settings.withDecision()) {
@@ -178,7 +179,7 @@ public class Preflight {
 	private void checkJsonParameter(final ErrandType type, final JsonParameterType jsonParameter, final List<String> problems) {
 		final var settings = properties.jsonParameter(jsonParameter);
 		if (Texts.isBlank(settings.key()) || Texts.isBlank(settings.schemaId())) {
-			problems.add("Nyckel eller schema för JSON-parametern %s saknas för %s (aot-loader.json-parameters.%s, beslut 87 och 92)".formatted(jsonParameter.settingsName(), type,
+			problems.add("Nyckel eller schema för JSON-parametern %s saknas för %s (aot-loader.json-parameters.%s, beslut 87, 92 och 98)".formatted(jsonParameter.settingsName(), type,
 				jsonParameter.settingsName()));
 		}
 	}
@@ -208,8 +209,8 @@ public class Preflight {
 	}
 
 	private void checkInspections(final Map<Source, Set<Kind>> scope, final List<String> problems) {
-		if (scope.values().stream().anyMatch(kinds -> kinds.contains(TILLSYN) || kinds.contains(DOKUMENTATION)) && Texts.isBlank(properties.roles().inspectionHolder())) {
-			problems.add("Rollen för tillståndshavaren på tillsyns- och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8)");
+		if (scope.values().stream().flatMap(Set::stream).anyMatch(Kind::hasConcernedHolder) && Texts.isBlank(properties.roles().inspectionHolder())) {
+			problems.add("Rollen för tillståndshavaren på tillsynsärenden, tillsynsbesök och dokumentationsärenden är inte angiven (aot-loader.roles.inspection-holder, avsnitt 7.7 och 7.8, beslut 103)");
 		}
 	}
 
@@ -280,8 +281,8 @@ public class Preflight {
 
 	/**
 	 * The roles the errands of the run give their stakeholders and measures must exist in the namespace: the holder's and
-	 * the contacts' on a permit, a notification, an inspection errand and a documentation errand, and the role measures are
-	 * added by on a visit.
+	 * the contacts' on a permit, a notification, an inspection errand, a visit and a documentation errand, and the role
+	 * measures are added by on a visit.
 	 */
 	private void checkRoles(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
 		final var roles = properties.roles();
@@ -290,7 +291,7 @@ public class Preflight {
 			wanted.add(roles.permitHolder());
 			wanted.add(roles.contact());
 		}
-		if (types.stream().anyMatch(type -> type.getKind() == TILLSYN || type.getKind() == DOKUMENTATION)) {
+		if (types.stream().anyMatch(type -> type.getKind().hasConcernedHolder())) {
 			Optional.ofNullable(Texts.trimToNull(roles.inspectionHolder())).ifPresent(wanted::add);
 			wanted.add(roles.contact());
 		}

@@ -42,7 +42,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.classification.type",
-					"equalTo": "FOLKOL_SALES_NOTIFICATION"
+					"equalTo": "FOLKOL"
 				}
 			},
 			{
@@ -52,9 +52,15 @@
 				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
 			},
 			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-folkol-sales')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_alcohol_folkol_folkol_sales_notification' && @.value.invoiceAddressSameAsCompany == 'YES' && @.value.premisesName == 'Timråkiosken' && @.value.premisesAddress.city == 'Timrå')]"
+			},
+			{
 				"matchesJsonPath": {
-					"expression": "$.parameters[?(@.key == 'premisesName')].values[0]",
-					"equalTo": "Timråkiosken"
+					"expression": "$.parameters.length()",
+					"equalTo": "1"
 				}
 			},
 			{

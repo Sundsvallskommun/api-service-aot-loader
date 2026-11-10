@@ -36,9 +36,9 @@ import static se.sundsvall.aotloader.source.CandidateTexts.line;
 
 /**
  * Builds the candidates of the inspection visits of a source, the same way for both sources (section 7.7.2): which
- * visits are migrated, and their rules, title, description and labels. A visit gets no holder, since the
- * source does not tell which holder the place had at the time. Its day relates it to the permit errand instead
- * (decision 61).
+ * visits are migrated, and their rules, title, description and labels. The source does not tell which holder the place
+ * had at the time of a visit, so its day relates it to the permit errand (decision 61), and a visit made while the
+ * current permit held gets the holder of that permit (decision 103).
  */
 public final class InspectionVisitCandidates {
 
@@ -83,15 +83,18 @@ public final class InspectionVisitCandidates {
 	}
 
 	/**
-	 * Starts the candidate of a visit with what both sources give it. The source adds the rest, such as the files.
+	 * Starts the candidate of a visit with what both sources give it. The source adds the rest, such as the files. A visit
+	 * made while the current permit held concerned the holder of that permit, the current owner, and gets it as its
+	 * holder, the same as relates the visit to the permit errand (decisions 61 and 103).
 	 *
 	 * @param  visit  the visit
 	 * @param  rows   the visits of the source, with the remarks and the code lists
 	 * @param  place  the place of the visit, null when it has none
 	 * @param  permit the current permit of the place, null when the place has none
+	 * @param  owner  the current owner of the place, null when it has none
 	 * @return        the builder of the candidate
 	 */
-	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit) {
+	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final ContactRow owner) {
 		final var hits = new ArrayList<RuleHit>();
 		if (place == null) {
 			hits.add(RuleHit.of(PLACE_MISSING, placeMissing));
@@ -106,6 +109,7 @@ public final class InspectionVisitCandidates {
 		final var name = Optional.ofNullable(placeName).orElse(unknownPlace);
 		final var title = Texts.title("Tillsynsbesök", name);
 		final var investigation = investigation(title, visit, content.remarks(), content.round());
+		final var permitLink = new PermitLink(permit, null, null, visit.datum());
 		return Candidate.builder(new ItemKey(type.getSource(), TILLSYNSBESOK, String.valueOf(visit.tillfalleNr())), type)
 			.placeName(placeName)
 			.ruleHits(hits)
@@ -115,20 +119,22 @@ public final class InspectionVisitCandidates {
 			.measures(measures(rows.remarksOf(visit.tillfalleNr()), rows, investigation.completedAt()))
 			.description(description(name, content))
 			.labelPaths(settings.labels())
-			.permitLink(new PermitLink(permit, null, null, visit.datum()));
+			.permitLink(permitLink)
+			.holder(owner == null || permitLink.basis() != PermitLink.Basis.AFTER_ISSUE ? null : PartyRows.holder(owner, today));
 	}
 
 	/**
-	 * Starts the candidate of a visit as {@link #builder(VisitRow, InspectionVisitRows, Place, PlacePermit)} does, with
-	 * the files of the visit, each with its purpose and the day of the visit.
+	 * Starts the candidate of a visit as {@link #builder(VisitRow, InspectionVisitRows, Place, PlacePermit, ContactRow)}
+	 * does, with the files of the visit, each with its purpose and the day of the visit.
 	 *
 	 * @param  sharedFileNames the file names of the source that more than one place refers to
 	 * @return                 the builder of the candidate
 	 */
-	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final SharedFileNames sharedFileNames) {
+	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final ContactRow owner,
+		final SharedFileNames sharedFileNames) {
 		final var files = new FileList(sharedFileNames);
 		rows.forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.ofVisit(type.getSource(), folder, name, SourceValues.startOfDay(visit.datum()))));
-		return builder(visit, rows, place, permit).files(files.build(), files.assetFiles(), files.details());
+		return builder(visit, rows, place, permit, owner).files(files.build(), files.assetFiles(), files.details());
 	}
 
 	private String description(final String name, final VisitContent content) {

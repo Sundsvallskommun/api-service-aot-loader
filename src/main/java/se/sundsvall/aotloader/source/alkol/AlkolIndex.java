@@ -320,7 +320,8 @@ final class AlkolIndex {
 	}
 
 	Place place(final SalesPlaceRow place) {
-		return new Place(place.namn(), place.gatuadress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codes().area(place.omrade()), null);
+		return new Place(place.namn(), place.gatuadress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codes().area(place.omrade()), null,
+			place.invoicing());
 	}
 
 	/**

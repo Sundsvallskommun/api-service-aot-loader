@@ -55,7 +55,7 @@ class ReadersTest {
 	@Test
 	void alkolReader() {
 		final var repository = mock(AlkolRepository.class);
-		final var place = new AlkolSnapshot.SalesPlaceRow(1, "Butik", null, null, null, null, null, null, null, null, null, true, true, false, false, false, null);
+		final var place = new AlkolSnapshot.SalesPlaceRow(1, "Butik", null, null, null, null, null, null, null, null, null, true, true, false, false, false, null, null);
 		when(repository.readSnapshot()).thenReturn(new AlkolSnapshot(List.of(place), Map.of(1, new AlkolSnapshot.PermitViewRow(1, true, false, false, false)), Map.of(),
 			List.of(AlkolTestRows.errand(400, 1, "IT", null, null, null, null)), List.of(),
 			List.of(AlkolTestRows.event(300, 1, null, "024", null, null, null, null, null, "Anteckning")), Map.of(), Map.of(), new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()),

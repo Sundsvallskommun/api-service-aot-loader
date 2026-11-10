@@ -32,6 +32,9 @@
 			},
 			{
 				"doesNotMatch": "(?s).*\"(reporterUserId|lifecycle)\".*"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_alcohol_folkol_folkol_sales_notification' && @.value.invoiceAddressSameAsCompany == 'NO')]"
 			}
 		]
 	},

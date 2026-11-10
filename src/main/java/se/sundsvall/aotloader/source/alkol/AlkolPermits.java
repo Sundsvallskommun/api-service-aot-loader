@@ -38,7 +38,6 @@ import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.PermitViewRow;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.SalesPlaceRow;
-import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
@@ -356,15 +355,8 @@ final class AlkolPermits {
 			.caseRegistrationNumber(diaryNumber)
 			.permitHolder(holder)
 			.place(premises);
-		final var salesPeriod = JsonFields.object();
-		if (decision == null || decision.validTo() == null) {
-			salesPeriod.text("period", "INDEFINITE").date("from", decision == null ? null : decision.validFrom());
-		} else {
-			salesPeriod.text("period", "TEMPORARY").date("from", decision.validFrom()).date("to", decision.validTo());
-		}
-		contents.fields()
-			.texts("salesTypes", kinds.stream().map(PermitKind::salesType).toList())
-			.object("salesPeriod", salesPeriod);
+		contents.fields().texts("salesTypes", kinds.stream().map(PermitKind::salesType).toList());
+		contents.salesPeriod(decision == null ? null : decision.validFrom(), decision == null ? null : decision.validTo());
 		return contents.decision(decision, issued, null).migration(ALKOL, false);
 	}
 

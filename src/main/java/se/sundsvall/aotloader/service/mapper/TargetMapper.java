@@ -28,7 +28,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -39,17 +38,10 @@ import se.sundsvall.aotloader.service.model.JsonContent;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
-import se.sundsvall.aotloader.service.model.Source;
-import se.sundsvall.aotloader.source.ParameterList;
 import se.sundsvall.aotloader.support.JsonValues;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
 
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_NAME;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_AREA;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_POSTAL_CODE;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_PREMISES_STREET_ADDRESS;
-import static se.sundsvall.aotloader.Constants.ERRAND_PARAMETER_RESTAURANT_NUMBER;
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
@@ -82,11 +74,13 @@ public class TargetMapper {
 	private final AotLoaderProperties properties;
 	private final Clock clock;
 	private final StakeholderMapper stakeholders;
+	private final ErrandFormMapper forms;
 
 	public TargetMapper(final AotLoaderProperties properties, final Clock clock) {
 		this.properties = properties;
 		this.clock = clock;
 		this.stakeholders = new StakeholderMapper(properties);
+		this.forms = new ErrandFormMapper(properties);
 	}
 
 	/**
@@ -132,8 +126,10 @@ public class TargetMapper {
 			.businessRelated(true)
 			.externalTags(externalTags(candidate))
 			.stakeholders(stakeholders.stakeholders(candidate, parties))
-			.parameters(ErrandParameterMapper.toParameters(Stream.concat(premisesParameters(candidate).stream(), Stream.of(premisesMunicipalityParameter(candidate, municipalityId))).toList()));
-		// A visit always sends its list, also an empty one, so that an update of a draft replaces what an earlier run gave it
+			.parameters(ErrandParameterMapper.toParameters(List.of(premisesMunicipalityParameter(candidate, municipalityId))))
+			// Always the list of JSON parameters, and of measures on a visit, also an empty one, so that an update
+			// of a draft replaces what an earlier run gave it
+			.jsonParameters(forms.toForm(candidate, municipalityId).map(form -> List.of(toJsonParameter(form))).orElse(List.of()));
 		if (candidate.type().getKind() == Kind.TILLSYNSBESOK) {
 			errand.measures(measures(candidate, settings.measureType()));
 		}
@@ -429,28 +425,8 @@ public class TargetMapper {
 	}
 
 	/**
-	 * The serving place or sales place as parameters of the errand, under the keys Draken and pw-alkt read (section 7.2.1,
-	 * decision 94): its name, address and the restaurant number of a serving place. A serving place of AlkT has the display
-	 * names Draken writes, a sales place of AlkOL the same for a sales place, and the postal code is written without
-	 * blanks, as Draken writes it.
-	 */
-	private static List<Parameter> premisesParameters(final Candidate candidate) {
-		final var place = candidate.place();
-		if (place == null) {
-			return List.of();
-		}
-		final var premises = candidate.key().source() == Source.ALKT ? "Serveringsställets" : "Försäljningsställets";
-		return new ParameterList()
-			.add(ERRAND_PARAMETER_PREMISES_NAME, premises + " namn", place.name())
-			.add(ERRAND_PARAMETER_PREMISES_STREET_ADDRESS, premises + " gatuadress", place.address())
-			.add(ERRAND_PARAMETER_PREMISES_POSTAL_CODE, premises + " postnummer", Texts.withoutBlanks(place.zipCode()))
-			.add(ERRAND_PARAMETER_PREMISES_POSTAL_AREA, premises + " postort", place.city())
-			.add(ERRAND_PARAMETER_RESTAURANT_NUMBER, "Valt restaurangnummer", place.restaurantNumber())
-			.build();
-	}
-
-	/**
-	 * The municipality code of the place, on every errand whether it has a place or not (decision 19).
+	 * The municipality code of the place, on every errand whether it has a place or not, the only parameter of the errand,
+	 * as Draken and pw-alkt read no other (decisions 19, 94 and 100).
 	 */
 	private Parameter premisesMunicipalityParameter(final Candidate candidate, final String municipalityId) {
 		return new Parameter(PARAMETER_PREMISES_MUNICIPALITY_ID, "Kommun", List.of(properties.premisesMunicipalityOf(candidate.place(), municipalityId)));

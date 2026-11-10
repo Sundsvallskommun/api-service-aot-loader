@@ -58,6 +58,15 @@
 				"matchesJsonPath": "$.labels[?(@.id == 'label-internal-inspection')]"
 			},
 			{
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_inspection_internal_inspection' && @.schemaId == '2281_aot_inspection_internal_inspection_1.2' && @.value.premises.name == 'Krogen Ett' && @.value.premises.restaurantNumber == '12345678' && @.value.premises.municipalityId == '2281')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "1"
+				}
+			},
+			{
 				"matchesJsonPath": "$[?(@.description =~ /.*<p>Handläggare: Anna Berg, XYZ<\\/p>.*/)]"
 			},
 			{
