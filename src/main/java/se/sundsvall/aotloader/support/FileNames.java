@@ -2,6 +2,8 @@ package se.sundsvall.aotloader.support;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Reads and compares the file names of the sources. A name is compared in its composed form and without regard to
@@ -10,7 +12,34 @@ import java.util.Locale;
  */
 public final class FileNames {
 
+	// What a file name cannot hold when it is saved on Windows, as a downloaded attachment is
+	private static final Pattern NOT_IN_A_NAME = Pattern.compile("[/\\\\:*?<>|]");
+	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("\\p{Cntrl}");
+	private static final Pattern BLANKS = Pattern.compile("\\s+");
+
 	private FileNames() {}
+
+	/**
+	 * Names a file put on an errand by its title and the case number it shows, as pw-alkt names the files it puts on an
+	 * errand, with the extension of the file in the source. In the case number, a slash, a backslash, a colon and the other
+	 * characters a file name cannot hold become a dash, a quote is left out and a control character becomes a space.
+	 *
+	 * @param  title      the title the name begins with
+	 * @param  caseNumber the case number the file shows, null when it shows none, which leaves the title alone
+	 * @param  sourceName the name of the file in the source
+	 * @return            the name, such as "Tillståndsbevis MBN-2019-123.rtf"
+	 */
+	public static String caseFileName(final String title, final String caseNumber, final String sourceName) {
+		final var number = Optional.ofNullable(caseNumber)
+			.map(value -> CONTROL_CHARACTERS.matcher(value).replaceAll(" "))
+			.map(value -> NOT_IN_A_NAME.matcher(value).replaceAll("-").replace("\"", ""))
+			.map(value -> BLANKS.matcher(value).replaceAll(" ").strip())
+			.filter(value -> !value.isEmpty());
+		final var name = nameOf(sourceName);
+		final var dot = name == null ? -1 : name.lastIndexOf('.');
+		final var extension = dot > 0 ? name.substring(dot) : "";
+		return title + number.map(value -> " " + value).orElse("") + extension;
+	}
 
 	/**
 	 * @return the file name of a reference: the part after the last slash or backslash, should the database hold a path;

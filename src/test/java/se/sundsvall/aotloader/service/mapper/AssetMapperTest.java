@@ -55,7 +55,7 @@ class AssetMapperTest {
 		assertThat(asset.getAdditionalParameters()).isNull();
 		assertThat(asset.getJsonParameters()).singleElement().satisfies(parameter -> {
 			assertThat(parameter.getKey()).isEqualTo("aot_alcohol_party_asset");
-			assertThat(parameter.getSchemaId()).isEqualTo("2281_aot_alcohol_party_asset_0.1");
+			assertThat(parameter.getSchemaId()).isEqualTo("2281_aot_alcohol_party_asset_1.0");
 			// The id of the errand comes first, and a post without a place gets the municipality all the same
 			assertThat(JSON.writeValueAsString(parameter.getValue())).isEqualTo("""
 				{"errandId":"11111111-1111-1111-1111-111111111111","caseRegistrationNumber":"IAN-2019-1","externalCaseRegistrationNumber":"IAN-2019-1",\

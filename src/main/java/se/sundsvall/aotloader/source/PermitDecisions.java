@@ -95,7 +95,10 @@ public final class PermitDecisions {
 			.map(row -> RuleHit.of(UNPARSEABLE, "beslutet %d har datumet %s, efter migreringsdagen".formatted(row.beslutsId(), SourceValues.format(row.beslutad().toLocalDate()))));
 	}
 
-	private static String missingIn(final Source source) {
+	/**
+	 * @return the text a decision has as its decision maker when the source names none (decision 75)
+	 */
+	public static String missingIn(final Source source) {
 		return "Uppgift saknas i " + source.getDisplayName();
 	}
 

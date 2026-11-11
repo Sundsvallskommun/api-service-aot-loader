@@ -14,15 +14,20 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.integration.supportmanagement.SupportManagementIntegration;
+import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.service.model.FilePurpose;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
+import se.sundsvall.aotloader.support.FileNames;
 import se.sundsvall.aotloader.support.MigrationException;
+import tools.jackson.databind.JsonNode;
 
 import static java.util.stream.Collectors.toSet;
+import static se.sundsvall.aotloader.Constants.ASSET_CATEGORY_CERTIFICATE;
 import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
+import static se.sundsvall.aotloader.source.AssetContents.FIELD_CASE_REGISTRATION_NUMBER;
 
 /**
  * Uploads the files of an item to its draft errand, or in a dry run checks that they can be found (step 3 of section
@@ -43,9 +48,11 @@ class FileUploader {
 	}
 
 	/**
-	 * Uploads the files to the draft, each with its purpose and the date it came in (decision 40). A file already on the
-	 * errand, with the same name and content, is not uploaded again, but gets the purpose and date it lacks. A file that
-	 * cannot be uploaded for good is listed in the report.
+	 * Uploads the files to the draft, each with its purpose and the date it came in (decision 40), and under its name in
+	 * the source but for the certificate of the permit, which is named for the diary number it shows, as pw-alkt names its
+	 * certificates (decision 110). A file already on the errand, with the same name and content, is not uploaded again, but
+	 * gets the purpose and date it lacks. A file that cannot be uploaded for good is listed in the report by its name in
+	 * the source.
 	 *
 	 * @return                    the attachments of the files on the errand, uploaded now or found there by name and
 	 *                            content, and which of them are material of the investigation (decision 60)
@@ -61,6 +68,7 @@ class FileUploader {
 		final var problems = new FileProblems();
 		final var attachmentIds = new LinkedHashMap<FileReference, String>();
 		final var material = new LinkedHashSet<String>();
+		final var certificates = certificatesOf(candidate);
 		for (final var reference : candidate.files().references()) {
 			final var lookup = ItemFiles.find(fileArea, reference, candidate);
 			final var problem = FileProblem.of(reference, lookup);
@@ -69,7 +77,8 @@ class FileUploader {
 				continue;
 			}
 			final var details = candidate.files().detailsOf(reference);
-			uploadFile(municipalityId, errandId, lookup, wanted(details, context, municipalityId), attached, problems).ifPresent(id -> {
+			final var name = certificates.contains(reference) ? FileNames.caseFileName(ASSET_CATEGORY_CERTIFICATE, caseNumberOf(candidate), lookup.name()) : lookup.name();
+			uploadFile(municipalityId, errandId, lookup, name, wanted(details, context, municipalityId), attached, problems).ifPresent(id -> {
 				attachmentIds.put(reference, id);
 				if (isMaterial(candidate, reference)) {
 					material.add(id);
@@ -149,22 +158,50 @@ class FileUploader {
 	}
 
 	/**
-	 * @return the id of the attachment of the file, uploaded now or already on the errand; empty when it was not uploaded
+	 * @return the files of the item that are the certificate of its permit, the files its post has in the category of
+	 *         the certificate
 	 */
-	private Optional<String> uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final Wanted wanted, final List<AttachedFile> attached,
-		final FileProblems problems) {
+	private static Set<FileReference> certificatesOf(final Candidate candidate) {
+		return candidate.files().onPost().stream()
+			.filter(file -> ASSET_CATEGORY_CERTIFICATE.equals(file.category()))
+			.map(AssetFile::reference)
+			.collect(toSet());
+	}
+
+	/**
+	 * @return the diary number of the permit, as its post has it and its certificate shows it, null when it has none
+	 */
+	private static String caseNumberOf(final Candidate candidate) {
+		return Optional.ofNullable(candidate.asset())
+			.map(asset -> asset.content().path(FIELD_CASE_REGISTRATION_NUMBER))
+			.filter(JsonNode::isString)
+			.map(JsonNode::asString)
+			.orElse(null);
+	}
+
+	/**
+	 * Uploads the file under the name it is to have on the errand. A file already on the errand with that name and the same
+	 * content is not uploaded again, nor is one an earlier run uploaded under the name of the file in the source.
+	 *
+	 * @param  name the name the file is to have on the errand
+	 * @return      the id of the attachment of the file, uploaded now or already on the errand; empty when it was not
+	 *              uploaded
+	 */
+	private Optional<String> uploadFile(final String municipalityId, final String errandId, final FileArea.Lookup lookup, final String name, final Wanted wanted,
+		final List<AttachedFile> attached, final FileProblems problems) {
 		final var read = itemFiles.read(lookup, problems);
 		if (read.isEmpty()) {
 			return Optional.empty();
 		}
 		final var content = read.get();
-		final var file = new AttachedFile(lookup.name(), sha256(content), content.length);
-		final var existing = attached.stream().filter(file::isSameAs).findFirst();
+		final var file = new AttachedFile(name, sha256(content), content.length);
+		final var asInTheSource = new AttachedFile(lookup.name(), file.hash(), file.size());
+		final var existing = attached.stream().filter(found -> file.isSameAs(found) || asInTheSource.isSameAs(found)).findFirst();
 		if (existing.isPresent()) {
 			completeAttachment(municipalityId, errandId, existing.get(), wanted);
 			return Optional.ofNullable(existing.get().id());
 		}
-		final var id = supportManagement.createAttachment(municipalityId, errandId, lookup.name(), content, wanted.received());
+		final var id = supportManagement.createAttachment(municipalityId, errandId, name, content, wanted.received());
 		if (id.isEmpty()) {
 			problems.add(FileProblem.REJECTED, lookup.name());
 			return Optional.empty();

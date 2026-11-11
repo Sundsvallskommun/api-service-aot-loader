@@ -33,7 +33,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.jsonParameters[0].schemaId",
-					"equalTo": "2281_aot_tobacco_party_asset_0.1"
+					"equalTo": "2281_aot_tobacco_party_asset_1.0"
 				}
 			},
 			{

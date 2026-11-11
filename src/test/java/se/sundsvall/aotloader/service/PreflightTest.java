@@ -245,8 +245,8 @@ class PreflightTest {
 			withoutAccount.municipalities(), null, withoutAccount.jsonParameters());
 
 		assertThat(new Preflight(properties, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).containsExactly(
-			"AD-kontot som tillståndens beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70)",
-			"Rubrik för beslutet saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 70)",
+			"AD-kontot som tillståndens och anmälningarnas beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70 och 108)",
+			"Rubrik för beslutet saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 70 och 108)",
 			"Beslutsutfallet APPROVAL_WITH_CONDITIONS finns inte i namnrymden, så tillståndens beslut kan inte få det (beslut 70)");
 
 		// The value of the header is the account alone
@@ -254,7 +254,7 @@ class PreflightTest {
 		when(supportManagement.getDecisionOutcomes(MUNICIPALITY_ID)).thenThrow(Problem.valueOf(BAD_GATEWAY, "Fel"));
 		final var problems = new Preflight(withHeader, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems();
 		assertThat(problems).containsExactly(
-			"AD-kontot som tillståndens beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70)",
+			"AD-kontot som tillståndens och anmälningarnas beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70 och 108)",
 			"Beslutsutfallen i SupportManagement gick inte att hämta: 502 BAD_GATEWAY Fel");
 	}
 
@@ -364,8 +364,8 @@ class PreflightTest {
 		// environment registers and Draken writes (decisions 87, 92, 97, 98 and 102)
 		assertThat(result.problems()).filteredOn(problem -> problem.contains("JSON-parametern")).isEmpty();
 		assertThat(Stream.of(JsonParameterType.values()).map(properties::jsonParameter)).containsExactly(
-			new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1"),
-			new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1"),
+			new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_1.0"),
+			new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_1.0"),
 			new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2"),
 			new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2"),
 			new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0"),
@@ -377,6 +377,15 @@ class PreflightTest {
 			new JsonParameterSettings("aot_alcohol_folkol_folkol_serving_notification", "2281_aot_alcohol_folkol_folkol_serving_notification_1.1"),
 			new JsonParameterSettings("aot_tobacco_ecigarette_sales_notification", "2281_aot_tobacco_ecigarette_sales_notification_0.10"),
 			new JsonParameterSettings("aot_tobacco_tobacco_free_nicotine_sales_notification", "2281_aot_tobacco_tobacco_free_nicotine_sales_notification_0.8"));
+		// The notifications get the approval pw-alkt gives one, with its type and heading, which says nothing of the
+		// notification, so it has no JSON parameter (decision 108)
+		assertThat(Stream.of(ErrandType.FOLKOL_SALES_NOTIFICATION, ErrandType.FOLKOL_SERVING_NOTIFICATION, ErrandType.ECIGARETTE_NOTIFICATION,
+			ErrandType.TOBACCO_FREE_NICOTINE_NOTIFICATION).map(properties::errandType))
+			.extracting(ErrandTypeSettings::decisionType, ErrandTypeSettings::decisionTitle)
+			.containsExactly(tuple("PERMIT", "Anmälan om försäljning av folköl"), tuple("PERMIT", "Anmälan om servering av folköl"),
+				tuple("PERMIT", "Anmälan om försäljning av elektroniska cigaretter och påfyllningsbehållare"), tuple("PERMIT", "Anmälan om försäljning av tobaksfria nikotinprodukter"));
+		assertThat(Preflight.jsonParametersOf(ErrandType.ECIGARETTE_NOTIFICATION, properties.errandType(ErrandType.ECIGARETTE_NOTIFICATION)))
+			.containsExactly(JsonParameterType.ECIGARETTE_NOTIFICATION_FORM, JsonParameterType.TOBACCO_PARTY_ASSET);
 		// Each errand type gets the form whose type label its settings give, the same label as the form has
 		final var forms = new EnumMap<ErrandType, List<JsonParameterType>>(ErrandType.class);
 		Stream.of(ErrandType.values()).forEach(type -> forms.put(type, ErrandFormMapper.formsOf(properties.errandType(type).allLabels())));
@@ -419,8 +428,9 @@ class PreflightTest {
 		final var expected = switch (type) {
 			case SERVING_PERMIT -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET, JsonParameterType.ALCOHOL_DECISION, JsonParameterType.PREMISES_SECTION);
 			case TOBACCO_PERMIT -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET, JsonParameterType.TOBACCO_DECISION);
-			case FOLKOL_SALES_NOTIFICATION, FOLKOL_SERVING_NOTIFICATION -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET, JsonParameterType.ALCOHOL_DECISION);
-			case ECIGARETTE_NOTIFICATION, TOBACCO_FREE_NICOTINE_NOTIFICATION -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET, JsonParameterType.TOBACCO_DECISION);
+			// The approval of a notification says nothing of it, as pw-alkt writes none (decision 108)
+			case FOLKOL_SALES_NOTIFICATION, FOLKOL_SERVING_NOTIFICATION -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET);
+			case ECIGARETTE_NOTIFICATION, TOBACCO_FREE_NICOTINE_NOTIFICATION -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET);
 			case ALCOHOL_INSPECTION, TOBACCO_INSPECTION -> List.of(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
 			case ALCOHOL_INSPECTION_VISIT -> List.of(JsonParameterType.SERVING_PERMIT_PROTOCOL);
 			case TOBACCO_INSPECTION_VISIT, ALCOHOL_DOCUMENTATION, TOBACCO_DOCUMENTATION -> List.<JsonParameterType>of();

@@ -81,7 +81,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.jsonParameters[0].schemaId",
-					"equalTo": "2281_aot_alcohol_party_asset_0.1"
+					"equalTo": "2281_aot_alcohol_party_asset_1.0"
 				}
 			},
 			{

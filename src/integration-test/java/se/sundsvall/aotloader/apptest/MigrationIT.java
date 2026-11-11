@@ -201,9 +201,10 @@ class MigrationIT extends AbstractAppTest {
 			.containsExactly(Instant.parse("2018-12-31T23:00:00Z"), Instant.parse("2019-04-30T22:00:00Z"));
 		final var uploads = wiremock.findAll(postRequestedFor(urlPathEqualTo("/support-management/2281/AOT/errands/" + PERMIT_ERRAND_ID + "/attachments")));
 		assertThat(uploads).extracting(request -> request.getPart("errandAttachment").getFileName())
-			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26)
-			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "55555555.rtf");
-		assertThat(uploads).filteredOn(request -> "55555555.rtf".equals(request.getPart("errandAttachment").getFileName()))
+			// skylt.jpg is not uploaded, since another place also refers to that name (decision 26), and the certificate
+			// 55555555.rtf is named for the diary number it shows, as pw-alkt names its certificates (decision 110)
+			.containsExactlyInAnyOrder("11111111.rtf", "22222222.rtf", "ansokan.pdf", "Tillståndsbevis IAN-2019-1.rtf");
+		assertThat(uploads).filteredOn(request -> "Tillståndsbevis IAN-2019-1.rtf".equals(request.getPart("errandAttachment").getFileName()))
 			.singleElement()
 			.extracting(request -> request.queryParameter("received").firstValue())
 			.as("The file came in at the time of its event, in UTC (decision 40)")

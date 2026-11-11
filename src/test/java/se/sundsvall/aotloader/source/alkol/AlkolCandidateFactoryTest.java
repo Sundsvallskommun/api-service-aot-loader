@@ -618,6 +618,17 @@ class AlkolCandidateFactoryTest {
 		assertThat(latestServing.asset().description()).isEqualTo("Anmälan om servering av folköl på Butik 1");
 		assertThat(latestServing.files().references()).containsExactly(new FileReference("33333333.rtf", DOCUMENTS));
 		assertThat(latestServing.persons()).isEmpty();
+		// Approved on the day of the notification, as pw-alkt approves one, by nobody AlkOL names (decision 108)
+		assertThat(latestServing.decision()).satisfies(decision -> {
+			assertThat(decision.decidedBy()).isEqualTo("Uppgift saknas i AlkOL");
+			assertThat(decision.maker()).isNull();
+			assertThat(decision.decidedAt()).isEqualTo(LocalDate.of(2010, 1, 1).atStartOfDay());
+			assertThat(decision.validFrom()).isEqualTo(LocalDate.of(2010, 1, 1));
+			assertThat(decision.description()).isEqualTo("Anmälan om servering av folköl – Butik 1");
+			assertThat(decision.outcome()).isEqualTo("APPROVAL");
+			assertThat(decision.documents()).isEmpty();
+			assertThat(decision.hasContent()).isFalse();
+		});
 
 		final var eventOnly = candidates.get(1);
 		assertThat(eventOnly.type()).isEqualTo(ErrandType.FOLKOL_SALES_NOTIFICATION);
@@ -641,6 +652,9 @@ class AlkolCandidateFactoryTest {
 		assertThat(withoutAnyDate.type()).isEqualTo(ErrandType.FOLKOL_SALES_NOTIFICATION);
 		assertThat(withoutAnyDate.ruleHits()).extracting(RuleHit::rule).containsExactly(NOTIFICATION_ONLY_FLAG, NOTIFICATION_DATE_MISSING);
 		assertThat(withoutAnyDate.asset().issued()).isNull();
+		assertThat(withoutAnyDate.decision()).isNull();
+		// An estimated day is the day of the approval too
+		assertThat(flagOnlyServingPlace.decision().decidedAt()).isEqualTo(LocalDate.of(2009, 3, 4).atStartOfDay());
 	}
 
 	@Test

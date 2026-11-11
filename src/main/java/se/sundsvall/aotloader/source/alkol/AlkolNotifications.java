@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.service.model.AssetSchema;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.DecisionData;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.service.model.FileReference.FileFolder;
@@ -24,6 +25,7 @@ import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FormerHolders;
 import se.sundsvall.aotloader.source.Journal;
 import se.sundsvall.aotloader.source.PartyRows;
+import se.sundsvall.aotloader.source.PermitDecisions;
 import se.sundsvall.aotloader.source.PermitFiles;
 import se.sundsvall.aotloader.source.SourceRules;
 import se.sundsvall.aotloader.source.alkol.AlkolSnapshot.DecisionRow;
@@ -108,21 +110,35 @@ final class AlkolNotifications {
 			asset.salesPeriod(notified.date(), null);
 		}
 		asset.migration(ALKOL, notified.estimated());
+		final var title = Texts.title(subject, name);
 
 		return Candidate.builder(new ItemKey(ALKOL, ANMALAN, notificationId(place, product.code())), type)
 			.placeName(place.namn())
 			.ruleHits(hits)
 			.holder(holder)
 			.place(premises)
-			.title(Texts.title(subject, name))
+			.title(title)
 			.description(description(subject + " för " + name + ".", notified, diaryNumber,
 				registrations.errands().stream().map(ErrandRow::noteringar).filter(Objects::nonNull).distinct().toList(), Journal.lines(log(registrations, ownEvents))))
 			.labelPaths(index.properties().errandType(type).labels())
 			.externalTag(TAG_NOTIFICATION, notificationId(place, product.code()))
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
 			.asset(asset.asset(null, subject + " på " + name, notified.date(), null, List.of()))
+			.decision(decisionOf(notified, title))
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
+	}
+
+	/**
+	 * @return the decision the errand of the notification gets, as pw-alkt approves a notification (decision 108): an
+	 *         approval from the day of the notification, also an estimated one, described by the title of the errand and
+	 *         made by nobody the source names; null for a notification without a day
+	 */
+	private static DecisionData decisionOf(final NotifiedDate notified, final String title) {
+		if (notified.date() == null) {
+			return null;
+		}
+		return new DecisionData(PermitDecisions.missingIn(ALKOL), null, notified.date().atStartOfDay(), title, null, notified.date(), null, List.of(), List.of());
 	}
 
 	/**

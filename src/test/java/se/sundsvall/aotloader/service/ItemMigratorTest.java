@@ -54,6 +54,7 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.JsonContent;
@@ -1514,6 +1515,56 @@ class ItemMigratorTest {
 		order.verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
 		// The application is no document of the decision
 		verify(supportManagement, never()).linkDecisionAttachment(MUNICIPALITY_ID, ERRAND_ID, "decision-1", "attachment-id");
+	}
+
+	@Test
+	void aNotificationGetsTheApprovalPwAlktGivesOneBeforeItsErrandIsActivated() {
+		withDecisions();
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKOL-ANMALAN-1-FOLKOL")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), decisionCaptor.capture())).thenReturn("decision-1");
+
+		final var result = migrator.process(TestData.notificationWithDecision("1"), contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Beslut: Bifall, fattat 2015-01-02, 0 villkor, 0 dokument");
+		assertThat(savedStatuses).containsExactly(ItemStatus.TILLSTANDSHAVARE_KLAR, ItemStatus.ARENDE_SKAPAT, ItemStatus.BILAGOR_KLARA, ItemStatus.TILLSTAND_SKAPAT,
+			ItemStatus.BESLUT_KLART, ItemStatus.KLAR);
+		// As pw-alkt approves a notification, but as a manual decision, by nobody the source names (decision 108)
+		final var draft = decisionCaptor.getValue();
+		assertThat(draft.getType()).isEqualTo("PERMIT");
+		assertThat(draft.getMethod()).isEqualTo("MANUAL");
+		assertThat(draft.getOutcome()).isEqualTo("APPROVAL");
+		assertThat(draft.getTitle()).isEqualTo("Anmälan om försäljning av folköl");
+		assertThat(draft.getDescription()).isEqualTo("Anmälan om försäljning av folköl – Butik 1");
+		assertThat(draft.getDecidedBy()).isEqualTo("Uppgift saknas i AlkOL");
+		assertThat(draft.getValidFrom()).isEqualTo(LocalDate.of(2015, 1, 2));
+		assertThat(draft.getValidTo()).isNull();
+		assertThat(draft.getInvestigationId()).isNull();
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
+		order.verify(supportManagement).updateDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1",
+			new Decision().status("COMPLETED").completedAt(OffsetDateTime.parse("2015-01-02T00:00+01:00")));
+		order.verify(supportManagement).updateErrand(MUNICIPALITY_ID, ERRAND_ID, new Errand().lifecycle(LifecycleEnum.ACTIVE));
+		// The approval says nothing of the notification and links no files
+		verify(supportManagement, never()).writeDecisionJsonParameter(anyString(), anyString(), anyString(), any());
+		verify(supportManagement, never()).linkDecisionAttachment(anyString(), anyString(), anyString(), anyString());
+		verify(supportManagement, never()).createDecisionTerm(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void aNotificationWithoutADayGetsNoDecision() {
+		withDecisions();
+		final var withoutDay = Candidate.builder(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
+			.holder(new Holder(TestData.HOLDER_ID, "Bolaget AB", null, null, null, null, null, null))
+			.build();
+
+		assertThat(migrator.process(withoutDay, context(true)).detail()).contains("Inget beslut: anmälan saknar datum");
 	}
 
 	@Test

@@ -11,7 +11,7 @@
 	"jsonParameters": [
 		{
 			"key": "aot_alcohol_party_asset",
-			"schemaId": "2281_aot_alcohol_party_asset_0.1",
+			"schemaId": "2281_aot_alcohol_party_asset_1.0",
 			"value": {
 				"errandId": "11111111-aaaa-bbbb-cccc-000000000005",
 				"caseRegistrationNumber": "IAN-2020-2",

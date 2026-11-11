@@ -144,7 +144,8 @@
 		"sourceId": "1-FOLKOL",
 		"placeName": "Kiosken",
 		"outcome": "SKULLE_MIGRERAS",
-		"rules": ""
+		"rules": "",
+		"detail": "Beslut: Bifall, fattat 2015-03-01, 0 villkor, 0 dokument"
 	},
 	{
 		"source": "ALKOL",
@@ -153,7 +154,7 @@
 		"placeName": "Timråkiosken",
 		"outcome": "SKULLE_MIGRERAS",
 		"rules": "",
-		"detail": "Stället hör till kommun 2262 (område Timrå); Till anmälan i PartyAssets: utan kategori 1"
+		"detail": "Stället hör till kommun 2262 (område Timrå); Till anmälan i PartyAssets: utan kategori 1; Beslut: Bifall, fattat 2020-03-01, 0 villkor, 0 dokument"
 	},
 	{
 		"source": "ALKOL",

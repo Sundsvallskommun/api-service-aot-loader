@@ -479,14 +479,14 @@ class TargetWriter {
 	}
 
 	/**
-	 * Gives the errand of a permit the decision its permit was granted by (decision 70), the way Draken writes a decision:
-	 * a draft, then its terms, the documents it links and what it says of the permit as its JSON parameter (decision 92),
-	 * and last its completion. A decision an earlier run wrote is kept when it is completed and is what the source gives
-	 * now, its JSON parameter included. Otherwise it is removed and the decision written again, since SupportManagement
-	 * leaves a field that a change does not carry as it is, so a change cannot empty one. Only the migration's own
-	 * decisions are removed: those its AD account wrote.
+	 * Gives the errand of a permit the decision its permit was granted by (decision 70), and that of a notification its
+	 * approval (decision 108), the way Draken writes a decision: a draft, then its terms, the documents it links and what
+	 * it says of the permit as its JSON parameter (decision 92), and last its completion. A decision an earlier run wrote
+	 * is kept when it is completed and is what the source gives now, its JSON parameter included. Otherwise it is removed
+	 * and the decision written again, since SupportManagement leaves a field that a change does not carry as it is, so a
+	 * change cannot empty one. Only the migration's own decisions are removed: those its AD account wrote.
 	 *
-	 * @param  candidate          the permit, with its decision
+	 * @param  candidate          the permit or notification, with its decision
 	 * @param  legalBasis         the legal basis read from the documents of the permit, null when none was found
 	 * @param  documentIds        the attachments of the errand that are the documents of the decision
 	 * @param  outcomeText        the display name of the outcome in the namespace, null when unknown

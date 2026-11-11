@@ -105,13 +105,13 @@ aot-loader:
   # must be registered for the municipality of the run. Draken and pw-alkt store each under the name of its schema, and
   # write it by the version here, so a new version is taken into use by changing the schema id.
   json-parameters:
-    # The post in PartyAssets of a permit or a notification, at version 0.1 in the test environment, as pw-alkt
+    # The post in PartyAssets of a permit or a notification
     alcohol-party-asset:
       key: aot_alcohol_party_asset
-      schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_0.1}
+      schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_1.0}
     tobacco-party-asset:
       key: aot_tobacco_party_asset
-      schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_0.1}
+      schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_1.0}
     # What the decision of a permit says of the permit
     alcohol-decision:
       key: aot_alcohol_decision
@@ -223,6 +223,9 @@ aot-loader:
         - CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION
       asset-type: LowAlcoholBeerSalesNotification
       asset-title: Anmälan om försäljning av folköl
+      # The approval pw-alkt gives a notification it takes in, with its type and heading (decision 108)
+      decision-type: PERMIT
+      decision-title: Anmälan om försäljning av folköl
     folkol-serving-notification:
       category: ALCOHOL
       type: FOLKOL
@@ -230,6 +233,8 @@ aot-loader:
         - CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION
       asset-type: LowAlcoholBeerServingNotification
       asset-title: Anmälan om servering av folköl
+      decision-type: PERMIT
+      decision-title: Anmälan om servering av folköl
     ecigarette-notification:
       category: TOBACCO
       type: ECIGARETTE_SALES_NOTIFICATION
@@ -237,6 +242,8 @@ aot-loader:
         - CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION
       asset-type: ECigaretteSalesNotification
       asset-title: Anmälan om försäljning av elektroniska cigaretter och påfyllningsbehållare
+      decision-type: PERMIT
+      decision-title: Anmälan om försäljning av elektroniska cigaretter och påfyllningsbehållare
     tobacco-free-nicotine-notification:
       category: TOBACCO
       type: TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
@@ -244,6 +251,8 @@ aot-loader:
         - CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION
       asset-type: TobaccoFreeNicotineProductSalesNotification
       asset-title: Anmälan om försäljning av tobaksfria nikotinprodukter
+      decision-type: PERMIT
+      decision-title: Anmälan om försäljning av tobaksfria nikotinprodukter
     # Inspection errands get no post in PartyAssets (section 7.7)
     alcohol-inspection:
       category: INSPECTION

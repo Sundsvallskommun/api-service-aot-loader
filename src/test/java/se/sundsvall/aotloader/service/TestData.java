@@ -41,6 +41,7 @@ import se.sundsvall.aotloader.support.JsonFields;
 import tools.jackson.databind.node.ObjectNode;
 
 import static java.util.function.Function.identity;
+import static se.sundsvall.aotloader.service.model.Kind.ANMALAN;
 import static se.sundsvall.aotloader.service.model.Kind.DOKUMENTATION;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
@@ -60,8 +61,8 @@ public final class TestData {
 	public static final String DOCUMENTATION = "CATEGORYROOT/DOCUMENTATION/DOCUMENTATION";
 	/** The keys and schemas of the JSON parameters, as the test environment has them. */
 	public static final Map<String, JsonParameterSettings> JSON_PARAMETERS = Map.ofEntries(
-		Map.entry("alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_0.1")),
-		Map.entry("tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_0.1")),
+		Map.entry("alcohol-party-asset", new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_1.0")),
+		Map.entry("tobacco-party-asset", new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_1.0")),
 		Map.entry("alcohol-decision", new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2")),
 		Map.entry("tobacco-decision", new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2")),
 		Map.entry("premises-section", new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0")),
@@ -120,13 +121,17 @@ public final class TestData {
 
 	/**
 	 * @return the settings of {@link #properties(String, String)}, in which the serving permits get the decision they were
-	 *         granted by, written with the AD account, null for none (decision 70)
+	 *         granted by and the notifications of low-alcohol beer sales their approval, written with the AD account, null
+	 *         for none (decisions 70 and 108)
 	 */
 	public static AotLoaderProperties propertiesWithDecisions(final String documents, final String attachments, final String decisionAdAccount) {
 		final var types = errandTypes();
 		final var settings = types.get(ErrandType.SERVING_PERMIT);
 		types.put(ErrandType.SERVING_PERMIT, new ErrandTypeSettings(settings.category(), settings.type(), settings.measureType(), settings.assetType(), settings.assetTitle(), settings.labels(),
 			settings.subtypeLabels(), settings.sourceErrandTypes(), settings.onlyPlacesWithPermit(), "SERVERINGSTILLSTAND", "Beslut om serveringstillstånd för alkoholdrycker"));
+		final var folkol = types.get(ErrandType.FOLKOL_SALES_NOTIFICATION);
+		types.put(ErrandType.FOLKOL_SALES_NOTIFICATION, new ErrandTypeSettings(folkol.category(), folkol.type(), folkol.measureType(), folkol.assetType(), folkol.assetTitle(), folkol.labels(),
+			folkol.subtypeLabels(), folkol.sourceErrandTypes(), folkol.onlyPlacesWithPermit(), "PERMIT", "Anmälan om försäljning av folköl"));
 		return properties(types, documents, attachments, decisionAdAccount);
 	}
 
@@ -274,6 +279,25 @@ public final class TestData {
 			.toNode();
 	}
 
+	/**
+	 * @return a notification of low-alcohol beer sales without files, approved on the day of the notification as pw-alkt
+	 *         approves one (decision 108)
+	 */
+	public static Candidate notificationWithDecision(final String fsId) {
+		final var notified = LocalDate.of(2015, 1, 2);
+		final var title = "Anmälan om försäljning av folköl – Butik " + fsId;
+		return Candidate.builder(new ItemKey(Source.ALKOL, ANMALAN, fsId + "-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
+			.placeName("Butik " + fsId)
+			.holder(new Holder(HOLDER_ID, "Bolaget AB", "Gatan 1", "85230", "Sundsvall", null, null, null))
+			.place(new Place("Butik " + fsId, "Storgatan 1", "85230", "Sundsvall", "060-2", null, "City", null))
+			.title(title)
+			.description("Beskrivning")
+			.labelPaths(LABELS.get(ErrandType.FOLKOL_SALES_NOTIFICATION))
+			.asset(new AssetData(null, "Anmälan om försäljning av folköl på Butik " + fsId, notified, null, AssetSchema.ALCOHOL, null, List.of()))
+			.decision(new DecisionData("Uppgift saknas i AlkOL", null, notified.atStartOfDay(), title, null, notified, null, List.of(), List.of()))
+			.build();
+	}
+
 	public static Candidate inspection(final String arendeId, final ItemKey permitKey, final LegalId inspectionHolder) {
 		return inspection(arendeId, permitKey, HOLDER_ID, inspectionHolder);
 	}
@@ -335,7 +359,8 @@ public final class TestData {
 			"TAGROOT/ALCOHOL_INSPECTION", "label-alcohol-inspection",
 			INTERNAL_INSPECTION, "label-internal-inspection",
 			EXTERNAL_INSPECTION, "label-external-inspection",
-			DOCUMENTATION, "label-documentation");
+			DOCUMENTATION, "label-documentation",
+			"CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION", "label-folkol-sales");
 	}
 
 	/**

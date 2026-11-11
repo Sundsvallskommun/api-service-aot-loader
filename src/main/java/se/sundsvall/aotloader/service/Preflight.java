@@ -158,7 +158,8 @@ public class Preflight {
 		final var types = new ArrayList<>(ErrandFormMapper.formsOf(settings.allLabels()));
 		if (type.isWithAsset()) {
 			types.add(type.getAssetSchema().asset());
-			if (settings.withDecision()) {
+			// The approval of a notification says nothing of it, as pw-alkt writes none (decision 108)
+			if (settings.withDecision() && type.getKind() == TILLSTAND) {
 				types.add(type.getAssetSchema().decision());
 			}
 		}
@@ -352,8 +353,9 @@ public class Preflight {
 	}
 
 	/**
-	 * The permits of the run get the decision they were granted by (decision 70), which needs the AD account the decisions
-	 * are written with, a heading for each type, and the outcomes they get in the namespace.
+	 * The permits of the run get the decision they were granted by (decision 70) and the notifications their approval
+	 * (decision 108), which needs the AD account the decisions are written with, a heading for each type, and the outcomes
+	 * they get in the namespace.
 	 *
 	 * @return the display names of the decision outcomes of the namespace by name, empty when the run has no permits that
 	 *         get decisions, or when they could not be read
@@ -365,13 +367,13 @@ public class Preflight {
 		}
 		final var account = Texts.trimToNull(properties.decisionAdAccount());
 		if (account == null) {
-			problems.add("AD-kontot som tillståndens beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70)");
+			problems.add("AD-kontot som tillståndens och anmälningarnas beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70 och 108)");
 		} else if (!AD_ACCOUNT.matcher(account).matches()) {
-			problems.add("AD-kontot som tillståndens beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70)");
+			problems.add("AD-kontot som tillståndens och anmälningarnas beslut skrivs med ska bara vara kontots namn, utan blanksteg och semikolon (aot-loader.decision-ad-account, beslut 70 och 108)");
 		}
 		decisionTypes.stream()
 			.filter(type -> Texts.isBlank(properties.errandType(type).decisionTitle()))
-			.forEach(type -> problems.add("Rubrik för beslutet saknas för %s (aot-loader.errand-types, beslut 70)".formatted(type)));
+			.forEach(type -> problems.add("Rubrik för beslutet saknas för %s (aot-loader.errand-types, beslut 70 och 108)".formatted(type)));
 		final Map<String, String> outcomes;
 		try {
 			outcomes = supportManagement.getDecisionOutcomes(municipalityId).stream()

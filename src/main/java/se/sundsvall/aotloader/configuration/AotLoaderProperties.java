@@ -244,7 +244,7 @@ public record AotLoaderProperties(
 	 * A JSON parameter the migration writes, which the target system validates by its schema (decisions 87 and 92).
 	 *
 	 * @param key      the key the parameter is stored under, the one Draken reads it by
-	 * @param schemaId the id of the schema in the json-schema service, e.g. 2281_aot_alcohol_party_asset_0.1, which must
+	 * @param schemaId the id of the schema in the json-schema service, e.g. 2281_aot_alcohol_party_asset_1.0, which must
 	 *                 be registered for the municipality of the run, since the target system validates the parameter by it
 	 */
 	public record JsonParameterSettings(String key, String schemaId) {

@@ -12,8 +12,8 @@ import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CO
 
 /**
  * The decision a permit was granted by, which the errand of the permit gets as a completed manual decision (decision
- * 70). Holds names and the JSON of the permit, which names the holder, in memory only, and {@link #toString()} shows
- * none of them.
+ * 70), or the approval of a notification, which pw-alkt gives a notification it takes in (decision 108). Holds names
+ * and the JSON of the permit, which names the holder, in memory only, and {@link #toString()} shows none of them.
  *
  * @param decidedBy     who made the decision: the name of the decision maker in the source, or else the code the source
  *                      names them with, or a text that says the source lacks them

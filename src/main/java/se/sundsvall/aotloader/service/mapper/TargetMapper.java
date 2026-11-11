@@ -258,12 +258,13 @@ public class TargetMapper {
 
 	/**
 	 * Maps the decision a permit was granted by to the decision of its errand, as Draken writes a manual decision on a
-	 * permit (decision 70): of the type and with the heading of the errand type, an approval, with conditions when it has
-	 * terms, and made by the decision maker of the source. What it says of the permit, the terms and the documents are not
-	 * part of it, since SupportManagement takes them through their own resources; it has no parameters, as Draken writes
-	 * none (decision 92).
+	 * permit (decision 70), and the approval of a notification, as pw-alkt approves one but as a manual decision (decision
+	 * 108): of the type and with the heading of the errand type, an approval, with conditions when it has terms, and made
+	 * by the decision maker of the source. What it says of the permit, the terms and the documents are not part of it,
+	 * since SupportManagement takes them through their own resources; it has no parameters, as Draken writes none
+	 * (decision 92).
 	 *
-	 * @param  candidate       the permit, with its decision
+	 * @param  candidate       the permit or notification, with its decision
 	 * @param  legalBasis      the legal basis read from the documents of the permit, null when none was found
 	 * @param  investigationId the investigation of the errand that the decision rests on, null when it has none
 	 * @return                 the decision, as a draft

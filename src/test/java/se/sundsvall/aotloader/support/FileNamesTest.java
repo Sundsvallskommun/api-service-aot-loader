@@ -17,6 +17,16 @@ class FileNamesTest {
 	}
 
 	@Test
+	void aFileOnTheErrandIsNamedByItsTitleAndTheCaseNumberItShowsWithTheExtensionOfTheSource() {
+		assertThat(FileNames.caseFileName("Tillståndsbevis", "MBN/2019:123", "Z0006821.rtf")).isEqualTo("Tillståndsbevis MBN-2019-123.rtf");
+		assertThat(FileNames.caseFileName("Tillståndsbevis", " IAN  2019\\\"1\" ", "mapp/bevis.PDF")).isEqualTo("Tillståndsbevis IAN 2019-1.PDF");
+		assertThat(FileNames.caseFileName("Tillståndsbevis", "IAN-2019-1\n", "bevis")).isEqualTo("Tillståndsbevis IAN-2019-1");
+		assertThat(FileNames.caseFileName("Tillståndsbevis", " ", ".rtf")).isEqualTo("Tillståndsbevis");
+		assertThat(FileNames.caseFileName("Tillståndsbevis", null, "Z0006821.rtf")).isEqualTo("Tillståndsbevis.rtf");
+		assertThat(FileNames.caseFileName("Tillståndsbevis", "a*b?c<d>e|f", null)).isEqualTo("Tillståndsbevis a-b-c-d-e-f");
+	}
+
+	@Test
 	void keyIsTheComposedNameInLowerCase() {
 		assertThat(FileNames.key("C:\\mapp\\Tillsta\u030Andsbevis.PDF")).isEqualTo("tillst\u00E5ndsbevis.pdf");
 		assertThat(FileNames.key("Tillst\u00E5ndsbevis.pdf")).isEqualTo(FileNames.key("TILLSTA\u030ANDSBEVIS.pdf"));

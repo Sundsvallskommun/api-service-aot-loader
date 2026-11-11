@@ -105,6 +105,32 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void theCertificateOfThePermitIsNamedForTheDiaryNumberItShows() {
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), anyString(), any(), any())).thenReturn(Optional.of(ATTACHMENT_ID));
+		final var notes = new ReportNotes();
+
+		uploader.upload(TestData.permitWithCertificate("1"), context(), MUNICIPALITY_ID, ERRAND_ID, notes);
+
+		// As pw-alkt names the certificate it puts on an errand, while the other files keep their names (decision 110)
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "Tillståndsbevis IAN-2019-1.rtf", "dokument".getBytes(StandardCharsets.UTF_8), null);
+		verify(supportManagement).createAttachment(MUNICIPALITY_ID, ERRAND_ID, "ansokan.pdf", "bilaga".getBytes(StandardCharsets.UTF_8), null);
+		assertThat(notes.result(Outcome.MIGRERAD, null).detail()).isNull();
+	}
+
+	@Test
+	void aCertificateAnEarlierRunUploadedUnderItsNameInTheSourceIsNotUploadedAgain() {
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new ErrandAttachment().id("a-1").fileName("beslut.rtf").hash(FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8))),
+			new ErrandAttachment().id("a-2").fileName("ansokan.pdf").hash(FileUploader.sha256("bilaga".getBytes(StandardCharsets.UTF_8)))));
+
+		final var uploaded = uploader.upload(TestData.permitWithCertificate("1"), context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+
+		assertThat(uploaded.attachmentIds()).containsOnly(entry(new FileReference("beslut.rtf", DOCUMENTS), "a-1"), entry(new FileReference("ansokan.pdf", ATTACHMENTS), "a-2"));
+		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any(), any());
+	}
+
+	@Test
 	void theUploadTellsTheAttachmentsOfTheMaterialByNameAndContent() throws IOException {
 		Files.writeString(documents.resolve("rapport.pdf"), "x");
 		Files.writeString(attachments.resolve("rapport.pdf"), "yy");
