@@ -127,10 +127,26 @@ final class AlktIndex {
 	}
 
 	/**
+	 * @return the errands of the place, of any type and holder
+	 */
+	List<ErrandRow> errandsOfPlace(final Integer objektId) {
+		return errandsByPlace.getOrDefault(objektId, List.of());
+	}
+
+	/**
+	 * @return the errands of the place whose decisions may change its permit: all but those of former holders, which
+	 *         concern nothing of the current holder (decisions 72 and 115)
+	 */
+	List<ErrandRow> errandsThatMayChange(final Integer objektId) {
+		final var former = formerHolders(objektId).errandIds();
+		return errandsOfPlace(objektId).stream().filter(errand -> !former.contains(errand.arendeId())).toList();
+	}
+
+	/**
 	 * @return what of the errands and the days of the place was a former holder's, told by all its errands (decision 72)
 	 */
 	FormerHolders formerHolders(final Integer objektId) {
-		return FormerHolders.of(errandsByPlace.getOrDefault(objektId, List.of()), snapshot.applicants(), ownerOf(placeOf(objektId)).orElse(null), today);
+		return FormerHolders.of(errandsOfPlace(objektId), snapshot.applicants(), ownerOf(placeOf(objektId)).orElse(null), today);
 	}
 
 	Optional<ContactRow> ownerOf(final PlaceRow place) {

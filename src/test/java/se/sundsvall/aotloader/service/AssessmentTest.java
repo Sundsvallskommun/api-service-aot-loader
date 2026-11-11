@@ -16,6 +16,8 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.NO_ISSUING_ERRAND;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 
 class AssessmentTest {
@@ -80,6 +82,26 @@ class AssessmentTest {
 
 		assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
 		assertThat(assessment.reasons()).containsExactly(RuleHit.of(ERRAND_OPEN));
+	}
+
+	@Test
+	void anOpenErrandOfThePlaceHoldsBackOnlyAnItemThatWouldBeMigrated() {
+		final var hold = RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2");
+
+		assertThat(Assessment.of(List.of(hold), Optional.empty())).isEqualTo(new Assessment(Decision.REVIEW, List.of(hold), null));
+		// A ceased place is not migrated, whatever errand of it is open (decision 115)
+		assertThat(Assessment.of(List.of(hold, RuleHit.of(SALES_PLACE_CEASED)), Optional.empty()))
+			.isEqualTo(new Assessment(Decision.NOT_MIGRATED, List.of(RuleHit.of(SALES_PLACE_CEASED)), null));
+	}
+
+	@Test
+	void theExceptionListCannotLiftAnOpenErrandOfThePlace() {
+		// The exception was decided for the shared diary number, before the errand was opened
+		final var assessment = Assessment.of(List.of(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, "IAN-2019-1"), RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2")),
+			Optional.of(ExceptionOutcome.MIGRERA));
+
+		assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
+		assertThat(assessment.reasons()).containsExactly(RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2"));
 	}
 
 	@Test

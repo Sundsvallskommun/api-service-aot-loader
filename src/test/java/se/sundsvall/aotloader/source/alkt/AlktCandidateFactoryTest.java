@@ -74,6 +74,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_ON_ALL_YEAR;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ROWS_ON_PLACE;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_INVALID;
@@ -81,6 +82,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
+import static se.sundsvall.aotloader.source.alkt.AlktTestData.applicant;
 import static se.sundsvall.aotloader.source.alkt.AlktTestData.owner;
 import static se.sundsvall.aotloader.source.alkt.AlktTestData.permit;
 import static se.sundsvall.aotloader.source.alkt.AlktTestData.place;
@@ -694,6 +696,32 @@ class AlktCandidateFactoryTest {
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 501, diarienummer ian 2019 1"), tuple(CERTIFICATE_MISSING, null));
+	}
+
+	@Test
+	void anotherOpenErrandOfThePlaceHoldsThePermitBack() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "556677-8899"))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, null))
+			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			// An application to change the permit and an inspection, both still open, whose decisions may change the permit
+			.errand(AlktTestRows.errand(503, 1, "02", "IAN-2026-3", LocalDate.of(2026, 10, 1), null, null))
+			.errand(AlktTestRows.errand(700, 1, "07", "TIL-2026-7", LocalDate.of(2026, 9, 1), null, null))
+			.errand(AlktTestRows.errand(504, 1, "02", "IAN-2020-4", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null))
+			.errand(AlktTestRows.errand(505, 2, "02", "IAN-2026-5", LocalDate.of(2026, 10, 1), null, null))
+			// An errand of a former owner, never closed, concerns nothing of the current holder (decision 72)
+			.applicant(applicant(71, "559988-7766"))
+			.errand(AlktTestRows.errand(506, 1, "02", "IAN-2010-6", LocalDate.of(2010, 1, 1), null, 71))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		// Decision 115: the permit waits until they are closed, as what is decided in them would not follow it afterwards
+		assertThat(candidate.ruleHits()).filteredOn(hit -> hit.rule() == PLACE_ERRAND_OPEN).extracting(RuleHit::detail)
+			.containsExactlyInAnyOrder("ArendeID 503, diarienummer IAN-2026-3", "ArendeID 700, diarienummer TIL-2026-7");
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).doesNotContain(UNDERLYING_ERRAND_OPEN);
 	}
 
 	@Test

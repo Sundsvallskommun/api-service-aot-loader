@@ -91,6 +91,13 @@ enum Product {
 	}
 
 	/**
+	 * @return true for the type of an errand that notifies a product, of any product
+	 */
+	static boolean isAnyErrandType(final String code) {
+		return Arrays.stream(values()).anyMatch(product -> product.isErrandType(code));
+	}
+
+	/**
 	 * @return true for an event that registers a notification of the product
 	 */
 	boolean isRegistration(final EventRow event) {

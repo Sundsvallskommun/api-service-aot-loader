@@ -20,6 +20,7 @@ import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.source.AssetContents;
 import se.sundsvall.aotloader.source.CandidateTexts;
+import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
 import se.sundsvall.aotloader.source.FileList;
 import se.sundsvall.aotloader.source.FormerHolders;
@@ -57,6 +58,9 @@ import static se.sundsvall.aotloader.source.CandidateTexts.line;
  */
 final class AlkolNotifications {
 
+	// The errand types of code list Ärendetyper that apply for a tobacco permit or end one, which change no notification
+	private static final Set<String> PERMIT_ERRAND_TYPES = Set.of("WADE", "WADI", "WAPH", "Uteb", "Utk");
+
 	private static final String SERVING_PLACE_CATEGORY_PREFIX = "serveringsställe";
 
 	private final AlkolIndex index;
@@ -67,6 +71,14 @@ final class AlkolNotifications {
 		this.index = index;
 		this.snapshot = index.snapshot();
 		this.today = index.today();
+	}
+
+	/**
+	 * @return false for an errand of a notification, of this product or another, and for one that applies for or ends a
+	 *         tobacco permit; none of them changes the notification of another product (decision 115)
+	 */
+	static boolean mayChangeANotification(final ErrandRow errand) {
+		return !Product.isAnyErrandType(errand.arendeTyp()) && !CodeTexts.isOneOf(errand.arendeTyp(), PERMIT_ERRAND_TYPES);
 	}
 
 	/**
@@ -88,7 +100,7 @@ final class AlkolNotifications {
 		final var registrations = registrations(place, product, owner);
 		final var notified = notifiedDate(place, registrations);
 		notifiedDateHits(product, registrations, notified, hits);
-		SourceRules.openErrandHits(registrations.errands(), hits);
+		SourceRules.openErrandHits(registrations.errands(), index.errandsThatMayChange(place, place.fsId(), AlkolNotifications::mayChangeANotification), hits);
 		formerHolderHits(registrations, hits);
 
 		final var current = registrations.ofCurrentHolder();

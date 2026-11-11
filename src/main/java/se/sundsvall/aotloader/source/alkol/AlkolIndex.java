@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
@@ -219,6 +220,17 @@ final class AlkolIndex {
 	 * @param  errands the errands of the place, all of them or those of one kind
 	 * @return         what of them and of the days of the place was a former holder's
 	 */
+	/**
+	 * @param  concerns which errands may change the item, by their type
+	 * @return          the errands of the place whose decisions may change one of its items: those the filter keeps, but
+	 *                  not those of former holders, which concern nothing of the current holder (decisions 72 and 115)
+	 */
+	List<ErrandRow> errandsThatMayChange(final SalesPlaceRow place, final Integer fsId, final Predicate<ErrandRow> concerns) {
+		final var errands = errandsOfPlace(fsId);
+		final var former = formerHolders(place, errands).errandIds();
+		return errands.stream().filter(errand -> !former.contains(errand.arendeId())).filter(concerns).toList();
+	}
+
 	FormerHolders formerHolders(final SalesPlaceRow place, final List<ErrandRow> errands) {
 		return FormerHolders.of(errands, snapshot.applicants(), ownerOf(place), today);
 	}

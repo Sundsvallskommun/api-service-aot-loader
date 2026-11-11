@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_ON_SEVERAL_OWNERS;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 
 class SourceRulesTest {
@@ -70,11 +71,29 @@ class SourceRulesTest {
 		SourceRules.openErrandHits(List.of(
 			AlktTestRows.errand(10, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null),
 			AlktTestRows.errand(11, 1, "01", "IAN-2019-2", LocalDate.of(2019, 1, 1), null, null),
-			AlktTestRows.errand(12, 1, "01", null, null, null, null)), hits);
+			AlktTestRows.errand(12, 1, "01", null, null, null, null)), List.of(), hits);
 
 		assertThat(hits).containsExactly(
 			RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 11, diarienummer IAN-2019-2"),
 			RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 12"));
+	}
+
+	@Test
+	void everyOtherErrandOfThePlaceThatIsNotClosedHitsÄ1() {
+		final var issuing = AlktTestRows.errand(10, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), null, null);
+		final var hits = new ArrayList<RuleHit>();
+
+		SourceRules.openErrandHits(List.of(issuing), List.of(
+			issuing,
+			AlktTestRows.errand(11, 1, "02", "IAN-2026-11", LocalDate.of(2026, 10, 1), null, null),
+			AlktTestRows.errand(12, 1, "07", null, null, null, null),
+			AlktTestRows.errand(13, 1, "02", "IAN-2020-13", LocalDate.of(2020, 1, 1), LocalDate.of(2020, 2, 1), null)), hits);
+
+		// The errand the permit builds on is told of once, by its own rule
+		assertThat(hits).containsExactly(
+			RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 10, diarienummer IAN-2019-1"),
+			RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 11, diarienummer IAN-2026-11"),
+			RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 12"));
 	}
 
 	private static ContactRow owner(final int id, final String number) {

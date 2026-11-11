@@ -181,7 +181,9 @@ final class AlkolPermits {
 			hits.add(RuleHit.of(SALES_PLACE_CEASED));
 		}
 		grantHits(fsId, grant, grantErrand, owner, hits);
-		SourceRules.openErrandHits(grantErrand == null ? List.of() : List.of(grantErrand), hits);
+		// A notification of a product changes nothing of the tobacco permit
+		SourceRules.openErrandHits(grantErrand == null ? List.of() : List.of(grantErrand),
+			index.errandsThatMayChange(place, fsId, errand -> !Product.isAnyErrandType(errand.arendeTyp())), hits);
 		if (grant != null && issued == null) {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));
 		}

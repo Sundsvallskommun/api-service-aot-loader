@@ -49,7 +49,8 @@ public enum ReviewRule {
 	GRANT_DECISION_MISSING("G33", "Källsystemet har inget beslut som beviljade tillståndet, så ärendet får ett beslut som bygger på tillståndet (beslut 75)", INFO, true),
 	SERVING_TIME_UNPLACED("G34", "En serveringstid går inte att lägga i beslutets serveringstider i Draken och står bara på ärendet (beslut 76)", INFO, true),
 	ERRAND_OPEN("Ä1", "Ärendet är inte avslutat i källsystemet och ska avslutas eller flyttas för hand (beslut 16 och 23)", BLOCKING, false),
-	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true);
+	UNDERLYING_ERRAND_OPEN("Ä1", "Ett ärende som tillståndet eller anmälan bygger på är inte avslutat i källsystemet och ska avslutas, eller flyttas för hand och föras in i undantagslistan (beslut 16 och 23)", BLOCKING, true),
+	PLACE_ERRAND_OPEN("Ä1", "Ett annat ärende på stället som kan ändra tillståndet eller anmälan är inte avslutat i källsystemet. Det migreras när ärendet är avslutat, så att det som beslutas i det följer med (beslut 115)", BLOCKING, false);
 
 	private final String code;
 	private final String description;

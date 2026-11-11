@@ -69,6 +69,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_ONLY_
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_COPY_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
@@ -746,8 +747,41 @@ class AlkolCandidateFactoryTest {
 		final var permit = data.factory().permits().candidates().get(0);
 		final var notification = data.factory().notifications().candidates().get(0);
 
+		// The open notification changes nothing of the permit, nor the open application for the permit of the notification
 		assertThat(permit.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-2019-100"), tuple(CERTIFICATE_MISSING, null));
 		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 102"));
+	}
+
+	@Test
+	void anOpenErrandOfThePlaceThatMayChangeAPermitOrNotificationHoldsItBack() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, true, true, false))
+			.owner(owner(10, "5566778899"))
+			.view(new PermitViewRow(1, true, false, false, false))
+			.errand(AlkolTestRows.errand(100, 1, "WADE", "IAN-2019-100", LocalDate.of(2019, 6, 1), LocalDate.of(2019, 7, 1), null))
+			.errand(AlkolTestRows.errand(101, 1, "Fföl", "IAN-2010-1", LocalDate.of(2010, 1, 1), LocalDate.of(2010, 2, 1), null))
+			.errand(AlkolTestRows.errand(102, 1, "ec", "IAN-2015-2", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
+			// An inspection and a change of the company, both open, may change every item of the place
+			.errand(AlkolTestRows.errand(103, 1, "IT", "TIL-2026-3", LocalDate.of(2026, 10, 1), null, null))
+			.errand(AlkolTestRows.errand(104, 1, "WAAÄ", null, LocalDate.of(2026, 10, 2), null, null))
+			// A new application for a permit changes no notification, and a notification of e-cigarettes neither the permit nor
+			// the notification of folköl
+			.errand(AlkolTestRows.errand(105, 1, "WADI", null, LocalDate.of(2026, 10, 3), null, null))
+			.errand(AlkolTestRows.errand(106, 1, "ec", "IAN-2026-6", LocalDate.of(2026, 10, 4), null, null))
+			.decision(AlkolTestRows.decision(200, 100, "GTDE", LocalDateTime.of(2019, 7, 1, 10, 0), null, null, null, null));
+
+		final var permit = data.factory().permits().candidates().get(0);
+		final var notifications = data.factory().notifications().candidates();
+
+		assertThat(permit.ruleHits()).filteredOn(hit -> hit.rule() == PLACE_ERRAND_OPEN).extracting(RuleHit::detail)
+			.containsExactly("ArendeID 103, diarienummer TIL-2026-3", "ArendeID 104", "ArendeID 105");
+		assertThat(notifications).filteredOn(candidate -> candidate.key().sourceId().endsWith("FOLKOL")).singleElement()
+			.satisfies(folkol -> assertThat(folkol.ruleHits()).filteredOn(hit -> hit.rule() == PLACE_ERRAND_OPEN).extracting(RuleHit::detail)
+				.containsExactly("ArendeID 103, diarienummer TIL-2026-3", "ArendeID 104"));
+		// The open notification of e-cigarettes is one the notification builds on
+		assertThat(notifications).filteredOn(candidate -> candidate.key().sourceId().endsWith("ECIGARETTER")).singleElement()
+			.satisfies(ecigarettes -> assertThat(ecigarettes.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+				.contains(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 106, diarienummer IAN-2026-6"), tuple(PLACE_ERRAND_OPEN, "ArendeID 104")));
 	}
 
 	@Test

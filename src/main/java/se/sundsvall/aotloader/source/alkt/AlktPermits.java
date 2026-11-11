@@ -131,7 +131,7 @@ final class AlktPermits {
 			hits.add(RuleHit.of(NO_ISSUING_ERRAND, "ArendeID %s finns inte i Ärende".formatted(Texts.join(", ", issuingErrands.stream().map(String::valueOf).toList()))));
 		}
 		final var errands = issuingErrands.stream().map(snapshot.errands()::get).filter(Objects::nonNull).toList();
-		SourceRules.openErrandHits(errands, hits);
+		SourceRules.openErrandHits(errands, index.errandsThatMayChange(permit.objektId()), hits);
 		index.diaryNumberHits(permit, hits);
 		if (permit.utfardandeDatum() == null) {
 			hits.add(RuleHit.of(ISSUE_DATE_MISSING));

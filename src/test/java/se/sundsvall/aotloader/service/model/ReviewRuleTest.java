@@ -13,6 +13,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
 import static se.sundsvall.aotloader.service.model.ReviewRule.NOTIFICATION_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ROWS_ON_PLACE;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
 
@@ -23,7 +24,8 @@ class ReviewRuleTest {
 	 * without the data they find missing.
 	 */
 	private static final EnumSet<ReviewRule> NOT_OVERRIDABLE = EnumSet.of(PLACE_MISSING, LEGAL_ID_INVALID, ISSUE_DATE_MISSING, HOLDER_NOT_IN_PARTY, DIARY_NUMBER_MISSING,
-		SUBTYPE_MISSING, OWNER_MISSING, NOTIFICATION_DATE_MISSING, PERMIT_ROWS_ON_PLACE, ERRAND_OPEN);
+		SUBTYPE_MISSING, OWNER_MISSING, NOTIFICATION_DATE_MISSING, PERMIT_ROWS_ON_PLACE, ERRAND_OPEN,
+		PLACE_ERRAND_OPEN);
 
 	@ParameterizedTest
 	@EnumSource(ReviewRule.class)
