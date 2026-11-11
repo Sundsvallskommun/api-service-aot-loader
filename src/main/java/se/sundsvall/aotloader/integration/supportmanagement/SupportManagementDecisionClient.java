@@ -21,9 +21,9 @@ import static se.sundsvall.aotloader.integration.supportmanagement.configuration
 import static se.sundsvall.aotloader.integration.supportmanagement.configuration.SupportManagementDecisionConfiguration.DECISION_CLIENT_ID;
 
 /**
- * The calls the migration makes to the decisions of the permit errands (decision 70). SupportManagement takes a manual
- * decision only from an AD account, so these calls are sent by the AD account of the decisions, with the other headers
- * of {@link SupportManagementClient}.
+ * The calls the migration makes to the decisions of the errands of permits and notifications (decisions 70 and 108).
+ * SupportManagement takes a manual decision only from an AD account, so these calls are sent by the AD account of the
+ * decisions, with the other headers of {@link SupportManagementClient}.
  */
 @FeignClient(name = CLIENT_ID, contextId = DECISION_CLIENT_ID, url = "${integration.support-management.url}", configuration = SupportManagementDecisionConfiguration.class)
 public interface SupportManagementDecisionClient {

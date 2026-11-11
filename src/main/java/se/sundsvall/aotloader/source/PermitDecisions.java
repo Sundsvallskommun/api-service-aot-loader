@@ -17,7 +17,8 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 
 /**
  * Builds the decision a permit was granted by, which the errand of the permit gets as a completed manual decision, the
- * same way for both sources (decision 70).
+ * same way for both sources (decision 70), and names the decision maker a source lacks, also for the approval of a
+ * notification (decision 108).
  */
 public final class PermitDecisions {
 

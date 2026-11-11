@@ -16,7 +16,6 @@ import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 import tools.jackson.databind.node.ObjectNode;
 
-import static java.util.function.Predicate.not;
 import static java.util.regex.Pattern.CANON_EQ;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.UNICODE_CASE;
@@ -114,13 +113,13 @@ final class DecidedScopes {
 		}
 		final var servingHours = new EnumMap<Slot, Range>(Slot.class);
 		servingHours.putAll(placed);
-		return new Decided(beverages(permit), servingHours.entrySet().stream().map(entry -> entry.getKey().entry(entry.getValue())).toList());
+		return new Decided(ServingPermits.beverages(permit), servingHours.entrySet().stream().map(entry -> entry.getKey().entry(entry.getValue())).toList());
 	}
 
 	/**
 	 * What the decision of a serving permit decided, as Draken writes it in the JSON of the decision.
 	 *
-	 * @param beverages    the beverages, as the constants Draken knows them by, in the order of the alcohol schema
+	 * @param beverages    the beverages, as the constants of the alcohol schema, in its order
 	 * @param servingHours the serving hours, an entry per field of Draken that got a time, in the order Draken shows them
 	 */
 	record Decided(List<String> beverages, List<JsonFields> servingHours) {
@@ -133,8 +132,8 @@ final class DecidedScopes {
 		/**
 		 * @param  permit the JSON of the permit, by the alcohol schema
 		 * @return        the JSON of the permit with the beverages and the serving hours of the decision in place of those of
-		 *                the permit, and without the field when the decision has none of them, since Draken reads a time only
-		 *                in a field it has and knows no beverage outside its list
+		 *                the permit, and without the field when the decision has none of them, so that Draken does not read
+		 *                those of the permit as the decision's
 		 */
 		ObjectNode applyTo(final ObjectNode permit) {
 			final var decided = JsonFields.object().texts(BEVERAGES, beverages).objects(SERVING_HOURS, servingHours).toNode();
@@ -187,16 +186,6 @@ final class DecidedScopes {
 			.text("from", from.filter(_ -> readable).orElse(null))
 			.text("to", to.filter(_ -> readable).orElse(null))
 			.text("description", readable ? time.text() : Texts.joinWords(Texts.range(time.start(), time.end()), time.text()));
-	}
-
-	/**
-	 * @return the beverages of the permit Draken knows, as the alcohol schema has them; alcohol-like preparations, ALP,
-	 *         Draken has no beverage for
-	 */
-	private static List<String> beverages(final PermitRow permit) {
-		return ServingPermits.beverages(permit).stream()
-			.filter(not(ServingPermits.ALCOHOL_LIKE_PREPARATIONS::equals))
-			.toList();
 	}
 
 	/**

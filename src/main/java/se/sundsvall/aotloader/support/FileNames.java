@@ -6,23 +6,24 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Reads and compares the file names of the sources. A name is compared in its composed form and without regard to
- * case, so that an å written as a letter and a combining mark, as a file copied from macOS may have it, matches the
- * letter.
+ * Reads and compares the file names of the sources, and names a file the migration puts on an errand under a name of
+ * its own. A name is compared in its composed form and without regard to case, so that an å written as a letter and a
+ * combining mark, as a file copied from macOS may have it, matches the letter.
  */
 public final class FileNames {
 
 	// What a file name cannot hold when it is saved on Windows, as a downloaded attachment is
 	private static final Pattern NOT_IN_A_NAME = Pattern.compile("[/\\\\:*?<>|]");
 	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("\\p{Cntrl}");
-	private static final Pattern BLANKS = Pattern.compile("\\s+");
+	private static final Pattern BLANKS = Pattern.compile("[\\s\\p{Z}]+");
 
 	private FileNames() {}
 
 	/**
-	 * Names a file put on an errand by its title and the case number it shows, as pw-alkt names the files it puts on an
-	 * errand, with the extension of the file in the source. In the case number, a slash, a backslash, a colon and the other
-	 * characters a file name cannot hold become a dash, a quote is left out and a control character becomes a space.
+	 * Names a file put on an errand by its title and the case number it shows, with the extension of the file in the
+	 * source (decision 110). In the case number, a slash, a backslash, a colon and the other characters a file name cannot
+	 * hold become a dash, a quote is left out, a control character becomes a space, and blanks, a no-break space among
+	 * them, become one space.
 	 *
 	 * @param  title      the title the name begins with
 	 * @param  caseNumber the case number the file shows, null when it shows none, which leaves the title alone

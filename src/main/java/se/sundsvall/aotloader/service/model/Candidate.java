@@ -29,7 +29,8 @@ import static java.util.Objects.requireNonNull;
  * @param permitLink    for an inspection errand or visit, what decides the relation to the permit errand, and for a
  *                      documentation errand, what it is filed under; otherwise null
  * @param measures      the measures of an inspection visit, its remarks (decision 57)
- * @param decision      the decision a permit was granted by, null for an errand without one (decision 70)
+ * @param decision      the decision a permit was granted by (decision 70) or the approval of a notification (decision
+ *                      108), null for an errand without one
  */
 public record Candidate(
 	ItemKey key,

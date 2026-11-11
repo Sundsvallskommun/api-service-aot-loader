@@ -53,8 +53,8 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
  * databases are configured, that the account of each source database may only read, and in the namespace of the
  * municipality of the run that the labels exist, with the label for migrated errands blocking processes, that the
  * roles, the closed status and the classification the errands get exist, that the attachment purposes and measure
- * types exist, that the decisions of the permits can be written (decision 70), and that no action is active (R6). A
- * real run does not start when a check fails; a dry run lists the problems and goes on.
+ * types exist, that the decisions of the permits and notifications can be written (decisions 70 and 108), and that no
+ * action is active (R6). A real run does not start when a check fails; a dry run lists the problems and goes on.
  */
 @Component
 public class Preflight {
@@ -357,8 +357,8 @@ public class Preflight {
 	 * (decision 108), which needs the AD account the decisions are written with, a heading for each type, and the outcomes
 	 * they get in the namespace.
 	 *
-	 * @return the display names of the decision outcomes of the namespace by name, empty when the run has no permits that
-	 *         get decisions, or when they could not be read
+	 * @return the display names of the decision outcomes of the namespace by name, empty when the run has no permits or
+	 *         notifications that get decisions, or when they could not be read
 	 */
 	private Map<String, String> checkDecisions(final String municipalityId, final Set<ErrandType> types, final List<String> problems) {
 		final var decisionTypes = types.stream().filter(type -> properties.errandType(type).withDecision()).toList();
@@ -383,9 +383,12 @@ public class Preflight {
 			problems.add("Beslutsutfallen i SupportManagement gick inte att hämta: " + ErrorTexts.describe(e));
 			return Map.of();
 		}
+		// A permit with conditions is approved with them; a notification has none
+		final var withConditions = decisionTypes.stream().anyMatch(type -> type.getKind() == TILLSTAND);
 		Stream.of(DECISION_OUTCOME_APPROVAL, DECISION_OUTCOME_APPROVAL_WITH_CONDITIONS)
+			.filter(outcome -> withConditions || DECISION_OUTCOME_APPROVAL.equals(outcome))
 			.filter(outcome -> !outcomes.containsKey(outcome))
-			.forEach(outcome -> problems.add("Beslutsutfallet %s finns inte i namnrymden, så tillståndens beslut kan inte få det (beslut 70)".formatted(outcome)));
+			.forEach(outcome -> problems.add("Beslutsutfallet %s finns inte i namnrymden, så besluten kan inte få det (beslut 70 och 108)".formatted(outcome)));
 		return outcomes;
 	}
 

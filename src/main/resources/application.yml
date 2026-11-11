@@ -94,9 +94,10 @@ aot-loader:
   namespace: AOT
   sent-by: 'alkt-migration; type=migration'
   reporter-user-id: alkt-migration
-  # The AD account the decisions of the permits are written with (decision 70). SupportManagement takes a manual decision
-  # only from an AD account, so these calls alone are sent by it, with the decision maker of the source in decidedBy.
-  # The account migration-job, decided 23 October 2026. Blank stops a real run that migrates permits.
+  # The AD account the decisions of the permits and the approvals of the notifications are written with (decisions 70 and
+  # 108). SupportManagement takes a manual decision only from an AD account, so these calls alone are sent by it, with the
+  # decision maker of the source in decidedBy. The account migration-job, decided 23 October 2026. Blank stops a real run
+  # that migrates permits or notifications.
   decision-ad-account: ${AOT_LOADER_DECISION_AD_ACCOUNT:migration-job}
   # The channel Draken shows as "Migrerat ärende"
   channel: MIGRATION

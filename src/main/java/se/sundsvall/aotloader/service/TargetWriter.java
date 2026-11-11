@@ -520,7 +520,7 @@ class TargetWriter {
 	}
 
 	/**
-	 * What became of the decision of a permit errand.
+	 * What became of the decision of the errand of a permit or notification.
 	 */
 	enum DecisionWrite {
 		/** The errand had no decision and got it. */

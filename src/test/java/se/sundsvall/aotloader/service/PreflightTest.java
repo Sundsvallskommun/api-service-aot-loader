@@ -247,7 +247,10 @@ class PreflightTest {
 		assertThat(new Preflight(properties, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKT, Set.of(TILLSTAND))).problems()).containsExactly(
 			"AD-kontot som tillståndens och anmälningarnas beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70 och 108)",
 			"Rubrik för beslutet saknas för SERVING_PERMIT (aot-loader.errand-types, beslut 70 och 108)",
-			"Beslutsutfallet APPROVAL_WITH_CONDITIONS finns inte i namnrymden, så tillståndens beslut kan inte få det (beslut 70)");
+			"Beslutsutfallet APPROVAL_WITH_CONDITIONS finns inte i namnrymden, så besluten kan inte få det (beslut 70 och 108)");
+		// A run of notifications alone needs the account too, but no outcome with conditions, as a notification has none
+		assertThat(new Preflight(withoutAccount, supportManagement, sourceDatabases).check(MUNICIPALITY_ID, Map.of(Source.ALKOL, Set.of(ANMALAN))).problems()).containsExactly(
+			"AD-kontot som tillståndens och anmälningarnas beslut skrivs med är inte angivet (aot-loader.decision-ad-account, beslut 70 och 108)");
 
 		// The value of the header is the account alone
 		final var withHeader = TestData.propertiesWithDecisions(directory.toString(), directory.toString(), "ab12cde; type=adAccount");

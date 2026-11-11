@@ -100,17 +100,23 @@ final class AlkolNotifications {
 		final var ownEvents = ownEvents(place, product);
 		final var files = files(product, registrations, ownEvents);
 		final var holder = PartyRows.holder(owner, today);
+		final var title = Texts.title(subject, name);
+		final var decision = decisionOf(notified, title, diaryNumber);
 		// The type of the post tells the product; the schema has no field for it
 		final var asset = new AssetContents(type.getAssetSchema())
 			.caseRegistrationNumber(diaryNumber)
 			.permitHolder(holder)
 			.place(premises);
 		if (type.getAssetSchema() == AssetSchema.TOBACCO) {
-			// Sold until further notice from the day of the notification, as pw-alkt writes it (decisions 102 and 105)
+			// Sold in a shop when the sales place has a name, and until further notice from the day of the notification, as
+			// pw-alkt writes a notification whose form names its point of sale (decisions 102, 105 and 111)
+			if (premises != null && !Texts.isBlank(premises.name())) {
+				asset.fields().texts("salesTypes", List.of(PermitKind.RETAIL.salesType()));
+			}
 			asset.salesPeriod(notified.date(), null);
 		}
-		asset.migration(ALKOL, notified.estimated());
-		final var title = Texts.title(subject, name);
+		// The approval, as pw-alkt gives the post of a notification the decision of its errand (decision 111)
+		asset.decision(decision, null, null).migration(ALKOL, notified.estimated());
 
 		return Candidate.builder(new ItemKey(ALKOL, ANMALAN, notificationId(place, product.code())), type)
 			.placeName(place.namn())
@@ -124,21 +130,24 @@ final class AlkolNotifications {
 			.externalTag(TAG_NOTIFICATION, notificationId(place, product.code()))
 			.externalTag(TAG_DIARY_NUMBER, diaryNumber)
 			.asset(asset.asset(null, subject + " på " + name, notified.date(), null, List.of()))
-			.decision(decisionOf(notified, title))
+			.decision(decision)
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
 
 	/**
-	 * @return the decision the errand of the notification gets, as pw-alkt approves a notification (decision 108): an
-	 *         approval from the day of the notification, also an estimated one, described by the title of the errand and
-	 *         made by nobody the source names; null for a notification without a day
+	 * @param  diaryNumber the diary number of the notification, which the approval is registered under on the post, null
+	 *                     when it has none
+	 * @return             the decision the errand of the notification gets, as pw-alkt approves a notification (decision
+	 *                     108): an approval from the day of the notification, also an estimated one, described by the
+	 *                     title of the errand and made by nobody the source names; null for a notification without a day
 	 */
-	private static DecisionData decisionOf(final NotifiedDate notified, final String title) {
+	private static DecisionData decisionOf(final NotifiedDate notified, final String title, final String diaryNumber) {
 		if (notified.date() == null) {
 			return null;
 		}
-		return new DecisionData(PermitDecisions.missingIn(ALKOL), null, notified.date().atStartOfDay(), title, null, notified.date(), null, List.of(), List.of());
+		return new DecisionData(PermitDecisions.missingIn(ALKOL), null, notified.date().atStartOfDay(), title, null, notified.date(), null, List.of(), List.of())
+			.withCase(diaryNumber, null);
 	}
 
 	/**
@@ -302,33 +311,49 @@ final class AlkolNotifications {
 
 	/**
 	 * @return the date of the notification: the first registration of the product, or, when the product is only a mark on
-	 *         the sales place, the earliest date of the place
+	 *         the sales place, the earliest date of the place. A date after the day of the migration, as a mistyped year
+	 *         may be, is no date of the notification, as it is no time of the decision of a permit (decision 85).
 	 */
 	private NotifiedDate notifiedDate(final SalesPlaceRow place, final Registrations registrations) {
-		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
-			final var earliest = earliestDate(place.fsId()).orElse(null);
-			return new NotifiedDate(earliest, earliest != null);
-		}
-		// The current holder's first registration, or the first of all when every one is a former holder's (G19)
-		final var current = registrations.ofCurrentHolder();
-		final var dated = current.errands().isEmpty() && current.events().isEmpty() ? registrations : current;
-		return new NotifiedDate(Stream.concat(dated.errands().stream().map(ErrandRow::openedOrRegistered), dated.events().stream().map(AlkolNotifications::dateOf))
-			.filter(Objects::nonNull)
-			.min(Comparator.naturalOrder())
-			.orElse(null), false);
+		final var onlyFlag = registrations.errands().isEmpty() && registrations.events().isEmpty();
+		final var dates = (onlyFlag ? datesOfPlace(place.fsId()) : datesOf(registrations)).filter(Objects::nonNull).toList();
+		final var date = dates.stream().filter(day -> !day.isAfter(today)).min(Comparator.naturalOrder()).orElse(null);
+		final var passedOver = dates.stream().filter(day -> day.isAfter(today)).min(Comparator.naturalOrder()).orElse(null);
+		return new NotifiedDate(date, onlyFlag && date != null, passedOver);
 	}
 
 	/**
-	 * G22 when the product is only a mark on the sales place, and G23 when the notification has no date at all.
+	 * @return the dates of the current holder's registrations, or of all of them when every one is a former holder's (G19)
+	 */
+	private static Stream<LocalDate> datesOf(final Registrations registrations) {
+		final var current = registrations.ofCurrentHolder();
+		final var dated = current.errands().isEmpty() && current.events().isEmpty() ? registrations : current;
+		return Stream.concat(dated.errands().stream().map(ErrandRow::openedOrRegistered), dated.events().stream().map(AlkolNotifications::dateOf));
+	}
+
+	/**
+	 * @return the dates of the errands and events of the sales place
+	 */
+	private Stream<LocalDate> datesOfPlace(final Integer fsId) {
+		return Stream.concat(
+			index.errandsOfPlace(fsId).stream().map(ErrandRow::openedOrRegistered),
+			index.eventsOfPlace(fsId).stream().map(AlkolNotifications::dateOf));
+	}
+
+	/**
+	 * G22 when the product is only a mark on the sales place, and G23 when the notification has no date, which names a
+	 * date it has after the day of the migration.
 	 */
 	private static void notifiedDateHits(final Product product, final Registrations registrations, final NotifiedDate notified, final List<RuleHit> hits) {
-		if (registrations.errands().isEmpty() && registrations.events().isEmpty()) {
+		final var onlyFlag = registrations.errands().isEmpty() && registrations.events().isEmpty();
+		if (onlyFlag) {
 			hits.add(RuleHit.of(NOTIFICATION_ONLY_FLAG, product.text()));
-			if (notified.date() == null) {
-				hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.text()));
-			}
-		} else if (notified.date() == null) {
-			hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, product.text() + ", anmälan saknar datum"));
+		}
+		if (notified.date() == null) {
+			final var missing = onlyFlag ? product.text() : product.text() + ", anmälan saknar datum";
+			hits.add(RuleHit.of(NOTIFICATION_DATE_MISSING, Optional.ofNullable(notified.passedOver())
+				.map(day -> "%s; datumet %s ligger efter migreringsdagen".formatted(missing, SourceValues.format(day)))
+				.orElse(missing)));
 		}
 	}
 
@@ -366,17 +391,6 @@ final class AlkolNotifications {
 			.orElse(false);
 	}
 
-	/**
-	 * @return the earliest date of the sales place's errands and events
-	 */
-	private Optional<LocalDate> earliestDate(final Integer fsId) {
-		return Stream.concat(
-			index.errandsOfPlace(fsId).stream().map(ErrandRow::openedOrRegistered),
-			index.eventsOfPlace(fsId).stream().map(AlkolNotifications::dateOf))
-			.filter(Objects::nonNull)
-			.min(Comparator.naturalOrder());
-	}
-
 	private static String productText(final ErrandType type) {
 		return switch (type) {
 			case FOLKOL_SALES_NOTIFICATION -> "försäljning av folköl";
@@ -411,10 +425,12 @@ final class AlkolNotifications {
 	/**
 	 * The date of a notification.
 	 *
-	 * @param date      the date, null when unknown
-	 * @param estimated true when the date is the earliest date of the sales place rather than of the notification
+	 * @param date       the date, null when unknown
+	 * @param estimated  true when the date is the earliest date of the sales place rather than of the notification
+	 * @param passedOver the earliest of the dates of the notification that is after the day of the migration, and so not
+	 *                   taken as its date; null when there is none
 	 */
-	record NotifiedDate(LocalDate date, boolean estimated) {
+	record NotifiedDate(LocalDate date, boolean estimated, LocalDate passedOver) {
 
 		/**
 		 * @return the date as "ÅÅÅÅ-MM-DD", followed by " (uppskattat)" when it is estimated, or null when it is unknown

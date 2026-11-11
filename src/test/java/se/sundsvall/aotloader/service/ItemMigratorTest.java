@@ -54,7 +54,6 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.FileReference;
-import se.sundsvall.aotloader.service.model.Holder;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.JsonContent;
@@ -1520,12 +1519,7 @@ class ItemMigratorTest {
 	@Test
 	void aNotificationGetsTheApprovalPwAlktGivesOneBeforeItsErrandIsActivated() {
 		withDecisions();
-		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKOL-ANMALAN-1-FOLKOL")).thenReturn(List.of());
-		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
-		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
-		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
-		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
-		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
+		stubNewNotification();
 		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
 		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), decisionCaptor.capture())).thenReturn("decision-1");
 
@@ -1558,13 +1552,54 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aNotificationWithoutADayGetsNoDecision() {
+	void anApprovalAnEarlierRunCompletedIsKept() {
 		withDecisions();
-		final var withoutDay = Candidate.builder(new ItemKey(Source.ALKOL, ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
-			.holder(new Holder(TestData.HOLDER_ID, "Bolaget AB", null, null, null, null, null, null))
-			.build();
+		stubNewNotification();
+		final var candidate = TestData.notificationWithDecision("1");
+		// As SupportManagement gives it back: with an id, its times in UTC and its account in capitals
+		final var found = new TargetMapper(properties, CLOCK).toDecisionDraft(candidate, null, null)
+			.id("decision-1")
+			.status("COMPLETED")
+			.decidedAt(OffsetDateTime.parse("2015-01-01T23:00Z"))
+			.completedAt(OffsetDateTime.parse("2015-01-01T23:00Z"))
+			.createdBy("AB12CDE");
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(found));
+		when(supportManagement.getDecisionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "decision-1")).thenReturn(List.of());
 
-		assertThat(migrator.process(withoutDay, context(true)).detail()).contains("Inget beslut: anmälan saknar datum");
+		final var result = migrator.process(candidate, contextWithOutcomes(false));
+
+		assertThat(result.outcome()).isEqualTo(Outcome.MIGRERAD);
+		assertThat(result.detail()).isEqualTo("Beslut: Bifall, fattat 2015-01-02, 0 villkor, 0 dokument; "
+			+ "Beslutet från en tidigare körning är redan fattat i SupportManagement och har det källan ger nu");
+		verify(supportManagement, never()).deleteDecision(anyString(), anyString(), anyString());
+		verify(supportManagement, never()).createDecision(anyString(), anyString(), any());
+		verify(supportManagement, never()).updateDecision(anyString(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void anApprovalAnEarlierRunCompletedWithAJsonParameterIsWrittenAgainWithout() {
+		withDecisions();
+		stubNewNotification();
+		final var candidate = TestData.notificationWithDecision("1");
+		final var found = new TargetMapper(properties, CLOCK).toDecisionDraft(candidate, null, null)
+			.id("decision-1")
+			.status("COMPLETED")
+			.completedAt(OffsetDateTime.parse("2015-01-02T00:00+01:00"))
+			.createdBy("ab12cde");
+		when(supportManagement.getDecisions(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(found));
+		// An approval says nothing of the notification (decision 108)
+		when(supportManagement.getDecisionJsonParameters(MUNICIPALITY_ID, ERRAND_ID, "decision-1"))
+			.thenReturn(List.of(new JsonParameter().key("aot_alcohol_decision").schemaId("2281_aot_alcohol_decision_1.2").version(1L)));
+		when(supportManagement.createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any())).thenReturn("decision-2");
+
+		final var result = migrator.process(candidate, contextWithOutcomes(false));
+
+		assertThat(result.detail()).endsWith("Beslutet från en tidigare körning togs bort och skrevs på nytt med det källan ger nu");
+		final var order = inOrder(supportManagement);
+		order.verify(supportManagement).deleteDecision(MUNICIPALITY_ID, ERRAND_ID, "decision-1");
+		order.verify(supportManagement).createDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), any());
+		order.verify(supportManagement).updateDecision(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("decision-2"), any());
+		verify(supportManagement, never()).writeDecisionJsonParameter(anyString(), anyString(), anyString(), any());
 	}
 
 	@Test
@@ -1896,6 +1931,15 @@ class ItemMigratorTest {
 		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
 		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
 		when(supportManagement.createAttachment(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("ansokan.pdf"), any(), any())).thenReturn(Optional.of("attachment-id"));
+	}
+
+	private void stubNewNotification() {
+		when(supportManagement.findErrandsByExternalTag(MUNICIPALITY_ID, "migreringsid", "ALKOL-ANMALAN-1-FOLKOL")).thenReturn(List.of());
+		when(supportManagement.createErrand(eq(MUNICIPALITY_ID), any())).thenReturn(ERRAND_ID);
+		when(supportManagement.getErrand(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(Optional.of(errand(LifecycleEnum.DRAFT)));
+		when(partyAssets.findAsset(MUNICIPALITY_ID, PARTY_ID, ERRAND_ID)).thenReturn(Optional.empty());
+		when(partyAssets.createAsset(eq(MUNICIPALITY_ID), anyString(), any())).thenReturn(Optional.of("asset-internal-id"));
+		when(supportManagement.getInvestigations(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of());
 	}
 
 	private RunContext contextWithOutcomes(final boolean dryRun) {

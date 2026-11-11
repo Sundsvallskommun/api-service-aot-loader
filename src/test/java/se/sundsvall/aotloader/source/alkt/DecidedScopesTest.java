@@ -139,17 +139,17 @@ class DecidedScopesTest {
 		final var row = permit(1).drinks(false, false, true, true, true).time("11:00", "01:00", "Inomhus").build();
 
 		assertThat(json(DecidedScopes.of(row, subtype, hits))).isEqualTo("""
-			{"beverages":["SPIRITS","OTHER_FERMENTED_BEVERAGES"]}""");
+			{"beverages":["SPIRITS","OTHER_FERMENTED_BEVERAGES","ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS"]}""");
 		assertThat(json(DecidedScopes.of(row, null, hits))).isEqualTo("""
-			{"beverages":["SPIRITS","OTHER_FERMENTED_BEVERAGES"]}""");
+			{"beverages":["SPIRITS","OTHER_FERMENTED_BEVERAGES","ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS"]}""");
 		assertThat(hits).isEmpty();
 	}
 
 	@Test
-	void aPermitWithoutTheBeveragesDrakenKnowsGetsNone() {
+	void alcoholLikePreparationsAreDecidedAsABeverage() {
 		final var row = permit(1).drinks(false, false, false, false, true).noTimes().build();
 
-		assertThat(DecidedScopes.of(row, PERMANENT_SERVING, new ArrayList<>()).beverages()).isEmpty();
+		assertThat(DecidedScopes.of(row, PERMANENT_SERVING, new ArrayList<>()).beverages()).containsExactly("ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS");
 	}
 
 	@Test

@@ -46,6 +46,10 @@ class FileAreaTest {
 		assertThat(fileArea.find(new FileReference("12345678.rtf", ATTACHMENTS)).result()).isEqualTo(LookupResult.MISSING);
 		assertThat(fileArea.find(new FileReference("gomd.pdf", ATTACHMENTS)).result()).isEqualTo(LookupResult.MISSING);
 		assertThat(fileArea.find(new FileReference("../12345678.rtf", ATTACHMENTS)).result()).isEqualTo(LookupResult.MISSING);
+		// A path that leads to a file that exists, in a folder below or in the other directory, is not followed
+		assertThat(fileArea.find(new FileReference("undermapp/gomd.pdf", ATTACHMENTS)).result()).isEqualTo(LookupResult.MISSING);
+		assertThat(attachments.resolve("..").resolve(documents.getFileName()).resolve("12345678.rtf")).exists();
+		assertThat(fileArea.find(new FileReference("../" + documents.getFileName() + "/12345678.rtf", ATTACHMENTS)).result()).isEqualTo(LookupResult.MISSING);
 		assertThat(fileArea.find(new FileReference("stor.pdf", ATTACHMENTS))).satisfies(lookup -> {
 			assertThat(lookup.result()).isEqualTo(LookupResult.TOO_LARGE);
 			assertThat(lookup.size()).isEqualTo(20);

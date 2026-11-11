@@ -626,9 +626,15 @@ class AlkolCandidateFactoryTest {
 			assertThat(decision.validFrom()).isEqualTo(LocalDate.of(2010, 1, 1));
 			assertThat(decision.description()).isEqualTo("Anmälan om servering av folköl – Butik 1");
 			assertThat(decision.outcome()).isEqualTo("APPROVAL");
+			assertThat(decision.justification()).isNull();
+			assertThat(decision.validTo()).isNull();
+			assertThat(decision.terms()).isEmpty();
 			assertThat(decision.documents()).isEmpty();
 			assertThat(decision.hasContent()).isFalse();
 		});
+		// The post has the approval too, under the diary number of the notification, as pw-alkt writes it (decision 111)
+		assertThat(JSON.writeValueAsString(latestServing.asset().content().get("decision"))).isEqualTo("""
+			{"caseRegistrationNumber":"IAN-2015-1","outcome":"APPROVAL","decisionDate":"2010-01-01","validFrom":"2010-01-01"}""");
 
 		final var eventOnly = candidates.get(1);
 		assertThat(eventOnly.type()).isEqualTo(ErrandType.FOLKOL_SALES_NOTIFICATION);
@@ -645,6 +651,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(JSON.writeValueAsString(flagOnlyServingPlace.asset().content())).isEqualTo("""
 			{"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
 			"premises":{"name":"Butik 3","address":{"street":"Gatan 3","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
+			"decision":{"outcome":"APPROVAL","decisionDate":"2009-03-04","validFrom":"2009-03-04"},\
 			"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":true}}""");
 		assertThat(flagOnlyServingPlace.errand().externalTags()).containsOnlyKeys("alkolAnmalan");
 
@@ -655,6 +662,29 @@ class AlkolCandidateFactoryTest {
 		assertThat(withoutAnyDate.decision()).isNull();
 		// An estimated day is the day of the approval too
 		assertThat(flagOnlyServingPlace.decision().decidedAt()).isEqualTo(LocalDate.of(2009, 3, 4).atStartOfDay());
+	}
+
+	@Test
+	void aDateAfterTheDayOfTheMigrationIsNoDateOfTheNotification() {
+		final var data = new Data()
+			.place(place(1, 10).withFlags(true, false, false, false))
+			.place(place(2, 10).withFlags(true, false, false, false))
+			.owner(owner(10, "5566778899"))
+			// A mistyped year on the only registration of one, and on the later of two of the other
+			.errand(AlkolTestRows.errand(100, 1, "Fföl", "IAN-2062-1", LocalDate.of(2062, 3, 1), LocalDate.of(2062, 3, 2), null))
+			.errand(AlkolTestRows.errand(101, 2, "Fföl", "IAN-2015-1", LocalDate.of(2015, 1, 1), LocalDate.of(2015, 2, 1), null))
+			.errand(AlkolTestRows.errand(102, 2, "Fföl", "IAN-2062-2", LocalDate.of(2062, 3, 1), LocalDate.of(2062, 3, 2), null));
+
+		final var candidates = data.factory().notifications().candidates();
+
+		assertThat(candidates).extracting(Candidate::key).containsExactly(new ItemKey(ALKOL, ANMALAN, "1-FOLKOL"), new ItemKey(ALKOL, ANMALAN, "2-FOLKOL"));
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(NOTIFICATION_DATE_MISSING, "Folköl, anmälan saknar datum; datumet 2062-03-01 ligger efter migreringsdagen"));
+		assertThat(candidates.get(0).asset().issued()).isNull();
+		assertThat(candidates.get(0).decision()).isNull();
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).doesNotContain(NOTIFICATION_DATE_MISSING);
+		assertThat(candidates.get(1).asset().issued()).isEqualTo(LocalDate.of(2015, 1, 1));
+		assertThat(candidates.get(1).decision().decidedAt()).isEqualTo(LocalDate.of(2015, 1, 1).atStartOfDay());
 	}
 
 	@Test
@@ -678,16 +708,24 @@ class AlkolCandidateFactoryTest {
 		assertThat(result.candidates().get(0).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/ECIGARETTE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().labelPaths()).containsExactly("CATEGORYROOT/TOBACCO/TOBACCO_FREE_NICOTINE_SALES_NOTIFICATION");
 		assertThat(result.candidates().get(1).errand().title()).isEqualTo("Anmälan om försäljning av tobaksfria nikotinprodukter – Butik 1");
-		// A notification of tobacco products follows the tobacco schema, with its sales place as the point of sale, sold until
-		// further notice from the day of the notification, which this one lacks (decision 105)
+		// A notification of tobacco products follows the tobacco schema, with its sales place as the point of sale, sold in a
+		// shop until further notice from the day of the notification, which this one lacks, so that it has no approval
+		// (decisions 105, 108 and 111)
 		assertThat(result.candidates()).extracting(candidate -> candidate.asset().schema()).containsOnly(AssetSchema.TOBACCO);
 		assertThat(JSON.writeValueAsString(result.candidates().get(0).asset().content())).isEqualTo("""
 			{"caseRegistrationNumber":"IAN-1","externalCaseRegistrationNumber":"IAN-1",\
 			"permitHolder":{"name":"Bolaget 10","organizationNumber":"556677-8899","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"}},\
 			"pointOfSale":{"name":"Butik 1","address":{"street":"Gatan 1","postalCode":"85230","city":"Sundsvall"},"phoneNumber":"060-1","emailAddress":"butik@example.com"},\
-			"salesPeriod":{"period":"INDEFINITE"},"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
+			"salesTypes":["RETAIL"],"salesPeriod":{"period":"INDEFINITE"},"migration":{"sourceSystem":"ALKOL","issuedDateEstimated":false}}""");
+		assertThat(result.candidates().get(0).decision()).isNull();
 		assertThat(result.candidates().get(1).asset().content().get("salesPeriod")).hasToString("""
 			{"period":"INDEFINITE","from":"2022-03-04"}""");
+		assertThat(result.candidates().get(1).asset().content().get("decision")).hasToString("""
+			{"outcome":"APPROVAL","decisionDate":"2022-03-04","validFrom":"2022-03-04"}""");
+		assertThat(result.candidates().get(1).decision()).satisfies(decision -> {
+			assertThat(decision.decidedAt()).isEqualTo(LocalDate.of(2022, 3, 4).atStartOfDay());
+			assertThat(decision.description()).isEqualTo("Anmälan om försäljning av tobaksfria nikotinprodukter – Butik 1");
+		});
 		assertThat(result.notices()).singleElement().satisfies(notice -> {
 			assertThat(notice.key()).isEqualTo(new ItemKey(ALKOL, ANMALAN, "2-INGEN"));
 			assertThat(notice.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);

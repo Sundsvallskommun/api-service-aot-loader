@@ -23,7 +23,6 @@ import se.sundsvall.aotloader.service.mapper.ErrandFormMapper;
 import se.sundsvall.aotloader.service.model.AssetData;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ItemStatus;
-import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Outcome;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.RuleHit;
@@ -345,8 +344,8 @@ public class ItemMigrator {
 		}
 
 		/**
-		 * @return the display name of the outcome of the decision of the permit in the namespace, null when the permit has no
-		 *         decision or the namespace does not name the outcome
+		 * @return the display name of the outcome of the decision of the permit or notification in the namespace, null when
+		 *         it has no decision or the namespace does not name the outcome
 		 */
 		private String decisionText(final String municipalityId) {
 			return Optional.ofNullable(candidate.decision()).flatMap(decision -> context.decisionOutcomeText(municipalityId, decision.outcome())).orElse(null);
@@ -362,7 +361,7 @@ public class ItemMigrator {
 
 		/**
 		 * Gives the draft the decision its permit was granted by, completed, linking the documents of the decision that are
-		 * on the errand (decision 70).
+		 * on the errand (decision 70), or the approval of its notification (decision 108).
 		 *
 		 * @param withLegalBasis the candidate with the legal basis read from its documents, which the decision gets too
 		 * @param uploaded       the attachments of the files of the item on the errand
@@ -380,9 +379,9 @@ public class ItemMigrator {
 		}
 
 		/**
-		 * Tells in the report which decision the errand of a permit or notification gets (decisions 70 and 108), or that it
-		 * gets none, since the source has no decision with a time for the permit, or no day for the notification. An errand
-		 * of a type without decisions gets no line.
+		 * Tells in the report which decision the errand of a permit or notification gets (decisions 70 and 108), or that a
+		 * permit gets none, since the source has no decision with a time for it. A notification without a day, which would
+		 * get none, is held for review (G23). An errand of a type without decisions gets no line.
 		 *
 		 * @param documents the number of documents the decision links
 		 */
@@ -392,8 +391,7 @@ public class ItemMigrator {
 			}
 			final var decision = candidate.decision();
 			if (decision == null) {
-				notes.line(candidate.key().kind() == Kind.ANMALAN ? "Inget beslut: anmälan saknar datum"
-					: "Inget beslut: %s har inget beslut med tidpunkt för tillståndet".formatted(candidate.key().source().getDisplayName()));
+				notes.line("Inget beslut: %s har inget beslut med tidpunkt för tillståndet".formatted(candidate.key().source().getDisplayName()));
 				return;
 			}
 			final var outcome = decision.outcome();

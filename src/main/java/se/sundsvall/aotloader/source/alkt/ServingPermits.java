@@ -12,8 +12,8 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PermitRow;
  */
 final class ServingPermits {
 
-	/** The alcohol-like preparations of the alcohol schema, which Draken has no beverage for. */
-	static final String ALCOHOL_LIKE_PREPARATIONS = "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS";
+	/** The alcohol-like preparations of the alcohol schema. */
+	private static final String ALCOHOL_LIKE_PREPARATIONS = "ALCOHOLIC_BEVERAGE_LIKE_PREPARATIONS";
 
 	private ServingPermits() {}
 

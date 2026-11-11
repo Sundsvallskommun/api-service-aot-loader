@@ -131,6 +131,21 @@ class FileUploaderTest {
 	}
 
 	@Test
+	void aCertificateAnEarlierRunUploadedUnderItsOwnNameIsNotUploadedAgain() {
+		final var certificate = FileUploader.sha256("dokument".getBytes(StandardCharsets.UTF_8));
+		when(supportManagement.getAttachments(MUNICIPALITY_ID, ERRAND_ID)).thenReturn(List.of(
+			new ErrandAttachment().id("a-1").fileName("Tillståndsbevis IAN-2019-1.rtf").hash(certificate),
+			new ErrandAttachment().id("a-3").fileName("beslut.rtf").hash(certificate),
+			new ErrandAttachment().id("a-2").fileName("ansokan.pdf").hash(FileUploader.sha256("bilaga".getBytes(StandardCharsets.UTF_8)))));
+
+		final var uploaded = uploader.upload(TestData.permitWithCertificate("1"), context(), MUNICIPALITY_ID, ERRAND_ID, new ReportNotes());
+
+		// Also when a run before decision 110 left it under its name in the source as well
+		assertThat(uploaded.attachmentIds()).containsOnly(entry(new FileReference("beslut.rtf", DOCUMENTS), "a-1"), entry(new FileReference("ansokan.pdf", ATTACHMENTS), "a-2"));
+		verify(supportManagement, never()).createAttachment(anyString(), anyString(), anyString(), any(), any());
+	}
+
+	@Test
 	void theUploadTellsTheAttachmentsOfTheMaterialByNameAndContent() throws IOException {
 		Files.writeString(documents.resolve("rapport.pdf"), "x");
 		Files.writeString(attachments.resolve("rapport.pdf"), "yy");

@@ -19,7 +19,8 @@ import static se.sundsvall.aotloader.Constants.DECISION_OUTCOME_APPROVAL_WITH_CO
  *                      names them with, or a text that says the source lacks them
  * @param maker         the name or code of the decision maker as the source gives it, null when the source names nobody
  * @param decidedAt     when the decision was made
- * @param description   the type of the decision in the source, null when unknown
+ * @param description   what the decision is: the type of the decision in the source, or the title of the errand of a
+ *                      notification for its approval; null when unknown
  * @param justification the text of the decision in the source, null when it has none
  * @param validFrom     the first day the decision is valid, null when the source does not say
  * @param validTo       the last day the decision is valid, null when it is valid until further notice

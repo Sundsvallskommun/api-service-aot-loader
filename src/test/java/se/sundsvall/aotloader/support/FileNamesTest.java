@@ -24,6 +24,8 @@ class FileNamesTest {
 		assertThat(FileNames.caseFileName("Tillståndsbevis", " ", ".rtf")).isEqualTo("Tillståndsbevis");
 		assertThat(FileNames.caseFileName("Tillståndsbevis", null, "Z0006821.rtf")).isEqualTo("Tillståndsbevis.rtf");
 		assertThat(FileNames.caseFileName("Tillståndsbevis", "a*b?c<d>e|f", null)).isEqualTo("Tillståndsbevis a-b-c-d-e-f");
+		// A no-break space, as a number copied from a document may have, is a blank like any other
+		assertThat(FileNames.caseFileName("Tillståndsbevis", " IAN  2019-1 ", "bevis.rtf")).isEqualTo("Tillståndsbevis IAN 2019-1.rtf");
 	}
 
 	@Test

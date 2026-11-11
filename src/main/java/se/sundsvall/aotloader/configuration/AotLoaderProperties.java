@@ -48,9 +48,9 @@ import static java.util.function.UnaryOperator.identity;
  * @param municipalities    the municipality of the places in an area, by the name of the area, for the areas that do
  *                          not belong to the municipality a run is started for. The errands are still created in that
  *                          municipality, with the municipality of the place as a parameter (decision 19).
- * @param decisionAdAccount the AD account the decisions of the permits are written with, since SupportManagement takes
- *                          a manual decision only from an AD account (decision 70); without one a real run with permits
- *                          does not start
+ * @param decisionAdAccount the AD account the decisions of the permits and the approvals of the notifications are
+ *                          written with, since SupportManagement takes a manual decision only from an AD account
+ *                          (decisions 70 and 108); without one a real run of errands that get decisions does not start
  * @param jsonParameters    the JSON parameters the migration writes, by the name of their type, such as
  *                          "alcohol-party-asset" for the posts in PartyAssets of the alcohol schema (decision 87) and
  *                          "alcohol-decision" for the decisions of the serving permits (decision 92)
@@ -176,9 +176,10 @@ public record AotLoaderProperties(
 	 * @param onlyPlacesWithPermit for inspection errands and visits, true to migrate only those of places with a current
 	 *                             permit
 	 *                             (section 7.7)
-	 * @param decisionType         for permits, the type of the decision their errands get, the one Draken gives a decision
-	 *                             on a permit of the kind; blank gives the errands no decision (decision 70)
-	 * @param decisionTitle        for permits, the heading of that decision, as Draken heads it (decision 70)
+	 * @param decisionType         for permits and notifications, the type of the decision their errands get, the one
+	 *                             Draken or pw-alkt gives an errand of the kind; blank gives the errands no decision
+	 *                             (decisions 70 and 108)
+	 * @param decisionTitle        the heading of that decision, as Draken or pw-alkt heads it (decisions 70 and 108)
 	 */
 	public record ErrandTypeSettings(
 		String category,
@@ -200,7 +201,8 @@ public record AotLoaderProperties(
 		}
 
 		/**
-		 * @return true when the errands of the type get the decision their permit was granted by (decision 70)
+		 * @return true when the errands of the type get the decision their permit was granted by (decision 70), or the
+		 *         approval of their notification (decision 108)
 		 */
 		public boolean withDecision() {
 			return decisionType != null && !decisionType.isBlank();
