@@ -36,14 +36,6 @@ public record AssetData(String titleSuffix, String description, LocalDate issued
 	}
 
 	/**
-	 * A post without documents that state its legal basis.
-	 */
-	public AssetData(final String titleSuffix, final String description, final LocalDate issued, final LocalDate validTo, final AssetSchema schema, final ObjectNode content,
-		final List<String> omitted) {
-		this(titleSuffix, description, issued, validTo, schema, content, omitted, null, List.of());
-	}
-
-	/**
 	 * @return a copy of the JSON parameter, which the caller may change
 	 */
 	@Override

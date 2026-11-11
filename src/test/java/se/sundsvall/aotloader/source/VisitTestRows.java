@@ -15,6 +15,13 @@ public final class VisitTestRows {
 	private VisitTestRows() {}
 
 	/**
+	 * @return no visits at all
+	 */
+	public static InspectionVisitRows none() {
+		return new InspectionVisitRows(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+	}
+
+	/**
 	 * @return a visit without handlers or marks about the staff, outside a round of inspection, without marks of what it
 	 *         covered and without an end day
 	 */

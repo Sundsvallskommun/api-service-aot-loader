@@ -71,6 +71,7 @@ import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.support.JsonFields;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SystemUnavailableException;
 import se.sundsvall.dept44.problem.Problem;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -169,7 +170,7 @@ class ItemMigratorTest {
 		final var permit = TestData.permitWithoutFiles("1");
 		final var asset = permit.asset();
 		final var candidate = permit.withAsset(new AssetData(asset.titleSuffix(), asset.description(), asset.issued(), asset.validTo(), asset.schema(), asset.content(),
-			List.of("premises.emailAddress: har inte formen av en e-postadress", "servingArea.seatsIndoor: inte ett heltal")));
+			List.of("premises.emailAddress: har inte formen av en e-postadress", "servingArea.seatsIndoor: inte ett heltal"), null, List.of()));
 
 		assertThat(migrator.process(candidate, context(true)).detail())
 			.isEqualTo("Utelämnat i JSON-parametern i PartyAssets, eftersom det inte följer schemat: premises.emailAddress: har inte formen av en e-postadress; "
@@ -356,6 +357,22 @@ class ItemMigratorTest {
 	}
 
 	@Test
+	void aPersonPartyCouldNotBeAskedAboutFailsTheItemBeforeTheExceptionListIsRead() {
+		when(party.getPartyId(MUNICIPALITY_ID, TestData.PERSON_ID)).thenThrow(new SystemUnavailableException("Party gick inte att nå (RetryableException); uppslaget görs om i nästa körning"));
+
+		final var result = migrator.process(TestData.permitWithoutFiles("1"), context(false));
+
+		// Not G30, which an exception would let through, so that a passing failure does not add the person without partyId
+		verify(exceptionRepository, never()).findByKey(any());
+		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
+		assertThat(result.rules()).isEmpty();
+		assertThat(result.detail()).isEqualTo("Steg Tillståndshavare: Party gick inte att nå (RetryableException); uppslaget görs om i nästa körning");
+		assertThat(result.systemUnavailable()).isTrue();
+		assertThat(savedStatuses).containsExactly(ItemStatus.FEL);
+		verify(supportManagement, never()).createErrand(anyString(), any());
+	}
+
+	@Test
 	void aPartyLookupThatFailsIsAnError() {
 		when(party.getPartyId(MUNICIPALITY_ID, TestData.HOLDER_ID)).thenThrow(new MigrationException("Uppslaget i Party misslyckades (502 BAD_GATEWAY)"));
 
@@ -363,6 +380,7 @@ class ItemMigratorTest {
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
 		assertThat(result.detail()).isEqualTo("Steg Tillståndshavare: Uppslaget i Party misslyckades (502 BAD_GATEWAY)");
+		assertThat(result.systemUnavailable()).isFalse();
 		assertThat(savedStatuses).containsExactly(ItemStatus.FEL);
 	}
 
@@ -490,8 +508,10 @@ class ItemMigratorTest {
 		// What the section establishes is its JSON parameter, where Draken reads it (decision 92)
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1", premisesParameter("Matsal"));
 		assertThat(section.getValue().getSectionKey()).isEqualTo("premises");
-		// The serving area is its text, which Draken shows on a migrated errand (decision 96), and it is not assessed
-		assertThat(section.getValue().getText()).isEqualTo("<p>Matsal</p>");
+		// The serving area is its text, which Draken shows on a migrated errand (decision 96), and it is not assessed, which
+		// the
+		// text tells (decision 113)
+		assertThat(section.getValue().getText()).isEqualTo("<p>Matsal</p><p>Bedömning ej gjord – migrerat ärende</p>");
 		assertThat(section.getValue().getAssessment()).isEqualTo("PENDING");
 		assertThat(section.getValue().getParameters()).isNull();
 	}
@@ -523,7 +543,8 @@ class ItemMigratorTest {
 		order.verify(supportManagement).createInvestigationSection(eq(MUNICIPALITY_ID), eq(ERRAND_ID), eq("investigation-1"), section.capture());
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-3", premisesParameter("Matsal"));
 		assertThat(section.getAllValues()).extracting(InvestigationSection::getSectionKey, InvestigationSection::getText, InvestigationSection::getAssessment)
-			.containsExactly(tuple("premises", "<p>Matsal och bar</p>", "PENDING"), tuple("premises", "<p>Matsal</p>", "PENDING"));
+			.containsExactly(tuple("premises", "<p>Matsal och bar</p><p>Bedömning ej gjord – migrerat ärende</p>", "PENDING"),
+				tuple("premises", "<p>Matsal</p><p>Bedömning ej gjord – migrerat ärende</p>", "PENDING"));
 		verify(supportManagement, never()).updateInvestigationSection(anyString(), anyString(), anyString(), anyString(), any());
 		verify(supportManagement, never()).getSectionJsonParameters(anyString(), anyString(), anyString(), anyString());
 		verify(supportManagement, never()).createInvestigation(anyString(), anyString(), any());
@@ -544,7 +565,7 @@ class ItemMigratorTest {
 		final var order = inOrder(supportManagement);
 		order.verify(supportManagement).deleteInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-1");
 		order.verify(supportManagement).createInvestigationSection(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", new InvestigationSection().sectionKey("premises")
-			.heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING").text("<p>Matsal och bar</p>"));
+			.heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING").text("<p>Matsal och bar</p><p>Bedömning ej gjord – migrerat ärende</p>"));
 		order.verify(supportManagement).writeSectionJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "section-2", premisesParameter("Matsal och bar"));
 	}
 
@@ -1272,6 +1293,8 @@ class ItemMigratorTest {
 
 		assertThat(result.outcome()).isEqualTo(Outcome.FEL);
 		assertThat(result.detail()).isEqualTo("Steg Bilagor: Filarean för AlkT gick inte att läsa");
+		// As every item with files would fail the same way, it counts towards stopping the run
+		assertThat(result.systemUnavailable()).isTrue();
 	}
 
 	@Test
@@ -2004,7 +2027,7 @@ class ItemMigratorTest {
 	 */
 	private static InvestigationSection premisesSectionWritten(final String servingArea) {
 		return new InvestigationSection().id("section-1").sectionKey("premises").heading("Lokal och serveringsställe").sortOrder(5).assessment("PENDING")
-			.text("<p>" + servingArea + "</p>");
+			.text("<p>" + servingArea + "</p><p>Bedömning ej gjord – migrerat ärende</p>");
 	}
 
 	private static JsonContent protocol(final String businessName) {

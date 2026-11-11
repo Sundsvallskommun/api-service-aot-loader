@@ -45,7 +45,7 @@ class PersonalDataTest {
 		final var file = new FileReference("Intyg " + NAME + " " + NUMBER + ".pdf", FileReference.FileFolder.ATTACHMENTS);
 		assertHidden(new Candidate.CandidateFiles(List.of(file), List.of(new AssetFile(file, null)), Map.of(file, FileDetails.NONE)));
 		assertHidden(new AssetData(null, "Tillstånd", null, null, AssetSchema.ALCOHOL, JsonFields.object()
-			.object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode(), List.of()));
+			.object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode(), List.of(), null, List.of()));
 		assertHidden(JsonFields.object().text("firstName", NAME).text("dateOfBirth", NUMBER));
 		final var holderFields = JsonFields.object().object("permitHolder", JsonFields.object().text("name", NAME).text("organizationNumber", NUMBER)).toNode();
 		assertHidden(new DecisionData(NAME, NAME, LocalDateTime.of(2019, 4, 30, 9, 0), null, NAME, null, null, List.of(NAME), List.of()).withCase(NUMBER, NAME)
@@ -77,13 +77,13 @@ class PersonalDataTest {
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), InspectionVisitRows.empty()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), VisitTestRows.none()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
 		assertHidden(new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("KA", NAME)));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1, new Invoicing(NAME, null, null, null, NAME)));
 		assertHidden(new Invoicing(NAME, NAME, NUMBER, NAME, NAME));
 		assertHidden(new Place(NAME, NAME, NUMBER, NAME, NUMBER, NAME, null, NUMBER, new Invoicing(NAME, NAME, NUMBER, NAME, NAME)));
-		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()), InspectionVisitRows.empty()));
+		assertHidden(new AlkolSnapshot(List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(), new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()), VisitTestRows.none()));
 		final var visit = VisitTestRows.visit(1, 1, null, null, null, null, NAME + " " + NUMBER, null, null, List.of(NAME), null);
 		final var remark = new RemarkRow(1, "05", NAME + " " + NUMBER, null);
 		final var round = new RoundRow(1, NAME, null, null, NAME + " " + NUMBER);
@@ -105,7 +105,7 @@ class PersonalDataTest {
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), InspectionVisitRows.empty());
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), VisitTestRows.none());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");

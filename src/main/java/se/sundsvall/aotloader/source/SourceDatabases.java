@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Locale;
@@ -32,6 +33,7 @@ public class SourceDatabases implements DisposableBean {
 
 	private static final int MAX_POOL_SIZE = 2;
 	private static final long CONNECTION_TIMEOUT_MILLIS = 30_000;
+	private static final Duration SOCKET_TIMEOUT_MARGIN = Duration.ofMinutes(1);
 	// SQLServerConnection.TRANSACTION_SNAPSHOT, which java.sql.Connection has no constant for
 	static final int SNAPSHOT_ISOLATION = 0x1000;
 	private static final String SELECT_SNAPSHOT_ALLOWED = "SELECT snapshot_isolation_state FROM sys.databases WHERE name = DB_NAME()";
@@ -160,7 +162,7 @@ public class SourceDatabases implements DisposableBean {
 		dataSources.clear();
 	}
 
-	private static HikariDataSource createDataSource(final Source source, final Database database) {
+	static HikariDataSource createDataSource(final Source source, final Database database) {
 		final var config = new HikariConfig();
 		config.setPoolName(source.name().toLowerCase(Locale.ROOT) + "-source");
 		config.setJdbcUrl(database.url());
@@ -174,6 +176,9 @@ public class SourceDatabases implements DisposableBean {
 		config.setMaximumPoolSize(MAX_POOL_SIZE);
 		config.setMinimumIdle(0);
 		config.setConnectionTimeout(CONNECTION_TIMEOUT_MILLIS);
+		// The query timeout does not end a read whose connection is lost half way, as when the VPN goes, which would
+		// otherwise hold the run until the application is restarted
+		config.addDataSourceProperty("socketTimeout", String.valueOf(database.queryTimeout().plus(SOCKET_TIMEOUT_MARGIN).toMillis()));
 		// The pool opens no connection until the first query, so a source that cannot be reached fails that query, not the
 		// start of the application
 		config.setInitializationFailTimeout(-1);

@@ -98,7 +98,7 @@ class AssetFileUploader {
 	/**
 	 * @return                    the number of files for the post in PartyAssets that are to be put there and are not on it
 	 *                            yet
-	 * @throws MigrationException when the file area cannot be read
+	 * @throws MigrationException when the file area or a file of the post cannot be read
 	 */
 	int missingOnAsset(final Candidate candidate, final RunContext context, final String municipalityId, final String partyAssetsId) {
 		if (candidate.files().onPost().isEmpty()) {
@@ -109,6 +109,10 @@ class AssetFileUploader {
 		var missing = 0;
 		for (final var file : candidate.files().onPost()) {
 			final var lookup = ItemFiles.find(fileArea, file.reference(), candidate);
+			// A file that cannot be read now may be missing, as the step that uploads it would fail on it
+			if (lookup.result() == FileArea.LookupResult.UNREADABLE) {
+				throw ItemFiles.unreadable(candidate);
+			}
 			final var onFileArea = new AttachedFile(lookup.name(), null, (int) lookup.size());
 			if (FileProblem.of(file.reference(), lookup).isEmpty() && attached.stream().noneMatch(onFileArea::isSameAs)) {
 				missing++;

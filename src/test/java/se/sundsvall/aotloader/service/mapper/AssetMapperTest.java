@@ -117,7 +117,7 @@ class AssetMapperTest {
 				"legalBasis":"8 kap. 2 § alkohollagen (2010:1622)"},"premises":{"municipalityId":"2281"}}""");
 		});
 		final var tobacco = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
-			.asset(new AssetData(null, "Tobakstillstånd", null, null, AssetSchema.TOBACCO, null, List.of()))
+			.asset(new AssetData(null, "Tobakstillstånd", null, null, AssetSchema.TOBACCO, null, List.of(), null, List.of()))
 			.decision(candidate.decision())
 			.build();
 		assertThat(mapper.toDecisionContent(tobacco, MUNICIPALITY_ID, ERRAND_ID, null)).map(JsonContent::type).contains(JsonParameterType.TOBACCO_DECISION);
@@ -163,7 +163,7 @@ class AssetMapperTest {
 	void toAssetShortensTheDescriptionAndAddsTheTitleSuffix() {
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKOL, TILLSTAND, "1"), ErrandType.TOBACCO_PERMIT)
 			.asset(new AssetData("detaljhandel", "Tobakstillstånd för " + "b".repeat(300), LocalDate.of(2020, 1, 1), LocalDate.of(2030, 1, 1), AssetSchema.TOBACCO,
-				JsonFields.object().texts("conditions", List.of("v".repeat(300))).toNode(), List.of()))
+				JsonFields.object().texts("conditions", List.of("v".repeat(300))).toNode(), List.of(), null, List.of()))
 			.build();
 
 		final var asset = mapper.toAsset(candidate, MUNICIPALITY_ID, ERRAND_ID, "party-id", true, null);

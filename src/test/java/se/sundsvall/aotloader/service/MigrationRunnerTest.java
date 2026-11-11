@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -205,6 +206,26 @@ class MigrationRunnerTest {
 		assertThat(run.getMessage()).isEqualTo("Gränsen på 1 ärenden nåddes; resten tas i nästa körning");
 		// The item the limit kept from being written is listed, so that the report shows it is left
 		assertThat(lines).extracting(RunItemEntity::getSourceId, RunItemEntity::getOutcome).containsExactly(tuple("1", Outcome.MIGRERAD), tuple("2", Outcome.EJ_KORD));
+	}
+
+	@Test
+	void aRunStopsAfterItemsInARowFailedSinceASystemCouldNotBeReached() {
+		final var permits = IntStream.rangeClosed(1, 10).mapToObj(String::valueOf).map(TestData::permit).toList();
+		when(alktReader.read(Set.of(TILLSTAND))).thenReturn(new ReaderResult(permits, List.of()));
+		final var unavailable = new ItemResult(Outcome.FEL, List.of(), "Steg Ärende: Party gick inte att nå", null, true);
+		final var otherError = new ItemResult(Outcome.FEL, List.of(), "Steg Ärende: 502", null);
+		// One that fails otherwise starts the count again
+		when(migrator.process(any(), any())).thenReturn(unavailable, unavailable, otherError, unavailable, unavailable, unavailable, unavailable, unavailable);
+		final var run = run(false, null);
+
+		runner.execute(run, Map.of(Source.ALKT, Set.of(TILLSTAND)), Optional.empty());
+
+		assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+		assertThat(run.getMessage()).isEqualTo(
+			"Körningen stoppades efter 5 ärenden i rad som inte kunde migreras för att ett system inte gick att nå. Den fortsätter där den slutade när den startas igen");
+		// The items after are left for the next run
+		verify(migrator, times(8)).process(any(), any());
+		assertThat(lines).hasSize(8);
 	}
 
 	@Test

@@ -1,6 +1,8 @@
 package se.sundsvall.aotloader.service;
 
+import jakarta.annotation.PreDestroy;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,9 +14,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -52,6 +57,9 @@ import static se.sundsvall.aotloader.configuration.ExecutorConfiguration.MIGRATI
 @Service
 public class MigrationService {
 
+	private static final Logger LOG = LoggerFactory.getLogger(MigrationService.class);
+	private static final Duration SHUTDOWN_WAIT = Duration.ofMinutes(2);
+
 	private final MigrationRunner runner;
 	private final CleanupRunner cleanupRunner;
 	private final RunLock lock;
@@ -72,6 +80,27 @@ public class MigrationService {
 		this.runItemRepository = runItemRepository;
 		this.itemRepository = itemRepository;
 		this.clock = clock;
+	}
+
+	/**
+	 * Lets a run or cleanup in progress finish its item when the application stops: asks it to stop before its next item
+	 * and waits for it up to two minutes. One that has not stopped by then is interrupted, which may cut its item off half
+	 * way; the next run continues the item.
+	 */
+	@PreDestroy
+	void stopBeforeShutdown() {
+		lock.holder().ifPresent(runId -> {
+			runner.requestStop(runId);
+			cleanupRunner.requestStop(runId);
+		});
+		executor.shutdown();
+		try {
+			if (!executor.awaitTermination(SHUTDOWN_WAIT.toSeconds(), TimeUnit.SECONDS)) {
+				LOG.warn("The run did not stop within {} of the shutdown and is interrupted", SHUTDOWN_WAIT);
+			}
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	/**

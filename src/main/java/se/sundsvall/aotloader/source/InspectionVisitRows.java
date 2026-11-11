@@ -45,13 +45,6 @@ public record InspectionVisitRows(
 	Map<String, String> handlerNames,
 	Map<Integer, RoundRow> rounds) {
 
-	/**
-	 * @return no visits at all
-	 */
-	public static InspectionVisitRows empty() {
-		return new InspectionVisitRows(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
-	}
-
 	@Override
 	public String toString() {
 		return "InspectionVisitRows[visits=" + visits.size() + "]";

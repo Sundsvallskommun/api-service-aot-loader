@@ -11,6 +11,7 @@ import se.sundsvall.aotloader.service.model.LegalId;
 import se.sundsvall.aotloader.service.model.PartyIds;
 import se.sundsvall.aotloader.service.model.RuleHit;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SystemUnavailableException;
 
 import static se.sundsvall.aotloader.service.model.ReviewRule.HOLDER_NOT_IN_PARTY;
 import static se.sundsvall.aotloader.service.model.ReviewRule.INSPECTION_HOLDER_NOT_IN_PARTY;
@@ -32,7 +33,9 @@ class PartyResolver {
 	 * Looks up the partyIds. A permit holder that Party does not know hits G10 and stops the item; the holder of an
 	 * inspection errand, often a former holder, hits G10 as information only and is added without partyId, and so is a
 	 * person. The report row counts the persons Party does not know and those whose number is missing or cannot be used,
-	 * unless the source marks them as foreign. A lookup of a person that fails hits G30, which stops the item for review.
+	 * unless the source marks them as foreign. A lookup of a person that Party answers with an error hits G30, which
+	 * stops the item for review. A lookup that could not reach Party fails the item, so that a later run looks the person
+	 * up again, and an exception for the item does not let a passing failure add the person without partyId.
 	 *
 	 * @param  candidate          the item
 	 * @param  municipalityId     the municipality the item belongs to
@@ -40,7 +43,7 @@ class PartyResolver {
 	 * @param  hits               the rule hits of the item, which the hits on Party are added to
 	 * @param  notes              the report row of the item
 	 * @return                    the partyIds found
-	 * @throws MigrationException when the lookup of the holder fails
+	 * @throws MigrationException when the lookup of the holder fails, or a lookup could not reach Party
 	 */
 	PartyIds resolve(final Candidate candidate, final String municipalityId, final RunContext context, final List<RuleHit> hits, final ReportNotes notes) {
 		final var holder = candidate.holder();
@@ -75,6 +78,8 @@ class PartyResolver {
 			final Optional<String> partyId;
 			try {
 				partyId = lookup(person.legalId(), municipalityId, context);
+			} catch (final SystemUnavailableException e) {
+				throw e;
 			} catch (final MigrationException e) {
 				// Unlike the holder's, a person's partyId is not needed to migrate the item, so the failure is a hit to review
 				failures.add(e.getMessage());

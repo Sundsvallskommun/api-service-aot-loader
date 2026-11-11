@@ -265,7 +265,7 @@ public final class TestData {
 			.description("Beskrivning")
 			.labelPath("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING")
 			.externalTag("diarienummer", "IAN-2019-" + objektId)
-			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, permitContent(objektId), List.of()));
+			.asset(new AssetData(null, "Serveringstillstånd för Restaurang " + objektId, LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, permitContent(objektId), List.of(), null, List.of()));
 	}
 
 	/**
@@ -293,7 +293,7 @@ public final class TestData {
 			.title(title)
 			.description("Beskrivning")
 			.labelPaths(LABELS.get(ErrandType.FOLKOL_SALES_NOTIFICATION))
-			.asset(new AssetData(null, "Anmälan om försäljning av folköl på Butik " + fsId, notified, null, AssetSchema.ALCOHOL, null, List.of()))
+			.asset(new AssetData(null, "Anmälan om försäljning av folköl på Butik " + fsId, notified, null, AssetSchema.ALCOHOL, null, List.of(), null, List.of()))
 			.decision(new DecisionData("Uppgift saknas i AlkOL", null, notified.atStartOfDay(), title, null, notified, null, List.of(), List.of()))
 			.build();
 	}

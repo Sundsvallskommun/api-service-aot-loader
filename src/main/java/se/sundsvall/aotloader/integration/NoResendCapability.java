@@ -8,8 +8,12 @@ import feign.RetryableException;
 import feign.Retryer;
 import feign.okhttp.OkHttpClient;
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.X509TrustManager;
+import okhttp3.ConnectionPool;
 import se.sundsvall.dept44.security.Truststore;
 
 import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
@@ -26,12 +30,19 @@ import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
  * request refused with 401, which changed nothing, and the capability keeps any retryer from sending a request
  * that may have changed something again after an IO error.</li>
  * </ul>
+ * A read, which changes nothing, is sent again twice after a broken connection, as on a connection the gateway closed
+ * while it was idle, but not after a timeout, which would only wait as long again. Idle connections are let go after
+ * 30 seconds, before the gateway closes them, and a write of the body of a large file may stall for a minute.
+ * <p>
  * It is added to a client through {@link NoResend}, never as a bean of its own.
  */
 public class NoResendCapability implements Capability {
 
 	private static final Set<HttpMethod> SAFE_METHODS = Set.of(HttpMethod.GET, HttpMethod.HEAD, HttpMethod.OPTIONS);
 	private static final String RETRY_AFTER = "Retry-After";
+	private static final int MAX_IDLE_CONNECTIONS = 5;
+	private static final Duration IDLE_CONNECTION_KEPT = Duration.ofSeconds(30);
+	private static final Duration WRITE_TIMEOUT = Duration.ofMinutes(1);
 
 	private final Client client;
 
@@ -43,6 +54,8 @@ public class NoResendCapability implements Capability {
 			.retryOnConnectionFailure(false)
 			.followRedirects(false)
 			.followSslRedirects(false)
+			.connectionPool(new ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_CONNECTION_KEPT.toSeconds(), TimeUnit.SECONDS))
+			.writeTimeout(WRITE_TIMEOUT)
 			.addNetworkInterceptor(chain -> withoutRetryAfter(chain.request(), chain.proceed(chain.request())));
 		if (truststore != null) {
 			builder.sslSocketFactory(truststore.getSSLContext().getSocketFactory(), (X509TrustManager) truststore.getTrustManagerFactory().getTrustManagers()[0]);
@@ -79,20 +92,47 @@ public class NoResendCapability implements Capability {
 		return response;
 	}
 
-	record NoResendRetryer(Retryer delegate)
-		implements
-		Retryer {
+	/**
+	 * The retryer of a request: Feign clones one for each request, so it counts the times that request was sent again.
+	 */
+	static final class NoResendRetryer implements Retryer {
+
+		private static final long[] READ_PAUSES_MILLIS = {
+			100, 500
+		};
+
+		private final Retryer delegate;
+		private int readsSentAgain;
+
+		NoResendRetryer(final Retryer delegate) {
+			this.delegate = delegate;
+		}
 
 		@Override
 		public void continueOrPropagate(final RetryableException e) {
-			if (e.getCause() instanceof IOException && !SAFE_METHODS.contains(e.method())) {
-				throw e;
+			if (e.getCause() instanceof IOException) {
+				if (!SAFE_METHODS.contains(e.method())) {
+					throw e;
+				}
+				if (!(e.getCause() instanceof InterruptedIOException) && readsSentAgain < READ_PAUSES_MILLIS.length) {
+					pause(READ_PAUSES_MILLIS[readsSentAgain++], e);
+					return;
+				}
 			}
 			delegate.continueOrPropagate(e);
 		}
 
+		private static void pause(final long millis, final RetryableException e) {
+			try {
+				Thread.sleep(millis);
+			} catch (final InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
+				throw e;
+			}
+		}
+
 		@Override
-		public Retryer clone() { // NOSONAR java:S2975 java:S1182, the Retryer of Feign requires clone, and a record copies by its constructor
+		public Retryer clone() { // NOSONAR java:S2975 java:S1182, the Retryer of Feign requires clone, and a new one counts from the start
 			return new NoResendRetryer(delegate.clone());
 		}
 	}

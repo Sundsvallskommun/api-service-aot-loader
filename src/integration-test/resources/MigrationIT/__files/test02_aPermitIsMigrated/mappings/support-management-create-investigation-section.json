@@ -34,7 +34,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.text",
-					"equalTo": "<p>Matsal och bar</p>"
+					"equalTo": "<p>Matsal och bar</p><p>Bedömning ej gjord – migrerat ärende</p>"
 				}
 			},
 			{

@@ -91,13 +91,6 @@ public record AlktSnapshot(
 		return errandTexts.getOrDefault(arendeId, emptyList());
 	}
 
-	/**
-	 * @return the events of the place that have no errand, in the order of their ids
-	 */
-	public List<PlaceEventRow> placeEventsOf(final Integer objektId) {
-		return placeEvents.getOrDefault(objektId, emptyList());
-	}
-
 	public List<PersonRow> personsOf(final Integer agarId) {
 		return persons.getOrDefault(agarId, emptyList());
 	}

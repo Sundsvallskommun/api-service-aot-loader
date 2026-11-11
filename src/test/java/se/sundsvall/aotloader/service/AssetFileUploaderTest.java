@@ -36,6 +36,7 @@ import se.sundsvall.aotloader.source.FilePurposes;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SystemUnavailableException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -99,6 +100,21 @@ class AssetFileUploaderTest {
 	}
 
 	@Test
+	void aFileOfThePostThatCannotBeReadIsNotCountedAsThere() {
+		final var gone = new FileReference("borta.pdf", ATTACHMENTS);
+		final var fileArea = mock(FileArea.class);
+		when(fileArea.find(gone)).thenReturn(new FileArea.Lookup(LookupResult.UNREADABLE, "borta.pdf", attachments.resolve("borta.pdf"), 0));
+		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
+		final var candidate = withAssetFiles(new AssetFile(gone, "Ritning"));
+		final var context = context(fileArea);
+
+		// It may be missing, so that a post an earlier run left EXPIRED for a file is not taken as finished
+		assertThatThrownBy(() -> uploader.missingOnAsset(candidate, context, MUNICIPALITY_ID, ASSET_ID))
+			.isInstanceOf(MigrationException.class)
+			.hasMessage("Filer på filarean för AlkT gick inte att läsa och laddas upp i nästa körning");
+	}
+
+	@Test
 	void theFilesOfThePostGoThereInTheirCategoryOnceAndThoseTheErrandStepListsAreSkipped() throws IOException {
 		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
 		final var candidate = withAssetFiles(
@@ -143,7 +159,7 @@ class AssetFileUploaderTest {
 		Files.writeString(attachments.resolve("ritning.pdf"), "ritning");
 		final var drawing = new FileReference("ritning.pdf", ATTACHMENTS);
 		final var candidate = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
-			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of(), null, List.of()))
 			.files(List.of(drawing))
 			.assetFiles(List.of(new AssetFile(drawing, "Ritning")))
 			.fileDetails(Map.of(drawing, new FileDetails(FilePurposes.FLOOR_PLAN, null)))
@@ -162,7 +178,7 @@ class AssetFileUploaderTest {
 	void aFileTheExpiredPostOfANotificationRefusesSpeaksOfTheNotification() {
 		final var reference = new FileReference("ansokan.pdf", ATTACHMENTS);
 		final var notification = Candidate.builder(new ItemKey(Source.ALKOL, Kind.ANMALAN, "1-FOLKOL"), ErrandType.FOLKOL_SALES_NOTIFICATION)
-			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
+			.asset(new AssetData(null, "Anmälan", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of(), null, List.of()))
 			.files(List.of(reference), List.of(new AssetFile(reference, null)), Map.of())
 			.build();
 		when(partyAssets.getAttachments(MUNICIPALITY_ID, ASSET_ID)).thenReturn(List.of());
@@ -227,7 +243,7 @@ class AssetFileUploaderTest {
 		final var notes = new ReportNotes();
 
 		assertThatThrownBy(() -> uploader.uploadToAsset(candidate, context, MUNICIPALITY_ID, ASSET_ID, notes))
-			.isInstanceOf(MigrationException.class)
+			.isInstanceOf(SystemUnavailableException.class)
 			.hasMessage("Filarean för AlkT gick inte att läsa");
 		verify(partyAssets, never()).createAttachment(anyString(), anyString(), anyString(), any(), anyString());
 	}
@@ -237,7 +253,7 @@ class AssetFileUploaderTest {
 	 */
 	private static Candidate withAssetFiles(final AssetFile... files) {
 		return Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT)
-			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of()))
+			.asset(new AssetData(null, "Serveringstillstånd", LocalDate.of(2019, 5, 1), null, AssetSchema.ALCOHOL, null, List.of(), null, List.of()))
 			.files(Arrays.stream(files).map(AssetFile::reference).toList())
 			.assetFiles(List.of(files))
 			.build();

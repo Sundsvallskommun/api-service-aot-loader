@@ -63,6 +63,8 @@ public class TargetMapper {
 	private static final int INVESTIGATION_TITLE_MAX_LENGTH = 255;
 	private static final int SECTION_HEADING_MAX_LENGTH = 255;
 	private static final String SECTION_NOT_ASSESSED = "PENDING";
+	// Draken shows the assessment of a migrated section as its code, which says nothing of why (decision 113)
+	private static final String SECTION_NOT_ASSESSED_NOTE = "Bedömning ej gjord – migrerat ärende";
 	private static final String MEASURE_COMPLETED = "COMPLETED";
 	private static final int MEASURE_TITLE_MAX_LENGTH = 255;
 	private static final int MEASURE_DESCRIPTION_MAX_LENGTH = 3000;
@@ -192,9 +194,10 @@ public class TargetMapper {
 
 	/**
 	 * @return the section of the investigation as Draken shows it on a migrated errand (decision 96): its heading, its
-	 *         place, and what the source says as its text in HTML, one paragraph per line. It is not assessed, as Draken
-	 *         writes a section when it starts an investigation, since the source has no assessment and SupportManagement
-	 *         requires one. What it establishes it gets as its JSON parameter
+	 *         place, and as its text in HTML what the source says, one paragraph per line, and a paragraph that tells that
+	 *         it was not assessed, as the errand is migrated (decision 113). It is not assessed, as Draken writes a section
+	 *         when it starts an investigation, since the source has no assessment and SupportManagement requires one. What
+	 *         it establishes it gets as its JSON parameter
 	 */
 	public static InvestigationSection toInvestigationSection(final InvestigationData.Section section) {
 		return new InvestigationSection()
@@ -202,7 +205,7 @@ public class TargetMapper {
 			.heading(Texts.truncate(section.heading(), SECTION_HEADING_MAX_LENGTH, null))
 			.sortOrder(section.sortOrder())
 			.assessment(SECTION_NOT_ASSESSED)
-			.text(Texts.paragraphs(section.text()));
+			.text(Texts.paragraphs(section.text() == null ? SECTION_NOT_ASSESSED_NOTE : section.text() + "\n" + SECTION_NOT_ASSESSED_NOTE));
 	}
 
 	/**

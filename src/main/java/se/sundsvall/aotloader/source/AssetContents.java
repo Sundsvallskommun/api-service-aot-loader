@@ -198,14 +198,6 @@ public final class AssetContents {
 	}
 
 	/**
-	 * Names a field that is left out, and why.
-	 */
-	public AssetContents omit(final String path, final String why) {
-		omissions.omit(path, why);
-		return this;
-	}
-
-	/**
 	 * @return what the source has but is left out, since it does not follow the schema, as the path of the field and why
 	 */
 	public List<String> omitted() {

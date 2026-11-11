@@ -10,6 +10,7 @@ import feign.RequestLine;
 import feign.Response;
 import feign.RetryableException;
 import feign.Retryer;
+import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,6 +32,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,9 +85,22 @@ class ClientSafetyTest {
 		assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);
 
 		assertThat(server.findAll(postRequestedFor(urlEqualTo("/errands")))).hasSize(1);
-		// The retryer of dept44 sends again only a request refused with 401
-		assertThat(server.findAll(getRequestedFor(urlEqualTo("/errands")))).hasSize(1);
+		// A read, which changes nothing, is sent again twice; the retryer of dept44 sends again only a request refused with 401
+		assertThat(server.findAll(getRequestedFor(urlEqualTo("/errands")))).hasSize(3);
 		assertThat(evictedTokens).hasValue(0);
+	}
+
+	@Test
+	void aReadSentAgainAfterABrokenConnectionGetsItsAnswer() {
+		final Client brokenOnce = (request, _) -> {
+			if (calls.incrementAndGet() == 1) {
+				throw new IOException("unexpected end of stream");
+			}
+			return Response.builder().status(200).reason("OK").request(request).headers(Map.of()).body("svar", UTF_8).build();
+		};
+
+		assertThat(api(brokenOnce).find()).isEqualTo("svar");
+		assertThat(calls).hasValue(2);
 	}
 
 	@Test
@@ -152,7 +167,25 @@ class ClientSafetyTest {
 	}
 
 	@Test
-	void aReadIsNotSentAgainAfterAnIoErrorEither() {
+	void aReadIsNotSentAgainWhenItsThreadIsInterrupted() {
+		final Client broken = (_, _) -> {
+			calls.incrementAndGet();
+			throw new IOException("unexpected end of stream");
+		};
+		final var api = api(broken);
+		Thread.currentThread().interrupt();
+		try {
+			assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);
+			assertThat(calls).hasValue(1);
+			// The interruption is kept for the run that is stopping
+			assertThat(Thread.currentThread().isInterrupted()).isTrue();
+		} finally {
+			Thread.interrupted();
+		}
+	}
+
+	@Test
+	void aReadIsNotSentAgainAfterATimeout() {
 		final var api = api(timingOut());
 
 		assertThatThrownBy(api::find).isInstanceOf(RetryableException.class);

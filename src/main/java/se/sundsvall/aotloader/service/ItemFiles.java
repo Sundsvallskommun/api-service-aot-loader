@@ -8,6 +8,7 @@ import se.sundsvall.aotloader.service.model.FileReference;
 import se.sundsvall.aotloader.source.files.FileArea;
 import se.sundsvall.aotloader.source.files.FileArea.LookupResult;
 import se.sundsvall.aotloader.support.MigrationException;
+import se.sundsvall.aotloader.support.SystemUnavailableException;
 
 /**
  * Finds and reads the files of an item in the file area of its source, and reports those that are not uploaded, for the
@@ -24,14 +25,22 @@ final class ItemFiles {
 	/**
 	 * Looks a file up in the file area of the candidate's source.
 	 *
-	 * @throws MigrationException when the file area cannot be read
+	 * @throws SystemUnavailableException when the file area cannot be read
 	 */
 	static FileArea.Lookup find(final FileArea fileArea, final FileReference reference, final Candidate candidate) {
 		final var lookup = fileArea.find(reference);
 		if (lookup.result() == LookupResult.DIRECTORY_UNAVAILABLE) {
-			throw new MigrationException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
+			throw new SystemUnavailableException("Filarean för %s gick inte att läsa".formatted(candidate.key().source().getDisplayName()));
 		}
 		return lookup;
+	}
+
+	/**
+	 * @return the failure of a step that could not read a file of the item, often only for a while, as when the share is
+	 *         busy or the file is open, so that the next run takes the file
+	 */
+	static MigrationException unreadable(final Candidate candidate) {
+		return new MigrationException("Filer på filarean för %s gick inte att läsa och laddas upp i nästa körning".formatted(candidate.key().source().getDisplayName()));
 	}
 
 	/**
@@ -60,7 +69,7 @@ final class ItemFiles {
 	void reportAndFailOnUnreadable(final FileProblems problems, final ReportNotes notes, final Candidate candidate) {
 		problems.report(notes, maxFileSizeText());
 		if (problems.has(FileProblem.UNREADABLE)) {
-			throw new MigrationException("Filer på filarean för %s gick inte att läsa och laddas upp i nästa körning".formatted(candidate.key().source().getDisplayName()));
+			throw unreadable(candidate);
 		}
 	}
 

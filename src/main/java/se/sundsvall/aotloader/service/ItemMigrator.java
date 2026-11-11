@@ -30,6 +30,7 @@ import se.sundsvall.aotloader.service.model.Step;
 import se.sundsvall.aotloader.support.ErrorTexts;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.SourceValues;
+import se.sundsvall.aotloader.support.SystemUnavailableException;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.ERRAND_NUMBER_MAX_LENGTH;
@@ -547,7 +548,8 @@ public class ItemMigrator {
 				saveFailure(message);
 			}
 			notes.lineFirst("Steg " + step.getDisplayName(candidate.key().kind()) + ": " + message);
-			return notes.result(Outcome.FEL, errandNumber());
+			final var result = notes.result(Outcome.FEL, errandNumber());
+			return SystemUnavailableException.isCauseOf(e) ? result.asSystemUnavailable() : result;
 		}
 
 		private void saveFailure(final String message) {

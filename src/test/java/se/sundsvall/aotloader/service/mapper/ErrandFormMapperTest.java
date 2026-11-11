@@ -281,7 +281,7 @@ class ErrandFormMapperTest {
 			.place(place)
 			.files(List.copyOf(files.keySet()), List.of(), files);
 		if (type.isWithAsset()) {
-			builder.asset(new AssetData(null, "Anmälan", NOTIFIED, null, type.getAssetSchema(), null, List.of()));
+			builder.asset(new AssetData(null, "Anmälan", NOTIFIED, null, type.getAssetSchema(), null, List.of(), null, List.of()));
 		}
 		return builder.build();
 	}

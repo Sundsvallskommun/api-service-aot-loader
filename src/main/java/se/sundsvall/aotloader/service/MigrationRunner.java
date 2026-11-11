@@ -31,8 +31,9 @@ import se.sundsvall.aotloader.support.Texts;
 
 /**
  * Runs the migration: the checks before the run, then each source with its items in order, permits before notifications
- * before inspection errands. Nothing an item or a source does stops the run; a run that cannot go on is marked FAILED
- * with the reason, and the lock is always released by the caller.
+ * before inspection errands. Nothing a single item or a source does stops the run, but several items in a row that fail
+ * because a system they need could not be reached do, as the next ones would fail the same way. A run that cannot go on
+ * is marked FAILED with the reason, and the lock is always released by the caller.
  */
 @Component
 public class MigrationRunner {
@@ -40,6 +41,7 @@ public class MigrationRunner {
 	private static final Logger LOG = LoggerFactory.getLogger(MigrationRunner.class);
 	private static final String UNEXPECTED_ERROR = "Körningen avbröts av ett oväntat fel, som står i appens logg";
 	private static final int MAX_RULES_LENGTH = 255;
+	static final int MAX_UNAVAILABLE_IN_A_ROW = 5;
 
 	private final Map<Source, SourceReader> readers = new EnumMap<>(Source.class);
 	private final ItemMigrator migrator;
@@ -201,10 +203,11 @@ public class MigrationRunner {
 	}
 
 	/**
-	 * Migrates the selected items of a source.
+	 * Migrates the selected items of a source. The run stops when {@value #MAX_UNAVAILABLE_IN_A_ROW} items in a row, of
+	 * this source or the one before, have failed because a system they need could not be reached.
 	 *
 	 * @param  single true for the run of a single item, whose row is kept as its result
-	 * @return        false when the run was asked to stop
+	 * @return        false when the run was asked to stop, or stopped since the systems could not be reached
 	 */
 	private boolean migrateItems(final MigrationRunEntity run, final List<Candidate> candidates, final ItemSelection selection, final boolean single, final RunContext context,
 		final Progress progress) {
@@ -223,6 +226,12 @@ public class MigrationRunner {
 			progress.found.add(candidate.key());
 			if (single) {
 				progress.singleResult = line;
+			}
+			progress.unavailableInARow = result.systemUnavailable() ? progress.unavailableInARow + 1 : 0;
+			if (progress.unavailableInARow >= MAX_UNAVAILABLE_IN_A_ROW) {
+				progress.fail("Körningen stoppades efter %d ärenden i rad som inte kunde migreras för att ett system inte gick att nå. Den fortsätter där den slutade när den startas igen"
+					.formatted(progress.unavailableInARow));
+				return false;
 			}
 		}
 		return true;
@@ -277,5 +286,6 @@ public class MigrationRunner {
 		private final Set<ItemKey> found = new HashSet<>();
 		private boolean limitReached;
 		private RunItemEntity singleResult;
+		private int unavailableInARow;
 	}
 }
