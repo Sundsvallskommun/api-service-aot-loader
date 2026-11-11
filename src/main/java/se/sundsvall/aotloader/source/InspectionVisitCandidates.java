@@ -37,8 +37,9 @@ import static se.sundsvall.aotloader.source.CandidateTexts.line;
 /**
  * Builds the candidates of the inspection visits of a source, the same way for both sources (section 7.7.2): which
  * visits are migrated, and their rules, title, description and labels. The source does not tell which holder the place
- * had at the time of a visit, so its day relates it to the permit errand (decision 61), and a visit made while the
- * current permit held gets the holder of that permit (decision 103).
+ * had at the time of a visit, so its day relates it to the permit errand (decision 61), or before the current permit
+ * the earlier permits and owners of the place (decision 114), and a visit so related gets the holder of the permit
+ * (decision 103).
  */
 public final class InspectionVisitCandidates {
 
@@ -84,8 +85,9 @@ public final class InspectionVisitCandidates {
 
 	/**
 	 * Starts the candidate of a visit with what both sources give it. The source adds the rest, such as the files. A visit
-	 * made while the current permit held concerned the holder of that permit, the current owner, and gets it as its
-	 * holder, the same as relates the visit to the permit errand (decisions 61 and 103).
+	 * made while the current permit held, or before it while the earlier permits and owners of the place show the same
+	 * holder, concerned the holder of that permit, the current owner, and gets it as its holder, the same as relates the
+	 * visit to the permit errand (decisions 61, 103 and 114).
 	 *
 	 * @param  visit  the visit
 	 * @param  rows   the visits of the source, with the remarks and the code lists
@@ -120,7 +122,7 @@ public final class InspectionVisitCandidates {
 			.description(description(name, content))
 			.labelPaths(settings.labels())
 			.permitLink(permitLink)
-			.holder(owner == null || permitLink.basis() != PermitLink.Basis.AFTER_ISSUE ? null : PartyRows.holder(owner, today));
+			.holder(owner == null || !permitLink.basis().relates() ? null : PartyRows.holder(owner, today));
 	}
 
 	/**

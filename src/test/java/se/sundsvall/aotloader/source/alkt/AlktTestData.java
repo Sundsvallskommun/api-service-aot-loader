@@ -15,6 +15,8 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierOwnerRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierPermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
@@ -88,6 +90,8 @@ final class AlktTestData {
 		private final Map<Integer, List<RemarkRow>> remarks = new HashMap<>();
 		private final Map<Integer, List<String>> visitFiles = new HashMap<>();
 		private final Map<Integer, RoundRow> rounds = new HashMap<>();
+		private final Map<Integer, List<EarlierPermitRow>> earlierPermits = new HashMap<>();
+		private final Map<Integer, List<EarlierOwnerRow>> earlierOwners = new HashMap<>();
 		private int nextHandelseId = 10_000;
 
 		SnapshotBuilder permit(final PermitRow row) {
@@ -196,11 +200,22 @@ final class AlktTestData {
 			return this;
 		}
 
+		SnapshotBuilder earlierPermit(final EarlierPermitRow row) {
+			earlierPermits.computeIfAbsent(row.objektId(), _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
+		SnapshotBuilder earlierOwner(final EarlierOwnerRow row) {
+			earlierOwners.computeIfAbsent(row.objektId(), _ -> new ArrayList<>()).add(row);
+			return this;
+		}
+
 		AlktSnapshot build() {
 			final var texts = codeTexts();
 			return new AlktSnapshot(permits, places, owners, conditions, decisions, errands, files, placeEvents, unplacedFiles, documents, errandTexts, persons,
 				staff, applicants, texts,
-				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V"), Map.of("ABE", "Anna Berg"), rounds));
+				new InspectionVisitRows(visits, remarks, visitFiles, texts.get("L"), texts.get("V"), Map.of("ABE", "Anna Berg"), rounds),
+				earlierPermits, earlierOwners);
 		}
 	}
 

@@ -32,6 +32,8 @@ import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Drinks;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierOwnerRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierPermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ErrandRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.Period;
@@ -194,6 +196,21 @@ public class AlktRepository {
 		ORDER BY p.ObjektID, p.ObjPersID
 		""";
 
+	// The earlier permits and owners of the places show who held a place before its current permit (decision 114)
+	private static final String SELECT_EARLIER_PERMITS = """
+		SELECT t.ObjektID, t.Utfardande_Datum, t.AgarID, t.OrganisationsNr
+		FROM dbo.[Tidigare_Tillstånd] t
+		WHERE t.ObjektID IS NOT NULL
+		ORDER BY t.ObjektID, t.TidGTID
+		""";
+
+	private static final String SELECT_EARLIER_OWNERS = """
+		SELECT x.ObjektID, x.DatumFrom, x.DatumTom, x.OrganisationsNr
+		FROM dbo.[TidigareÄgare] x
+		WHERE x.ObjektID IS NOT NULL
+		ORDER BY x.ObjektID, x.XAgarID
+		""";
+
 	private static final String SELECT_APPLICANTS = """
 		SELECT s.SokandeID, s.OrganisationsNr, s.Bolagsnamn, s.KontaktPerson, s.GAdress, s.GAdress2, s.PNr, s.POrt,
 		       s.TelefonNr1, s.EMail
@@ -281,7 +298,11 @@ public class AlktRepository {
 			jdbc.query(SELECT_STAFF, (rs, _) -> new StaffRow(integer(rs, OBJEKT_ID), text(rs, "Namn"), text(rs, "Personnr"), date(rs, "FROMDatum"))).stream().collect(groupingBy(StaffRow::objektId)),
 			byKey(jdbc.query(SELECT_APPLICANTS, (rs, _) -> PartyRows.toApplicant(rs)), ContactRow::id),
 			codeTexts,
-			readVisits(jdbc, codeTexts));
+			readVisits(jdbc, codeTexts),
+			jdbc.query(SELECT_EARLIER_PERMITS, (rs, _) -> new EarlierPermitRow(integer(rs, OBJEKT_ID), date(rs, "Utfardande_Datum"), integer(rs, "AgarID"), text(rs, "OrganisationsNr")))
+				.stream().collect(groupingBy(EarlierPermitRow::objektId)),
+			jdbc.query(SELECT_EARLIER_OWNERS, (rs, _) -> new EarlierOwnerRow(integer(rs, OBJEKT_ID), date(rs, "DatumFrom"), date(rs, "DatumTom"), text(rs, "OrganisationsNr")))
+				.stream().collect(groupingBy(EarlierOwnerRow::objektId)));
 	}
 
 	private static InspectionVisitRows readVisits(final JdbcTemplate jdbc, final Map<String, Map<String, String>> codeTexts) {

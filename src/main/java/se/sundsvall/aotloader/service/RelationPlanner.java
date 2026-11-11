@@ -1,10 +1,12 @@
 package se.sundsvall.aotloader.service;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import se.sundsvall.aotloader.integration.db.MigrationItemRepository;
 import se.sundsvall.aotloader.integration.db.model.MigrationItemEntity;
 import se.sundsvall.aotloader.service.model.Candidate;
+import se.sundsvall.aotloader.service.model.HolderHistory;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.Kind;
@@ -87,6 +89,11 @@ class RelationPlanner {
 		return switch (basis) {
 			case FILED, SAME_HOLDER -> "Relation till " + errandText(permit.key());
 			case AFTER_ISSUE -> "Relation till tillståndsärendet %s, tillsynen gjordes efter att tillståndet utfärdades %s".formatted(permit.key(), SourceValues.format(permit.issued()));
+			case EARLIER_PERMIT -> "Relation till tillståndsärendet %s, tillsynen gjordes medan samma tillståndshavare hade ett tidigare tillstånd, utfärdat %s"
+				.formatted(permit.key(), SourceValues.format(evidenceDate(link)));
+			case OWNER_HISTORY -> Optional.ofNullable(evidenceDate(link))
+				.map(left -> "Relation till tillståndsärendet %s, tillsynen gjordes efter att den förra ägaren slutade %s".formatted(permit.key(), SourceValues.format(left)))
+				.orElseGet(() -> "Relation till tillståndsärendet %s, ägarhistoriken visar att stället hade samma ägare som nu när tillsynen gjordes".formatted(permit.key()));
 			case NO_PERMIT -> "Ingen relation: stället har inget gällande tillstånd";
 			case OTHER_HOLDER -> "Ingen relation: ärendet gällde en annan tillståndshavare än den som har tillståndet";
 			case NO_PERMIT_HOLDER -> "Ingen relation: det går inte att se vem som har tillståndet";
@@ -97,6 +104,14 @@ class RelationPlanner {
 				.formatted(SourceValues.format(permit.issued()));
 			case AFTER_END -> "Ingen relation: tillsynen gjordes efter att tillståndet upphörde %s".formatted(SourceValues.format(permit.ended()));
 		};
+	}
+
+	/**
+	 * @return the day the earlier permit was issued, or the last day of the latest other owner, that shows the holder of an
+	 *         inspection before the permit was issued (decision 114); null when there is none
+	 */
+	private static LocalDate evidenceDate(final PermitLink link) {
+		return link.earlierHolding().map(HolderHistory.Evidence::date).orElse(null);
 	}
 
 	/**

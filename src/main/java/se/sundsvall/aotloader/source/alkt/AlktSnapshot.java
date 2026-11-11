@@ -19,25 +19,28 @@ import static java.util.Collections.emptyMap;
  * What the migration reads from AlkT in one go: the tables it needs, in memory, so that rules that compare permits with
  * each other see all of them. It holds personal data and is never logged or stored.
  *
- * @param permits       the rows of Gällande_Tillstånd
- * @param places        the serving places by ObjektID
- * @param owners        the owners by AgarID
- * @param conditions    the conditions by ObjektID
- * @param decisions     the decisions by BeslutsID
- * @param errands       the errands by ArendeID
- * @param errandFiles   the files of the errands' events and pictures, by ArendeID
- * @param placeEvents   the events without an errand, each with its files, by the ObjektID of the event, in the order of
- *                      their ids; an event whose errand is missing counts as one without an errand (decision 71)
- * @param unplacedFiles the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
- *                      tell which file names are shared
- * @param documents     the documents AlkT generated at events, with the template each was made from
- * @param errandTexts   the events of the errands, also those without a text, and the texts of their pictures, by
- *                      ArendeID
- * @param persons       the active persons with significant influence, by AgarID
- * @param staff         the active serving staff of the places, by ObjektID (decision 79)
- * @param applicants    the applicants of the inspection errands, by SokandeID
- * @param codeTexts     the texts of the code lists, by code type and code
- * @param visits        the inspection visits, with the code lists of kinds and remarks (code types L and V)
+ * @param permits        the rows of Gällande_Tillstånd
+ * @param places         the serving places by ObjektID
+ * @param owners         the owners by AgarID
+ * @param conditions     the conditions by ObjektID
+ * @param decisions      the decisions by BeslutsID
+ * @param errands        the errands by ArendeID
+ * @param errandFiles    the files of the errands' events and pictures, by ArendeID
+ * @param placeEvents    the events without an errand, each with its files, by the ObjektID of the event, in the order
+ *                       of their ids; an event whose errand is missing counts as one without an errand (decision 71)
+ * @param unplacedFiles  the files of the events with neither an errand nor a place, by HandelseID; they go nowhere but
+ *                       tell which file names are shared
+ * @param documents      the documents AlkT generated at events, with the template each was made from
+ * @param errandTexts    the events of the errands, also those without a text, and the texts of their pictures, by
+ *                       ArendeID
+ * @param persons        the active persons with significant influence, by AgarID
+ * @param staff          the active serving staff of the places, by ObjektID (decision 79)
+ * @param applicants     the applicants of the inspection errands, by SokandeID
+ * @param codeTexts      the texts of the code lists, by code type and code
+ * @param visits         the inspection visits, with the code lists of kinds and remarks (code types L and V)
+ * @param earlierPermits the earlier permits of the places, Tidigare_Tillstånd, by ObjektID in the order of TidGTID
+ *                       (decision 114)
+ * @param earlierOwners  the earlier owners of the places, TidigareÄgare, by ObjektID (decision 114)
  */
 public record AlktSnapshot(
 	List<PermitRow> permits,
@@ -55,7 +58,9 @@ public record AlktSnapshot(
 	Map<Integer, List<StaffRow>> staff,
 	Map<Integer, ContactRow> applicants,
 	Map<String, Map<String, String>> codeTexts,
-	InspectionVisitRows visits) {
+	InspectionVisitRows visits,
+	Map<Integer, List<EarlierPermitRow>> earlierPermits,
+	Map<Integer, List<EarlierOwnerRow>> earlierOwners) {
 
 	public static final String CODE_TYPE_ERRAND = "A";
 	public static final String CODE_TYPE_DECISION = "B";
@@ -97,6 +102,14 @@ public record AlktSnapshot(
 
 	public List<StaffRow> staffOf(final Integer objektId) {
 		return staff.getOrDefault(objektId, emptyList());
+	}
+
+	public List<EarlierPermitRow> earlierPermitsOf(final Integer objektId) {
+		return earlierPermits.getOrDefault(objektId, emptyList());
+	}
+
+	public List<EarlierOwnerRow> earlierOwnersOf(final Integer objektId) {
+		return earlierOwners.getOrDefault(objektId, emptyList());
 	}
 
 	/**
@@ -244,6 +257,36 @@ public record AlktSnapshot(
 		@Override
 		public String toString() {
 			return "StaffRow[objektId=" + objektId + ", fromDatum=" + fromDatum + "]";
+		}
+	}
+
+	/**
+	 * A row of Tidigare_Tillstånd, an earlier permit of a place. Its number is only compared, never passed on.
+	 *
+	 * @param utfardandeDatum the day it was issued, Utfardande_Datum, null when unknown
+	 * @param agarId          the owner post of its holder, AgarID, null when none
+	 * @param organisationsNr the organisation or personal identity number of its holder, OrganisationsNr, null when blank
+	 */
+	public record EarlierPermitRow(Integer objektId, LocalDate utfardandeDatum, Integer agarId, String organisationsNr) {
+
+		@Override
+		public String toString() {
+			return "EarlierPermitRow[objektId=" + objektId + ", utfardandeDatum=" + utfardandeDatum + "]";
+		}
+	}
+
+	/**
+	 * A row of TidigareÄgare, an earlier owner of a place. Its number is only compared, never passed on.
+	 *
+	 * @param datumFrom       the first day of the owner, DatumFrom, null when unknown
+	 * @param datumTom        the last day of the owner, DatumTom, null when unknown
+	 * @param organisationsNr the organisation or personal identity number of the owner, OrganisationsNr, null when blank
+	 */
+	public record EarlierOwnerRow(Integer objektId, LocalDate datumFrom, LocalDate datumTom, String organisationsNr) {
+
+		@Override
+		public String toString() {
+			return "EarlierOwnerRow[objektId=" + objektId + ", datumFrom=" + datumFrom + ", datumTom=" + datumTom + "]";
 		}
 	}
 

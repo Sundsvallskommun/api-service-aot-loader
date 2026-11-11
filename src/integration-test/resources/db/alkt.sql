@@ -222,3 +222,11 @@ INSERT INTO dbo.Objektpersonal (ObjektID, Namn, Personnr, FROMDatum, PASSIV) VAL
 INSERT INTO dbo.Tillsyn_Servpers (TillsynsTillfalleNr, Namn, Personnr) VALUES (900, 'Olle Svensson', '800101-1234')
 UPDATE dbo.[Tillsyn_Tillfälle] SET ServPersEjpaPlats = 0 WHERE TillsynsTillfalleNr = 900
 GO
+-- The earlier permit of place 1, held by its current owner, and the former owner, who left before it, which show who
+-- held the place before its current permit (decision 114). Only the columns the migration reads
+CREATE TABLE dbo.[Tidigare_Tillstånd] (TidGTID int IDENTITY(1, 1) NOT NULL PRIMARY KEY, ObjektID int NULL, Utfardande_Datum datetime NULL, AgarID int NULL, OrganisationsNr varchar(12) NULL)
+CREATE TABLE dbo.[TidigareÄgare] (XAgarID int IDENTITY(1, 1) NOT NULL PRIMARY KEY, ObjektID int NULL, DatumFrom datetime NULL, DatumTom datetime NULL, OrganisationsNr varchar(12) NULL)
+GO
+INSERT INTO dbo.[Tidigare_Tillstånd] (ObjektID, Utfardande_Datum, AgarID, OrganisationsNr) VALUES (1, '2018-06-01', 10, NULL)
+INSERT INTO dbo.[TidigareÄgare] (ObjektID, DatumFrom, DatumTom, OrganisationsNr) VALUES (1, NULL, '2018-05-31', '556677-0001')
+GO

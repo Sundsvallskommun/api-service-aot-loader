@@ -38,6 +38,8 @@ import se.sundsvall.aotloader.source.VisitTestRows;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.ConditionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DecisionRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.DocumentRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierOwnerRow;
+import se.sundsvall.aotloader.source.alkt.AlktSnapshot.EarlierPermitRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.FileRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.PlaceEventRow;
 import se.sundsvall.aotloader.source.alkt.AlktSnapshot.StaffRow;
@@ -1272,6 +1274,38 @@ class AlktCandidateFactoryTest {
 		assertThat(withoutPlace.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Tillsynsomgång");
 		assertThat(JSON.writeValueAsString(withoutPlace.investigation().protocolFields().value())).isEqualTo("""
 			{"inspectionDate":"2022-03-01","visitStartTime":"09:15","visitEndTime":"10:00"}""");
+	}
+
+	@Test
+	void aVisitBeforeThePermitIsRelatedWhenTheEarlierPermitsOrOwnersShowTheHolder() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.permit(permit(2).build())
+			.permit(permit(3).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.place(place(3, 10, "12345670"))
+			.owner(owner(10, "556677-8899"))
+			// Another owner post with the same number, written without a hyphen
+			.owner(owner(11, "5566778899"))
+			// Place 1: an earlier permit without a number of its own, whose owner post has the number of the holder
+			.earlierPermit(new EarlierPermitRow(1, LocalDate.of(2015, 3, 1), 11, null))
+			// Place 2: the former owner left before the visit
+			.earlierOwner(new EarlierOwnerRow(2, null, LocalDate.of(2014, 12, 31), "559988-7766"))
+			// Place 3: the earlier permit was another holder's
+			.earlierPermit(new EarlierPermitRow(3, LocalDate.of(2015, 3, 1), null, "559988-7766"))
+			.visit(VisitTestRows.visit(910, 1, LocalDate.of(2016, 1, 1), null, null, "04", null, null, null))
+			.visit(VisitTestRows.visit(911, 2, LocalDate.of(2016, 1, 1), null, null, "04", null, null, null))
+			.visit(VisitTestRows.visit(912, 3, LocalDate.of(2016, 1, 1), null, null, "04", null, null, null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).visits().candidates();
+
+		// Every permit was issued in 2019, after the visits of 2016 (decision 114)
+		assertThat(candidates).extracting(candidate -> candidate.permitLink().basis()).containsExactly(Basis.EARLIER_PERMIT, Basis.OWNER_HISTORY, Basis.BEFORE_ISSUE);
+		// A visit so related concerned the holder of the permit, which it gets (decision 103)
+		assertThat(candidates).extracting(Candidate::holder).extracting(holder -> holder == null ? null : holder.legalId())
+			.containsExactly(new LegalId("5566778899", ENTERPRISE), new LegalId("5566778899", ENTERPRISE), null);
 	}
 
 	@Test

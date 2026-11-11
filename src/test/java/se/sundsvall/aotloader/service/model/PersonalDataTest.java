@@ -40,6 +40,8 @@ class PersonalDataTest {
 		assertHidden(new Holder(legalId, NAME, "Gatan 1", "85230", "Sundsvall", "tolvan@example.com", "070-1", NAME));
 		assertHidden(new Person(NAME, legalId, false, List.of("VD")));
 		assertHidden(new PermitLink(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true), legalId, legalId, null));
+		assertHidden(new PlacePermit(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), null, null, true,
+			new HolderHistory(NUMBER, List.of(new HolderHistory.EarlierPermit(null, NUMBER)), List.of(new HolderHistory.EarlierOwner(null, null, NUMBER)))));
 		assertHidden(Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSTAND, "1"), ErrandType.SERVING_PERMIT).holder(new Holder(legalId, NAME, null, null, null, null, null, null)).build());
 		assertHidden(new Candidate.ErrandContent("Serveringstillstånd – " + NAME, NAME + " " + NUMBER, List.of("TAGROOT/X"), Map.of("diarienummer", NUMBER)));
 		final var file = new FileReference("Intyg " + NAME + " " + NUMBER + ".pdf", FileReference.FileFolder.ATTACHMENTS);
@@ -77,8 +79,10 @@ class PersonalDataTest {
 	@Test
 	void theRowsOfTheSourcesHidePersonalData() {
 		assertHidden(new ContactRow(1, NUMBER, NAME, NAME, null, null, null, null, null, null));
-		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), VisitTestRows.none()));
+		assertHidden(new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), VisitTestRows.none(), Map.of(), Map.of()));
 		assertHidden(new PersonRow(1, NAME, NUMBER, List.of(), false));
+		assertHidden(new AlktSnapshot.EarlierPermitRow(1, null, 1, NUMBER));
+		assertHidden(new AlktSnapshot.EarlierOwnerRow(1, null, null, NUMBER));
 		assertHidden(new AlkolSnapshot.CodeLists(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("KA", NAME)));
 		assertHidden(new AlkolSnapshot.SalesPlaceRow(1, NAME, null, null, null, null, null, null, null, NUMBER, null, false, false, false, false, false, 1, new Invoicing(NAME, null, null, null, NAME)));
 		assertHidden(new Invoicing(NAME, NAME, NUMBER, NAME, NAME));
@@ -105,7 +109,8 @@ class PersonalDataTest {
 
 	@Test
 	void snapshots() {
-		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), VisitTestRows.none());
+		final var alkt = new AlktSnapshot(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of("A", Map.of("07", "Tillsyn")), VisitTestRows.none(), Map.of(),
+			Map.of());
 		assertThat(alkt.codeText("A", "07")).isEqualTo("Tillsyn");
 		assertThat(alkt.codeText("A", "08")).isEqualTo("08");
 		assertThat(alkt.codeText("X", "08")).isEqualTo("08");

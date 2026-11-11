@@ -1,6 +1,7 @@
 package se.sundsvall.aotloader.service.model;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 /**
  * What an inspection errand or visit needs to be related to the permit errand of its place (section 7.7.1, decision
@@ -62,7 +63,16 @@ public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspe
 		/** The inspection was after the permit ended. */
 		AFTER_END(false),
 		/** The inspection was on or after the day the permit was issued, while it held, so it concerned its holder. */
-		AFTER_ISSUE(true);
+		AFTER_ISSUE(true),
+		/**
+		 * The inspection was before the permit was issued, while its holder had an earlier permit of the place (decision 114).
+		 */
+		EARLIER_PERMIT(true),
+		/**
+		 * The inspection was before the permit was issued, when the earlier owners of the place show its holder as the owner
+		 * (decision 114).
+		 */
+		OWNER_HISTORY(true);
 
 		private final boolean relates;
 
@@ -86,7 +96,8 @@ public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspe
 	 * Decides whether the inspection concerned the holder of the permit. Its holder decides when it is known, whatever its
 	 * day. Otherwise its day does: a new holder needs a new permit, so an inspection on or after the day the permit was
 	 * issued, and not after it ended, concerned the holder of the permit, unless the permit may have been issued to
-	 * another than the current owner. A documentation errand is filed under the permit whatever its holder and day.
+	 * another than the current owner. An inspection before that day concerned the holder when the earlier permits or owners
+	 * of the place show it (decision 114). A documentation errand is filed under the permit whatever its holder and day.
 	 *
 	 * @return the basis, which tells whether there is a relation
 	 */
@@ -113,12 +124,22 @@ public record PermitLink(PlacePermit permit, LegalId permitHolder, LegalId inspe
 			return Basis.NO_ISSUE_DATE;
 		}
 		if (inspected.isBefore(permit.issued())) {
-			return Basis.BEFORE_ISSUE;
+			return earlierHolding()
+				.map(evidence -> evidence.source() == HolderHistory.Source.EARLIER_PERMIT ? Basis.EARLIER_PERMIT : Basis.OWNER_HISTORY)
+				.orElse(Basis.BEFORE_ISSUE);
 		}
 		if (permit.ended() != null && inspected.isAfter(permit.ended())) {
 			return Basis.AFTER_END;
 		}
 		return Basis.AFTER_ISSUE;
+	}
+
+	/**
+	 * @return what the earlier permits and owners of the place show of the holder on the day of the inspection (decision
+	 *         114); empty when they show nothing or the place has no history
+	 */
+	public Optional<HolderHistory.Evidence> earlierHolding() {
+		return permit == null || permit.history() == null ? Optional.empty() : permit.history().sameHolderOn(inspected);
 	}
 
 	@Override

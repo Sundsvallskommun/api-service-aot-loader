@@ -15,6 +15,9 @@ import java.util.Set;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.service.model.FileDetails;
+import se.sundsvall.aotloader.service.model.HolderHistory;
+import se.sundsvall.aotloader.service.model.HolderHistory.EarlierOwner;
+import se.sundsvall.aotloader.service.model.HolderHistory.EarlierPermit;
 import se.sundsvall.aotloader.service.model.InvestigationTexts;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.Place;
@@ -198,7 +201,26 @@ final class AlktIndex {
 			return new PlacePermit(key, null, null, false);
 		}
 		final var permit = rows.getFirst();
-		return new PlacePermit(key, permit.utfardandeDatum(), ServingPermits.validTo(permit, PermitPeriods.of(permit)), issuedToOwner(permit, placeOf(objektId)));
+		final var place = placeOf(objektId);
+		return new PlacePermit(key, permit.utfardandeDatum(), ServingPermits.validTo(permit, PermitPeriods.of(permit)), issuedToOwner(permit, place), holderHistory(objektId, place));
+	}
+
+	/**
+	 * @return the earlier permits and owners of the place, with the number of its current owner, the holder of its permit;
+	 *         they show whether an inspection before the day the permit was issued concerned that holder (decision 114).
+	 *         An earlier permit without a number of its own has the number of its owner post.
+	 */
+	HolderHistory holderHistory(final Integer objektId, final PlaceRow place) {
+		final var holder = ownerOf(place).flatMap(owner -> PartyRows.numberKey(owner.organisationsNr(), today)).orElse(null);
+		final var permits = snapshot.earlierPermitsOf(objektId).stream()
+			.map(row -> new EarlierPermit(row.utfardandeDatum(), PartyRows.numberKey(row.organisationsNr(), today)
+				.or(() -> Optional.ofNullable(row.agarId()).map(snapshot.owners()::get).flatMap(owner -> PartyRows.numberKey(owner.organisationsNr(), today)))
+				.orElse(null)))
+			.toList();
+		final var owners = snapshot.earlierOwnersOf(objektId).stream()
+			.map(row -> new EarlierOwner(row.datumFrom(), row.datumTom(), PartyRows.numberKey(row.organisationsNr(), today).orElse(null)))
+			.toList();
+		return new HolderHistory(holder, permits, owners);
 	}
 
 	/**

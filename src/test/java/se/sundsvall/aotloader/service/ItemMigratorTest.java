@@ -54,6 +54,9 @@ import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.ErrandType;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
 import se.sundsvall.aotloader.service.model.FileReference;
+import se.sundsvall.aotloader.service.model.HolderHistory;
+import se.sundsvall.aotloader.service.model.HolderHistory.EarlierOwner;
+import se.sundsvall.aotloader.service.model.HolderHistory.EarlierPermit;
 import se.sundsvall.aotloader.service.model.ItemKey;
 import se.sundsvall.aotloader.service.model.ItemStatus;
 import se.sundsvall.aotloader.service.model.JsonContent;
@@ -1424,6 +1427,28 @@ class ItemMigratorTest {
 		// Without a known holder, the day of the inspection relates it
 		assertThat(migrator.process(TestData.inspection("703", permitKey, null), context(true)).detail())
 			.contains("Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes efter att tillståndet utfärdades 2019-05-01");
+	}
+
+	@Test
+	void anInspectionBeforeThePermitIsRelatedWhenTheEarlierHoldersShowItsHolder() {
+		final var permitKey = new ItemKey(Source.ALKT, TILLSTAND, "1");
+		lenient().when(itemRepository.findByKey(permitKey)).thenReturn(Optional.of(item(ItemStatus.KLAR, PERMIT_ERRAND_ID)));
+		final var holder = TestData.HOLDER_ID.number();
+		final var byPermit = new HolderHistory(holder, List.of(new EarlierPermit(LocalDate.of(2015, 3, 1), holder)), List.of());
+		final var byOwners = new HolderHistory(holder, List.of(), List.of(new EarlierOwner(null, LocalDate.of(2014, 12, 31), "5599887766")));
+		final var byOwnPeriod = new HolderHistory(holder, List.of(), List.of(new EarlierOwner(LocalDate.of(2019, 1, 1), LocalDate.of(2020, 12, 31), holder)));
+
+		// Decision 114: the permit was issued in 2021, after the inspection of 2020, but the holder was the same
+		assertThat(migrator.process(TestData.inspection("703", beforeThePermit(permitKey, byPermit)), context(true)).detail())
+			.contains("Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes medan samma tillståndshavare hade ett tidigare tillstånd, utfärdat 2015-03-01");
+		assertThat(migrator.process(TestData.inspection("704", beforeThePermit(permitKey, byOwners)), context(true)).detail())
+			.contains("Relation till tillståndsärendet ALKT/TILLSTAND/1, tillsynen gjordes efter att den förra ägaren slutade 2014-12-31");
+		assertThat(migrator.process(TestData.inspection("705", beforeThePermit(permitKey, byOwnPeriod)), context(true)).detail())
+			.contains("Relation till tillståndsärendet ALKT/TILLSTAND/1, ägarhistoriken visar att stället hade samma ägare som nu när tillsynen gjordes");
+	}
+
+	private static PermitLink beforeThePermit(final ItemKey permitKey, final HolderHistory history) {
+		return new PermitLink(new PlacePermit(permitKey, LocalDate.of(2021, 1, 1), null, true, history), TestData.HOLDER_ID, null, LocalDate.of(2020, 1, 1));
 	}
 
 	@Test
