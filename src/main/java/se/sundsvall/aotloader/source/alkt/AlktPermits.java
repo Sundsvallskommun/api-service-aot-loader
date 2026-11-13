@@ -287,8 +287,9 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @return the decision the permit points to; a decision that has expired hits G3, which only tells when the decision
-	 *         extended the permit and the permit holds without it (decision 117), and one that is missing G27
+	 * @return the decision the permit points to; a decision that has expired hits G3, as information, since the permit is
+	 *         in the source and is migrated (decision 121), telling that the permit holds without it when the decision
+	 *         extended it (decision 117), and one that is missing G27
 	 */
 	private DecisionRow decisionOf(final PermitRow permit, final List<RuleHit> hits) {
 		final var decisionId = linkedDecisionId(permit);

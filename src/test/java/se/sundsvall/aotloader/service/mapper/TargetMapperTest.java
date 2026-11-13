@@ -479,7 +479,7 @@ class TargetMapperTest {
 	@Test
 	void anInvestigationIsCompletedWhenTheSourceTellsWhenInSwedishTime() {
 		final var completed = mapper.toInvestigation(new InvestigationData("Tillsyn – Restaurang 1", LocalDateTime.of(2024, 3, 31, 1, 30), LocalDateTime.of(2024, 3, 31, 3, 30), InvestigationTexts.NONE));
-		final var notCompleted = mapper.toInvestigation(new InvestigationData("x".repeat(300), null, null, InvestigationTexts.NONE));
+		final var withoutTimes = mapper.toInvestigation(new InvestigationData("x".repeat(300), null, null, InvestigationTexts.NONE));
 
 		assertThat(completed.getStatus()).isEqualTo("COMPLETED");
 		assertThat(completed.getTitle()).isEqualTo("Tillsyn – Restaurang 1");
@@ -488,10 +488,11 @@ class TargetMapperTest {
 		assertThat(completed.getCompletedAt()).isEqualTo(OffsetDateTime.parse("2024-03-31T03:30+02:00"));
 		assertThat(completed.getType()).isNull();
 		assertThat(completed.getParameters()).isNull();
-		assertThat(notCompleted.getStatus()).isEqualTo("ACTIVE");
-		assertThat(notCompleted.getTitle()).hasSize(255);
-		assertThat(notCompleted.getStartedAt()).isNull();
-		assertThat(notCompleted.getCompletedAt()).isNull();
+		// A visit without a date was made, at a time the source does not tell (decision 121)
+		assertThat(withoutTimes.getStatus()).isEqualTo("COMPLETED");
+		assertThat(withoutTimes.getTitle()).hasSize(255);
+		assertThat(withoutTimes.getStartedAt()).isNull();
+		assertThat(withoutTimes.getCompletedAt()).isNull();
 	}
 
 	@Test

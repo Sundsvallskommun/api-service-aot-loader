@@ -1406,11 +1406,16 @@ class AlktCandidateFactoryTest {
 			new FileReference("anteckningar.pdf", ATTACHMENTS),
 			new FileReference("bild.jpg", ATTACHMENTS));
 
+		// A visit without a date is migrated anyway, and says so, as the source tells no day of it (decision 121)
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
-			.containsExactly("G28 Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: datum saknas");
+			.containsExactly("G28 Tillsynsbesöket saknar datum. Det migreras ändå, med en dag som går att härleda ur källsystemet eller med upplysningen att datum saknas (beslut 121): datum saknas");
+		assertThat(Assessment.of(candidates.get(1).ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
 		assertThat(candidates.get(1).errand().description()).isEqualTo("""
 			Tillsynsbesök på Restaurang 1.
+			Datum: saknas i källsystemet
 			Anmärkningar: Inga anmärkningar registrerade""");
+		assertThat(candidates.get(1).investigation().startedAt()).isNull();
+		assertThat(candidates.get(1).investigation().completedAt()).isNull();
 		final var withoutPlace = candidates.get(2);
 		assertThat(withoutPlace.ruleHits()).extracting(RuleHit::toReportText)
 			.containsExactly("G1 Serverings- eller försäljningsstället saknas i källsystemet, så ärendet migreras inte (beslut 119): tillsynsbesöket saknar serveringsställe");

@@ -184,6 +184,14 @@ public record InspectionVisitRows(
 			covered = covered == null ? List.of() : List.copyOf(covered);
 		}
 
+		/**
+		 * @return the visit on the day given, as a visit without a date gets the day the source tells otherwise (decision
+		 *         121)
+		 */
+		public VisitRow withDatum(final LocalDate day) {
+			return new VisitRow(tillfalleNr, objektId, day, slutDatum, startTid, slutTid, tillsynsart, fritext, worddokument, bifogadfil, handlaggare, staff, omgangsNr, covered, announced);
+		}
+
 		@Override
 		public String toString() {
 			return "VisitRow[tillfalleNr=" + tillfalleNr + "]";

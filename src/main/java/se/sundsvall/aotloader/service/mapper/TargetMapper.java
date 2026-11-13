@@ -179,12 +179,14 @@ public class TargetMapper {
 	 *         inspection or trial was, with the times in Swedish time (decisions 41 and 46) and the texts of the source in
 	 *         its conclusion (decisions 44–46), and with the template of its inspection protocol when it has one (decision
 	 *         77), whose fields it gets as its JSON parameter; an end later than now, which the source has in error or
-	 *         for a planned inspection, leaves it active without an end
+	 *         for a planned inspection, leaves it active without an end, and one the source does not tell, as for a
+	 *         visit without a date, leaves it completed without times (decision 121)
 	 */
 	public Investigation toInvestigation(final InvestigationData investigation) {
 		final var completedAt = untilNow(investigation.completedAt());
+		final var planned = investigation.completedAt() != null && completedAt == null;
 		return new Investigation()
-			.status(completedAt == null ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
+			.status(planned ? INVESTIGATION_ACTIVE : INVESTIGATION_COMPLETED)
 			.title(Texts.truncate(investigation.title(), INVESTIGATION_TITLE_MAX_LENGTH, null))
 			.conclusion(conclusion(investigation.texts()))
 			.startedAt(inSwedishTime(investigation.startedAt()))

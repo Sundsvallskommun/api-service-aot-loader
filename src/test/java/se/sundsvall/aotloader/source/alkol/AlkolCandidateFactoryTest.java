@@ -951,7 +951,7 @@ class AlkolCandidateFactoryTest {
 		assertThat(visit.place().name()).isEqualTo("Butik 1");
 		assertThat(visit.files().references()).containsExactly(new FileReference("55555555.rtf", DOCUMENTS), new FileReference("protokoll.pdf", ATTACHMENTS), new FileReference("foto.jpg", ATTACHMENTS));
 		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::toReportText)
-			.containsExactly("G28 Tillsynsbesöket saknar datum eller har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: " + TODAY.plusDays(1));
+			.containsExactly("G28 Tillsynsbesöket har ett datum efter migreringsdagen och kan vara planerat men inte genomfört: " + TODAY.plusDays(1));
 
 		final var allPlaces = TestData.properties(ErrandType.TOBACCO_INSPECTION_VISIT, false, Map.of());
 		assertThat(new AlkolCandidateFactory(data.build(), TODAY, allPlaces).visits().candidates()).extracting(candidate -> candidate.key().sourceId())

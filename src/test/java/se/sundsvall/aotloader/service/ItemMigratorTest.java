@@ -343,20 +343,15 @@ class ItemMigratorTest {
 	}
 
 	@Test
-	void aPersonWhoseLookupFailsIsReviewedAndTheExceptionListLetsTheItemThrough() {
+	void aPersonWhoseLookupFailsIsAddedWithoutPartyId() {
 		when(party.getPartyId(MUNICIPALITY_ID, TestData.PERSON_ID)).thenThrow(new MigrationException("Uppslaget i Party misslyckades (502 BAD_GATEWAY)"));
 
-		final var reviewed = migrator.process(TestData.permitWithoutFiles("1"), context(false));
+		final var result = migrator.process(TestData.permitWithoutFiles("1"), context(true));
 
-		assertThat(reviewed.outcome()).isEqualTo(Outcome.GRANSKAS);
-		assertThat(reviewed.rules()).containsExactly("G30");
-		assertThat(reviewed.detail()).contains("G30 En person med betydande inflytande gick inte att slå upp i Party", "1 person(er), Uppslaget i Party misslyckades (502 BAD_GATEWAY)");
-
-		final var exception = new ReviewExceptionEntity();
-		exception.setOutcome(ExceptionOutcome.MIGRERA);
-		when(exceptionRepository.findByKey(new ItemKey(Source.ALKT, TILLSTAND, "1"))).thenReturn(Optional.of(exception));
-
-		assertThat(migrator.process(TestData.permitWithoutFiles("1"), context(true)).outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		// A person Party cannot tell of is added anyway, and the report tells of it (decision 121)
+		assertThat(result.outcome()).isEqualTo(Outcome.SKULLE_MIGRERAS);
+		assertThat(result.rules()).containsExactly("G30");
+		assertThat(result.detail()).contains("G30 En person med betydande inflytande gick inte att slå upp i Party och läggs in utan partyId", "1 person(er), Uppslaget i Party misslyckades (502 BAD_GATEWAY)");
 	}
 
 	@Test

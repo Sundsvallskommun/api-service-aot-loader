@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties.ErrandTypeSettings;
 import se.sundsvall.aotloader.service.model.Candidate;
@@ -32,6 +33,7 @@ import se.sundsvall.aotloader.support.Texts;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.VISIT_DATE_INVALID;
+import static se.sundsvall.aotloader.service.model.ReviewRule.VISIT_DATE_MISSING;
 import static se.sundsvall.aotloader.source.CandidateTexts.line;
 
 /**
@@ -89,23 +91,27 @@ public final class InspectionVisitCandidates {
 	 * holder, concerned the holder of that permit, the current owner, and gets it as its holder, the same as relates the
 	 * visit to the permit errand (decisions 61, 103 and 114).
 	 *
-	 * @param  visit  the visit
+	 * @param  row    the visit
 	 * @param  rows   the visits of the source, with the remarks and the code lists
 	 * @param  place  the place of the visit, null when it has none
 	 * @param  permit the current permit of the place, null when the place has none
 	 * @param  owner  the current owner of the place, null when it has none
 	 * @return        the builder of the candidate
 	 */
-	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final ContactRow owner) {
+	public Candidate.Builder builder(final VisitRow row, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final ContactRow owner) {
 		final var hits = new ArrayList<RuleHit>();
 		if (place == null) {
 			hits.add(RuleHit.of(PLACE_MISSING, placeMissing));
 		}
-		if (visit.datum() == null || visit.datum().isAfter(today)) {
+		final var day = VisitDay.of(row, rows.roundOf(row), today);
+		if (row.datum() == null) {
+			hits.add(RuleHit.of(VISIT_DATE_MISSING, day.date() == null ? "datum saknas" : "datum saknas, dagen %s är härledd ur %s".formatted(SourceValues.format(day.date()), day.derivedFrom())));
+		} else if (row.datum().isAfter(today)) {
 			// A visit not yet made may be a planned one, which must not become an inspection that took place
-			hits.add(RuleHit.of(VISIT_DATE_INVALID, visit.datum() == null ? "datum saknas" : SourceValues.format(visit.datum())));
+			hits.add(RuleHit.of(VISIT_DATE_INVALID, SourceValues.format(row.datum())));
 		}
-		final var content = new VisitContent(visit, rows.kindText(visit.tillsynsart()), time(visit), remarks(rows.remarksOf(visit.tillfalleNr()), rows),
+		final var visit = row.withDatum(day.date());
+		final var content = new VisitContent(visit, day.description(), rows.kindText(visit.tillsynsart()), time(visit), remarks(rows.remarksOf(visit.tillfalleNr()), rows),
 			rows.handlerNamesOf(visit), visit.staff().texts(), rows.roundOf(visit));
 		final var placeName = place == null ? null : place.name();
 		final var name = Optional.ofNullable(placeName).orElse(unknownPlace);
@@ -135,7 +141,8 @@ public final class InspectionVisitCandidates {
 	public Candidate.Builder builder(final VisitRow visit, final InspectionVisitRows rows, final Place place, final PlacePermit permit, final ContactRow owner,
 		final SharedFileNames sharedFileNames) {
 		final var files = new FileList(sharedFileNames);
-		rows.forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.ofVisit(type.getSource(), folder, name, SourceValues.startOfDay(visit.datum()))));
+		final var day = VisitDay.of(visit, rows.roundOf(visit), today).date();
+		rows.forEachFile(visit, (name, folder) -> files.add(name, folder, FilePurposes.ofVisit(type.getSource(), folder, name, SourceValues.startOfDay(day))));
 		return builder(visit, rows, place, permit, owner).files(files.build(), files.assetFiles(), files.details());
 	}
 
@@ -143,6 +150,7 @@ public final class InspectionVisitCandidates {
 		final var visit = content.visit();
 		final var lines = new ArrayList<String>();
 		lines.add(Texts.joinWords("Tillsynsbesök på " + name, SourceValues.format(visit.datum())) + ".");
+		lines.add(line("Datum", content.day()));
 		lines.add(line("Tillsynsart", content.kind()));
 		lines.add(line("Tid", content.time()));
 		lines.add(line(ROUND, roundName(content.round())));
@@ -283,7 +291,8 @@ public final class InspectionVisitCandidates {
 	/**
 	 * What a visit holds, interpreted once for the description, the protocol and the measures.
 	 *
-	 * @param visit      the row of the visit
+	 * @param visit      the row of the visit, with the day the source tells otherwise when it has no date (decision 121)
+	 * @param day        what the description tells of the day of a visit without a date, null for one with a date
 	 * @param kind       the text of the kind of inspection
 	 * @param time       the time of the visit
 	 * @param remarks    the remarks as texts
@@ -292,11 +301,44 @@ public final class InspectionVisitCandidates {
 	 * @param staff      the marks about the serving staff as texts (decision 48)
 	 * @param round      the round of inspection the visit was made in, null when none (decision 50)
 	 */
-	record VisitContent(VisitRow visit, String kind, String time, List<String> remarks, List<String> inspectors, List<String> staff, RoundRow round) {
+	record VisitContent(VisitRow visit, String day, String kind, String time, List<String> remarks, List<String> inspectors, List<String> staff, RoundRow round) {
 
 		@Override
 		public String toString() {
 			return "VisitContent[visit=" + visit + ", kind=" + kind + "]";
+		}
+	}
+
+	/**
+	 * The day of a visit (decision 121): its date, or for a visit without one the day the source tells otherwise, its end
+	 * day or the day of its round when the round lasted one day, but never a day after the migration.
+	 *
+	 * @param date        the day, null when the source tells none
+	 * @param derivedFrom what the day of a visit without a date was taken from, null for a visit with a date and one
+	 *                    without a day
+	 */
+	record VisitDay(LocalDate date, String derivedFrom) {
+
+		static VisitDay of(final VisitRow visit, final RoundRow round, final LocalDate today) {
+			if (visit.datum() != null) {
+				return new VisitDay(visit.datum(), null);
+			}
+			final var roundDay = Optional.ofNullable(round).filter(found -> found.start() != null && found.start().equals(found.slut())).map(RoundRow::start);
+			return Stream.of(Optional.ofNullable(visit.slutDatum()).map(end -> new VisitDay(end, "besökets slutdatum")), roundDay.map(start -> new VisitDay(start, "tillsynsomgången")))
+				.flatMap(Optional::stream)
+				.filter(found -> !found.date().isAfter(today))
+				.findFirst()
+				.orElse(new VisitDay(null, null));
+		}
+
+		/**
+		 * @return what the description tells of the day of a visit without a date, null for a visit with a date
+		 */
+		String description() {
+			if (derivedFrom != null) {
+				return "saknas i källsystemet, dagen är härledd ur " + derivedFrom;
+			}
+			return date == null ? "saknas i källsystemet" : null;
 		}
 	}
 }
