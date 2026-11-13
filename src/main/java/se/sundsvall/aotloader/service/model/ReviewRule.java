@@ -11,9 +11,10 @@ import static se.sundsvall.aotloader.service.model.Severity.NOT_MIGRATED;
  */
 public enum ReviewRule {
 
-	PLACE_MISSING("G1", "Serverings- eller försäljningsstället saknas", BLOCKING, false),
+	PLACE_MISSING("G1", "Serverings- eller försäljningsstället saknas i källsystemet, så ärendet migreras inte (beslut 119)", NOT_MIGRATED, false),
 	OWNER_DIFFERS("G2", "Tillståndets ägare skiljer sig från serveringsställets nuvarande ägare", BLOCKING, true),
 	DECISION_EXPIRED("G3", "Det kopplade beslutet har passerat sitt sista giltighetsdatum", BLOCKING, true),
+	EXTENSION_EXPIRED("G3", "Det kopplade beslutet är en utökning som har passerat sitt sista giltighetsdatum. Grundtillståndet gäller och migreras (beslut 117)", INFO, true),
 	PERIOD_PASSED("G4", "Datumperioden har passerat", BLOCKING, true),
 	PERIOD_MISSING("G5", "Gäller inte året runt men saknar period", BLOCKING, true),
 	RESTAURANT_NUMBER_INVALID("G6", "Serveringsstället saknar serveringsställenummer, eller numret har inte 8 siffror", BLOCKING, true),
@@ -23,7 +24,8 @@ public enum ReviewRule {
 	ISSUE_DATE_MISSING("G9", "Utfärdandedatum saknas, och PartyAssets kräver ett datum", BLOCKING, false),
 	HOLDER_NOT_IN_PARTY("G10", "Tillståndshavaren finns inte i Party", BLOCKING, false),
 	INSPECTION_HOLDER_NOT_IN_PARTY("G10", "Tillståndshavaren som ärendet gällde finns inte i Party och läggs in utan partyId", INFO, true),
-	PERIOD_ON_ALL_YEAR("G12", "Gäller året runt men har en datumperiod, troligen ett tillfälligt tillägg", BLOCKING, true),
+	PERIOD_ON_ALL_YEAR("G12", "Gäller året runt och har en datumperiod, ett tillfälligt tillägg som en längre serveringstid. Tillståndet migreras som året runt, och perioden står med (beslut 117)", INFO,
+		true),
 	NO_ISSUING_ERRAND("G13", "Tillståndet går inte att koppla till ärendet som utfärdade det och får inga filer därifrån automatiskt", INFO, true),
 	FILE_NOT_UPLOADED("G14", "En fil som ska följa med finns inte på filarean, eller är för stor, och laddas inte upp", INFO, true),
 	DIARY_NUMBER_MISSING("G15", "Tillståndet saknar diarienummer", BLOCKING, false),
@@ -36,6 +38,7 @@ public enum ReviewRule {
 	NOTIFICATION_ONLY_FLAG("G22", "Anmälan finns bara som markering på försäljningsstället och får försäljningsställets tidigaste kända datum", INFO, true),
 	NOTIFICATION_DATE_MISSING("G23", "Anmälan saknar datum, och försäljningsstället har inga händelser eller ärenden", BLOCKING, false),
 	RESTAURANT_NUMBER_DIFFERS("G24", "Serveringsställenumret på tillståndet skiljer sig från serveringsställets", BLOCKING, true),
+	CATEGORY_CODE_DIFFERS("G24", "Kategorikoden efter serveringsställenumret på tillståndet skiljer sig från serveringsställets. Ärendet får serveringsställets (beslut 116)", INFO, true),
 	SALES_PLACE_CEASED("G25", "Försäljningsstället är markerat som upphört men har gällande tobakstillstånd", NOT_MIGRATED, true),
 	PERMIT_ROWS_ON_PLACE("G26", "Serveringsstället har flera rader i Gällande_Tillstånd, och bara en kan migreras", BLOCKING, false),
 	DECISION_MISSING("G27", "Tillståndet pekar på ett beslut som saknas i AlkT", INFO, true),

@@ -209,6 +209,8 @@ public record AlktSnapshot(
 	/**
 	 * A row of Objekt.
 	 *
+	 * @param kategorikod   the category code that follows the restaurant number on the permit certificate, as registered
+	 *                      on the place
 	 * @param objektGrupper ObjektGrupp1-3, those filled in, in that order: codes of code list Q, the types of the place and
 	 *                      its markings
 	 */
@@ -216,6 +218,7 @@ public record AlktSnapshot(
 		Integer objektId,
 		Integer agarId,
 		String restaurangBeteckning,
+		String kategorikod,
 		List<String> objektGrupper,
 		String namn,
 		String adress,

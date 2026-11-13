@@ -91,7 +91,7 @@ class DecidedScopesTest {
 	@Test
 	void aTimeThatCannotBePlacedAndAFieldWithTwoTimesAreLeftOut() {
 		final var hits = new ArrayList<RuleHit>();
-		final var row = permit(1).noTimes().servingTo(true, false)
+		final var row = permit(1).noTimes().servingTo(true, false).scope(true, false, false, false)
 			.time("11:00", "01:00", "måndag till torsdag")
 			.time("11:00", "03:00", "fredag och lördag")
 			.time("11:00", "02:00", "Inomhus")
@@ -99,10 +99,63 @@ class DecidedScopesTest {
 
 		final var decided = DecidedScopes.of(row, PERMANENT_SERVING, hits);
 
-		// The first time is indoors, as is the third, and they differ
+		// The first time is indoors, as is the third, and they differ; the second may be outdoors, as the permit serves there
 		assertThat(decided.servingHours()).isEmpty();
 		assertThat(hits).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(SERVING_TIME_UNPLACED,
 			"serveringstid 2 (11:00–03:00): texten säger inte inne eller ute; Serveringstid inne (allmänheten): serveringstid 1 (11:00–01:00) och serveringstid 3 (11:00–02:00) har olika tider"));
+	}
+
+	@Test
+	void withoutOutdoorServingATimeWhoseTextSaysNeitherIsIndoors() {
+		final var hits = new ArrayList<RuleHit>();
+		final var row = permit(1).noTimes().servingTo(true, true)
+			.time("11:00", "01:00", "slutet sällskap")
+			.time("12:00", "02:00")
+			.build();
+
+		final var decided = DecidedScopes.of(row, PERMANENT_SERVING, hits);
+
+		// The rows of AlkT have no fixed meaning, and a permit without outdoor serving holds indoors (decision 118)
+		assertThat(hours(decided)).isEqualTo("""
+			[{"audience":"PUBLIC","location":"INDOOR","from":"12:00","to":"02:00"},{"audience":"CLOSED_COMPANY","location":"INDOOR","from":"11:00","to":"01:00"}]""");
+		assertThat(hits).isEmpty();
+	}
+
+	@Test
+	void withoutOutdoorServingATimeWhoseTextSaysNeitherGivesWayToTheFirst() {
+		final var hits = new ArrayList<RuleHit>();
+		final var row = permit(1).noTimes().servingTo(true, false)
+			.time("11:00", "02:00")
+			.time("11:00", "03:00")
+			.time("11:00", "02:00")
+			.build();
+
+		final var decided = DecidedScopes.of(row, PERMANENT_SERVING, hits);
+
+		// A longer time of a temporary addition, as on a permit all year with a period, does not take the place of the
+		// permit's own, and the third time is the same as the first
+		assertThat(hours(decided)).isEqualTo("""
+			[{"audience":"PUBLIC","location":"INDOOR","from":"11:00","to":"02:00"}]""");
+		assertThat(hits).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(SERVING_TIME_UNPLACED,
+			"serveringstid 2 (11:00–03:00): inne, eftersom tillståndet saknar uteservering, men Serveringstid inne (allmänheten) har en annan tid"));
+	}
+
+	@Test
+	void withoutOutdoorServingTwoTimesWhoseTextsSayNeitherDiffer() {
+		final var hits = new ArrayList<RuleHit>();
+		final var row = permit(1).noTimes().servingTo(true, false)
+			.time("11:00", "01:00", "slutet sällskap")
+			.time("11:00", "02:00")
+			.time("11:00", "03:00")
+			.build();
+
+		final var decided = DecidedScopes.of(row, PERMANENT_SERVING, hits);
+
+		// Neither goes before the other, so the field of the public gets none
+		assertThat(hours(decided)).isEqualTo("""
+			[{"audience":"CLOSED_COMPANY","location":"INDOOR","from":"11:00","to":"01:00"}]""");
+		assertThat(hits).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(SERVING_TIME_UNPLACED,
+			"Serveringstid inne (allmänheten): serveringstid 2 (11:00–02:00) och serveringstid 3 (11:00–03:00) har olika tider"));
 	}
 
 	@Test

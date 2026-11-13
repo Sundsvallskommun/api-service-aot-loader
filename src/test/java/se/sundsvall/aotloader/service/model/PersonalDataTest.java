@@ -100,7 +100,7 @@ class PersonalDataTest {
 			List.of(NAME + " " + NUMBER), null, null, null, null, null, 1));
 		assertHidden(new AlktSnapshot.ServingArea("100", "50", NAME + " " + NUMBER));
 		assertHidden(new AlktSnapshot.ServingTime("11:00", "01:00", NAME + " " + NUMBER));
-		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", List.of("12"), NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
+		assertHidden(new AlktSnapshot.PlaceRow(1, 1, "R1", "21", List.of("12"), NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Sundsvall", null, null));
 		assertHidden(new AlktSnapshot.ConditionRow(1, "V1", NAME + " " + NUMBER, null, null));
 		assertHidden(new AlktSnapshot.StaffRow(1, NAME, NUMBER, null));
 		assertHidden(new Place(NAME, "Gatan 1", "85230", "Sundsvall", NUMBER, "tolvan@example.com", "Timrå", NAME));

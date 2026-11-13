@@ -4,8 +4,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.Assessment;
+import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.AssetSchema;
@@ -56,6 +59,7 @@ import static se.sundsvall.aotloader.service.model.Kind.TILLSYN;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSYNSBESOK;
 import static se.sundsvall.aotloader.service.model.PartyType.ENTERPRISE;
 import static se.sundsvall.aotloader.service.model.PartyType.PRIVATE;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CATEGORY_CODE_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
@@ -63,6 +67,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DIARY_NUMBER_ON_SEVERAL;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.EXTENSION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.FORMER_HOLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.GRANT_DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
@@ -215,7 +220,7 @@ class AlktCandidateFactoryTest {
 	void whatThePostCannotTakeIsLeftOutAndNamed() {
 		final var snapshot = snapshot()
 			.permit(permit(1).servingArea("ca 200", "80 st", "Matsal").build())
-			.place(new AlktSnapshot.PlaceRow(1, 10, "1234567", List.of(), "Restaurang 1", "Storgatan 1", "852 3", "Sundsvall", "060-123456", "info@", "Sundsvall", null, null))
+			.place(new AlktSnapshot.PlaceRow(1, 10, "1234567", null, List.of(), "Restaurang 1", "Storgatan 1", "852 3", "Sundsvall", "060-123456", "info@", "Sundsvall", null, null))
 			.owner(owner(10, "556677-8899"))
 			.build();
 
@@ -624,13 +629,120 @@ class AlktCandidateFactoryTest {
 	}
 
 	@Test
-	void aRestaurantNumberWithMoreDigitsDiffers() {
-		final var snapshot = snapshot().permit(permit(1).gtRestaurantNumber("1234 5678 01").build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
+	void aRestaurantNumberFollowedByTheCategoryCodeIsTheSameNumber() {
+		final var snapshot = snapshot().permit(permit(1).gtRestaurantNumber("1234 567 8 21").build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
 
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
-		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).contains(RESTAURANT_NUMBER_DIFFERS);
-		assertThat(candidate.ruleHits()).extracting(RuleHit::detail).contains("på tillståndet 1234 5678 01, på serveringsstället 12345678");
+		// The certificate prints the category code after the number, which is not part of it (decision 116)
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).containsExactly(NO_ISSUING_ERRAND, GRANT_DECISION_MISSING, CERTIFICATE_MISSING);
+		assertThat(candidate.place().restaurantNumber()).isEqualTo("12345678");
+		assertThat(candidate.errand().description()).contains("\nKategorikod: 21\n");
+	}
+
+	@Test
+	void theCategoryCodeOfThePlaceGoesBeforeTheOneOnThePermit() {
+		final var snapshot = snapshot()
+			.permit(permit(1).gtRestaurantNumber("1234567821").build())
+			.permit(permit(2).gtRestaurantNumber("1234567922").build())
+			.permit(permit(3).gtRestaurantNumber(null).build())
+			.place(place(1, 10, "12345678", "22"))
+			.place(place(2, 10, "12345679", " 22 "))
+			.place(place(3, 10, "12345680", "41"))
+			.owner(owner(10, "5566778899"))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		// The place is where the business registers it, so a certificate with another code is only told of
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(CATEGORY_CODE_DIFFERS, "på tillståndet 21, på serveringsstället 22"));
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS);
+		assertThat(candidates.get(0).errand().description()).contains("\nKategorikod: 22\n");
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS, CATEGORY_CODE_DIFFERS);
+		assertThat(candidates.get(1).errand().description()).contains("\nKategorikod: 22\n");
+		assertThat(candidates.get(2).errand().description()).contains("\nKategorikod: 41\n");
+	}
+
+	@Test
+	void aRestaurantNumberWithOtherDigitsDiffers() {
+		for (final var written : List.of("1234 5679 21", "1234 5678 1", "1234 5678 210", "12345678AB", "21")) {
+			final var snapshot = snapshot().permit(permit(1).gtRestaurantNumber(written).build()).place(place(1, 10, "12345678")).owner(owner(10, "5566778899")).build();
+
+			final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+			assertThat(candidate.ruleHits()).as(written).extracting(RuleHit::rule, RuleHit::detail)
+				.contains(tuple(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället 12345678".formatted(written)));
+			assertThat(candidate.errand().description()).as(written).doesNotContain("Kategorikod");
+		}
+	}
+
+	@Test
+	void anExpiredExtensionTellsThatThePermitHoldsWithoutIt() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(102).build())
+			.permit(permit(2).beslutsId(103).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "5566778899"))
+			.decision(AlktTestRows.decision(102, null, "0230", LocalDate.of(2025, 6, 1).atStartOfDay(), LocalDate.of(2025, 8, 31), null, null, null))
+			.decision(AlktTestRows.decision(103, null, "0232", LocalDate.of(2025, 6, 1).atStartOfDay(), LocalDate.of(2025, 8, 31), null, null, null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		// When a temporary extension ends, the permit it extended holds (decision 117), but a temporary permit ends
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(EXTENSION_EXPIRED, "beslutstyp 0230, giltigt till 2025-08-31"));
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(DECISION_EXPIRED);
+		assertThat(Assessment.of(candidates.get(0).ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(DECISION_EXPIRED, "beslutstyp 0232, giltigt till 2025-08-31"));
+	}
+
+	@Test
+	void aPermitLinkedToDecisionZeroPointsToNone() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(0).build())
+			.permit(permit(2).beslutsId(999).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "5566778899"))
+			.errand(AlktTestRows.errand(501, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.errand(AlktTestRows.errand(502, 2, "01", "IAN-2019-2", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.decision(AlktTestRows.decision(104, 501, "0200", LocalDate.of(2019, 4, 1).atStartOfDay(), null, null, null, null))
+			.decision(AlktTestRows.decision(105, 501, "0200", LocalDate.of(2019, 4, 28).atStartOfDay(), null, null, null, null))
+			.decision(AlktTestRows.decision(106, 501, "ER", LocalDate.of(2019, 4, 30).atStartOfDay(), null, null, null, null))
+			.decision(AlktTestRows.decision(107, 502, "0200", LocalDate.of(2019, 4, 28).atStartOfDay(), null, null, null, null))
+			.build();
+
+		final var candidates = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		// AlkT writes 0 for a permit linked to no decision (decision 117), and G33 tells which decision of the issuing errand
+		// it has besides a grant
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(DECISION_MISSING, NO_ISSUING_ERRAND);
+		assertThat(candidates.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(GRANT_DECISION_MISSING, "tillståndet pekar inte på något beslut, och ärendet som utfärdade det har Utökat tillstånd, bifall, 2019-04-28"));
+		// A permit that points to a decision that is missing does point to one, which G27 tells of
+		assertThat(candidates.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(DECISION_MISSING, "BeslutsID 999"), tuple(GRANT_DECISION_MISSING, null));
+	}
+
+	@Test
+	void aPermitAllYearWithAPeriodIsMigratedAsAllYear() {
+		final var snapshot = snapshot()
+			.permit(permit(1).aretRunt(true).period("2026-01-31", "2026-11-30").noTimes().time("11:00", "02:00").time("11:00", "03:00").build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		// The period is a temporary addition, such as a later serving time, to a permit that holds all year (decision 117)
+		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERIOD_ON_ALL_YEAR, "2026-01-31 – 2026-11-30"));
+		assertThat(Assessment.of(candidate.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
+		assertThat(candidate.asset().validTo()).isNull();
+		assertThat(candidate.errand().labelPaths()).contains("CATEGORYROOT/ALCOHOL/SERVING_PERMIT_APPLICATION/PERMANENT_SERVING");
+		// The decision keeps the time of the permit itself, as the longer one gives way to it (decision 118)
+		assertThat(candidate.decision().content().get("servingHours")).hasToString("""
+			[{"audience":"PUBLIC","location":"INDOOR","from":"11:00","to":"02:00"}]""");
 	}
 
 	@Test
@@ -926,7 +1038,7 @@ class AlktCandidateFactoryTest {
 	}
 
 	private static Candidate permitOnPlaceWithGroups(final List<String> groups) {
-		final var place = new AlktSnapshot.PlaceRow(1, 10, "12345678", groups, "Krogen", null, null, null, null, null, null, null, null);
+		final var place = new AlktSnapshot.PlaceRow(1, 10, "12345678", null, groups, "Krogen", null, null, null, null, null, null, null, null);
 		final var snapshot = snapshot().permit(permit(1).build()).place(place).owner(owner(10, "5566778899")).build();
 		return new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 	}
@@ -943,7 +1055,8 @@ class AlktCandidateFactoryTest {
 		assertThat(result.candidates()).isEmpty();
 		assertThat(result.notices()).singleElement().satisfies(notice -> {
 			assertThat(notice.key()).isEqualTo(new ItemKey(ALKT, TILLSTAND, "utan-id-1"));
-			assertThat(notice.outcome()).isEqualTo(Outcome.GRANSKAS);
+			// Without a place it cannot be found in AlkT, and it is only told in the report (decision 119)
+			assertThat(notice.outcome()).isEqualTo(Outcome.MIGRERAS_INTE);
 			assertThat(notice.detail()).isEqualTo("G1 Tillståndet saknar ObjektID, diarienummer IAN-1");
 		});
 	}
@@ -1296,7 +1409,8 @@ class AlktCandidateFactoryTest {
 			Tillsynsbesök på Restaurang 1.
 			Anmärkningar: Inga anmärkningar registrerade""");
 		final var withoutPlace = candidates.get(2);
-		assertThat(withoutPlace.ruleHits()).extracting(RuleHit::toReportText).containsExactly("G1 Serverings- eller försäljningsstället saknas: tillsynsbesöket saknar serveringsställe");
+		assertThat(withoutPlace.ruleHits()).extracting(RuleHit::toReportText)
+			.containsExactly("G1 Serverings- eller försäljningsstället saknas i källsystemet, så ärendet migreras inte (beslut 119): tillsynsbesöket saknar serveringsställe");
 		assertThat(withoutPlace.errand().title()).isEqualTo("Tillsynsbesök – okänt serveringsställe");
 		assertThat(withoutPlace.errand().description()).contains("Tillsynsart: 99", "Tid: 09:15–10:00").doesNotContain("Anteckning", "Tillsynsomgång");
 		assertThat(withoutPlace.investigation().texts().parts()).extracting(Part::heading).doesNotContain("Tillsynsomgång");

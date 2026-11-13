@@ -37,6 +37,11 @@ public record Assessment(Decision decision, List<RuleHit> reasons, String note) 
 	 */
 	public static Assessment of(final List<RuleHit> hits, final Optional<ExceptionOutcome> exception) {
 		final var notMigrated = hits.stream().filter(hit -> hit.rule().getSeverity() == NOT_MIGRATED).toList();
+		// Nothing the business could review or the exception list could lift makes such an item migrated (decision 119)
+		final var neverMigrated = notMigrated.stream().filter(hit -> !hit.rule().isOverridable()).toList();
+		if (!neverMigrated.isEmpty()) {
+			return new Assessment(Decision.NOT_MIGRATED, neverMigrated, null);
+		}
 		// An item waits for an open errand of its place (decision 115) only when it would otherwise be migrated
 		final var blocking = hits.stream()
 			.filter(hit -> hit.rule().getSeverity() == BLOCKING)

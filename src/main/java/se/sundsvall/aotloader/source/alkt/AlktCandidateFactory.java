@@ -63,7 +63,7 @@ public final class AlktCandidateFactory {
 		for (final var permit : index.snapshot().permits()) {
 			if (permit.objektId() == null) {
 				withoutId++;
-				notices.add(new Notice(new ItemKey(ALKT, TILLSTAND, ItemKey.WITHOUT_ID + withoutId), null, Outcome.GRANSKAS, PLACE_MISSING.getCode(),
+				notices.add(new Notice(new ItemKey(ALKT, TILLSTAND, ItemKey.WITHOUT_ID + withoutId), null, Outcome.MIGRERAS_INTE, PLACE_MISSING.getCode(),
 					PLACE_MISSING.getCode() + " Tillståndet saknar ObjektID, diarienummer " + Optional.ofNullable(permit.utfardandeDiarienr()).orElse("saknas")));
 			} else if (places.add(permit.objektId())) {
 				candidates.add(permits.permit(permit));

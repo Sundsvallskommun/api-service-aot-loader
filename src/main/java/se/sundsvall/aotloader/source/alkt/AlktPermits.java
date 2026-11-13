@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import se.sundsvall.aotloader.service.model.Candidate;
 import se.sundsvall.aotloader.service.model.DecisionData;
@@ -50,10 +51,12 @@ import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.ATTACHMENTS;
 import static se.sundsvall.aotloader.service.model.FileReference.FileFolder.DOCUMENTS;
 import static se.sundsvall.aotloader.service.model.Kind.TILLSTAND;
+import static se.sundsvall.aotloader.service.model.ReviewRule.CATEGORY_CODE_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.CERTIFICATE_OLDER;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.DECISION_MISSING;
+import static se.sundsvall.aotloader.service.model.ReviewRule.EXTENSION_EXPIRED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.GRANT_DECISION_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.ISSUE_DATE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.LEGAL_ID_INVALID;
@@ -99,6 +102,15 @@ final class AlktPermits {
 	 * company.
 	 */
 	private static final Set<String> TEMPORARY_GRANT_TYPES = Set.of("0231", "0232", "0233", "0235");
+	/**
+	 * The types of decision that extend a permit, for a time or for good: an extended permit, also in part, a larger
+	 * serving area, also in part, and a temporarily extended permit, also in part (decision 117).
+	 */
+	private static final Set<String> EXTENSION_TYPES = Set.of("0200", "0210", "0222", "0223", "0230", "0234");
+	/** The types of decision that extend a permit, and those that change it, also in part. */
+	private static final Set<String> EXTENSION_AND_CHANGE_TYPES = Set.copyOf(Stream.concat(EXTENSION_TYPES.stream(), Stream.of("0300", "0310")).toList());
+	/** The digits of the category code that follow the restaurant number on a permit (decision 116). */
+	private static final Pattern CATEGORY_CODE = Pattern.compile("\\d{2}");
 
 	private final AlktIndex index;
 	private final AlktSnapshot snapshot;
@@ -141,7 +153,7 @@ final class AlktPermits {
 		grant.flatMap(chosen -> PermitDecisions.futureDateHit(chosen, today)).ifPresent(hits::add);
 		final var days = PermitDays.of(permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), grant.map(this::errandClosed).orElse(null), today);
 		if (grant.isEmpty() && days.decidedOn() != null) {
-			hits.add(RuleHit.of(GRANT_DECISION_MISSING, Optional.ofNullable(Texts.trimToNull(index.decisionText(decision))).map(text -> "tillståndet pekar på " + text).orElse(null)));
+			hits.add(RuleHit.of(GRANT_DECISION_MISSING, grantMissingDetail(permit, decision, issuingErrands)));
 		}
 		final var subtype = ServingPermits.subtype(permit, periods);
 		if (subtype == null) {
@@ -174,7 +186,7 @@ final class AlktPermits {
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
 			.title(title)
 			.investigation(PermitInvestigations.premisesSection(permit.servingArea().serveringslokal()).map(investigation::withSection).orElse(investigation))
-			.description(description(name, content, handlers))
+			.description(description(name, categoryCode(permit, place).orElse(null), content, handlers))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
 			.asset(post)
@@ -204,8 +216,8 @@ final class AlktPermits {
 		if (restaurantNumber == null || !restaurantNumber.matches("\\d{8}")) {
 			hits.add(RuleHit.of(RESTAURANT_NUMBER_INVALID, restaurantNumber == null ? null : "'%s'".formatted(restaurantNumber)));
 		}
-		if (permit.gtRestaurangBeteckning() != null && restaurantNumber != null && !digitsOf(permit.gtRestaurangBeteckning()).equals(digitsOf(restaurantNumber))) {
-			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), restaurantNumber)));
+		if (permit.gtRestaurangBeteckning() != null && restaurantNumber != null) {
+			restaurantNumberHits(permit, place, hits);
 		}
 		if (holder == null || holder.legalId() == null) {
 			hits.add(RuleHit.of(LEGAL_ID_INVALID, ownerText(place, owner)));
@@ -221,6 +233,53 @@ final class AlktPermits {
 	}
 
 	/**
+	 * G24 when the restaurant number on the permit is another than the place's. The permit may have the category code of
+	 * the place after the number, as the certificate prints it (decision 116), and G24 tells, as information, when that
+	 * code is another than the one registered on the place.
+	 */
+	private static void restaurantNumberHits(final PermitRow permit, final PlaceRow place, final List<RuleHit> hits) {
+		if (digitsOf(permit.gtRestaurangBeteckning()).equals(digitsOf(place.restaurangBeteckning()))) {
+			return;
+		}
+		final var codeOnPermit = categoryCodeOnPermit(permit, place);
+		if (codeOnPermit.isEmpty()) {
+			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), place.restaurangBeteckning())));
+			return;
+		}
+		final var codeOfPlace = Texts.trimToNull(place.kategorikod());
+		if (codeOfPlace != null && !codeOfPlace.equals(codeOnPermit.get())) {
+			hits.add(RuleHit.of(CATEGORY_CODE_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(codeOnPermit.get(), codeOfPlace)));
+		}
+	}
+
+	/**
+	 * @return the category code of the place (decision 116): the one registered on the place, or else the two digits that
+	 *         follow its restaurant number on the permit; empty for a permit without a place, and when neither has one
+	 */
+	private static Optional<String> categoryCode(final PermitRow permit, final PlaceRow place) {
+		if (place == null) {
+			return Optional.empty();
+		}
+		return Optional.ofNullable(Texts.trimToNull(place.kategorikod())).or(() -> categoryCodeOnPermit(permit, place));
+	}
+
+	/**
+	 * @return the two digits that follow the restaurant number of the place on the permit, empty when the number on the
+	 *         permit is not the place's number followed by two digits
+	 */
+	private static Optional<String> categoryCodeOnPermit(final PermitRow permit, final PlaceRow place) {
+		if (permit.gtRestaurangBeteckning() == null || place.restaurangBeteckning() == null) {
+			return Optional.empty();
+		}
+		final var number = digitsOf(place.restaurangBeteckning());
+		final var onPermit = digitsOf(permit.gtRestaurangBeteckning());
+		if (number.isEmpty() || !onPermit.startsWith(number)) {
+			return Optional.empty();
+		}
+		return Optional.of(onPermit.substring(number.length())).filter(rest -> CATEGORY_CODE.matcher(rest).matches());
+	}
+
+	/**
 	 * A restaurant number without the spaces and dots it is sometimes written with on the permit.
 	 */
 	private static String digitsOf(final String restaurantNumber) {
@@ -228,19 +287,46 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @return the decision the permit points to; a decision that has expired hits G3, and one that is missing G27
+	 * @return the decision the permit points to; a decision that has expired hits G3, which only tells when the decision
+	 *         extended the permit and the permit holds without it (decision 117), and one that is missing G27
 	 */
 	private DecisionRow decisionOf(final PermitRow permit, final List<RuleHit> hits) {
-		if (permit.beslutsId() == null) {
+		final var decisionId = linkedDecisionId(permit);
+		if (decisionId.isEmpty()) {
 			return null;
 		}
-		final var decision = snapshot.decisions().get(permit.beslutsId());
+		final var decision = snapshot.decisions().get(decisionId.get());
 		if (decision == null) {
-			hits.add(RuleHit.of(DECISION_MISSING, "BeslutsID " + permit.beslutsId()));
+			hits.add(RuleHit.of(DECISION_MISSING, "BeslutsID " + decisionId.get()));
 		} else if (decision.giltigtTom() != null && decision.giltigtTom().isBefore(today)) {
-			hits.add(RuleHit.of(DECISION_EXPIRED, "beslutstyp %s, giltigt till %s".formatted(decision.beslutsTyp(), decision.giltigtTom())));
+			final var rule = CodeTexts.isOneOf(decision.beslutsTyp(), EXTENSION_TYPES) ? EXTENSION_EXPIRED : DECISION_EXPIRED;
+			hits.add(RuleHit.of(rule, "beslutstyp %s, giltigt till %s".formatted(decision.beslutsTyp(), decision.giltigtTom())));
 		}
 		return decision;
+	}
+
+	/**
+	 * @return the id of the decision the permit points to, empty when it points to none, which AlkT also writes as 0
+	 */
+	private static Optional<Integer> linkedDecisionId(final PermitRow permit) {
+		return Optional.ofNullable(permit.beslutsId()).filter(id -> id != 0);
+	}
+
+	/**
+	 * @param  pointedTo the decision the permit points to, null when it points to none or to one that is missing (G27)
+	 * @return           what G33 tells of the decisions the permit has besides a grant: the decision it points to, or, when
+	 *                   it points to none, the latest decision of the errands that issued it that extended or changed it;
+	 *                   null when there is none to tell of
+	 */
+	private String grantMissingDetail(final PermitRow permit, final DecisionRow pointedTo, final Set<Integer> issuingErrands) {
+		if (linkedDecisionId(permit).isPresent()) {
+			return Optional.ofNullable(pointedTo).map(index::decisionText).map(Texts::trimToNull).map(text -> "tillståndet pekar på " + text).orElse(null);
+		}
+		return latestOf(decisionsOf(null, issuingErrands), EXTENSION_AND_CHANGE_TYPES)
+			.map(index::decisionText)
+			.map(Texts::trimToNull)
+			.map(text -> "tillståndet pekar inte på något beslut, och ärendet som utfärdade det har " + text)
+			.orElse(null);
 	}
 
 	/**
@@ -398,7 +484,7 @@ final class AlktPermits {
 	 */
 	private Set<Integer> issuingErrands(final PermitRow permit) {
 		final var errands = new LinkedHashSet<Integer>();
-		Optional.ofNullable(permit.beslutsId())
+		linkedDecisionId(permit)
 			.map(snapshot.decisions()::get)
 			.map(DecisionRow::arendeId)
 			.ifPresent(errands::add);
@@ -598,14 +684,17 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @param handlers the names of the handlers of the errands that issued the permit, or their codes when no name is found
-	 *                 (decision 51)
+	 * @param categoryCode the category code of the place, which no schema has a field for yet (decision 116), null when it
+	 *                     has none
+	 * @param handlers     the names of the handlers of the errands that issued the permit, or their codes when no name is
+	 *                     found (decision 51)
 	 */
-	private static String description(final String name, final PermitContent content, final List<String> handlers) {
+	private static String description(final String name, final String categoryCode, final PermitContent content, final List<String> handlers) {
 		final var permit = content.permit();
 		final var lines = new ArrayList<String>();
 		lines.add("Serveringstillstånd för " + name + ".");
 		lines.add(CandidateTexts.issuedLine(permit.utfardandeDatum(), permit.utfardandeDiarienr()));
+		lines.add(line("Kategorikod", categoryCode));
 		lines.add(line("Handläggare", Texts.join(", ", handlers)));
 		lines.add(line("Drycker", Texts.join(", ", content.drinks())));
 		lines.add(line("Servering till", Texts.join(", ", content.servingTo())));

@@ -17,7 +17,7 @@ public enum Outcome {
 	/** The item hits a review rule and waits for the business. */
 	GRANSKAS,
 
-	/** The item counts as ended in the source and is not migrated. */
+	/** The item is not migrated: it counts as ended in the source, or its place is missing there. */
 	MIGRERAS_INTE,
 
 	/** The item waits for another item, e.g. an inspection errand for the permit of its place. */

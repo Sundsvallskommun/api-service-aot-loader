@@ -2,6 +2,7 @@ package se.sundsvall.aotloader.source.alkt;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import se.sundsvall.aotloader.support.SourceValues;
 import se.sundsvall.aotloader.support.Texts;
 import tools.jackson.databind.node.ObjectNode;
 
+import static java.util.function.Predicate.not;
 import static java.util.regex.Pattern.CANON_EQ;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.UNICODE_CASE;
@@ -30,8 +32,10 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.SERVING_TIME_UNPLA
  * "Uteservering" (analysis round 14). A permanent permit gets a time in each of Draken's four fields, indoors and
  * outdoors for the public and for closed company, that the texts point out: indoors or outdoors as the text says, the
  * first time indoors when its text says neither, and for the public or closed company as the text says, otherwise for
- * whom the permit serves. A text that names one of them goes before one that names neither. A temporary permit and farm
- * sales get their one time in Draken's one field. A time that cannot be placed, and a field that would get two
+ * whom the permit serves. A text that names one of them goes before one that names neither. On a permit without outdoor
+ * serving any other time whose text says neither is indoors too, but gives way to a time that its text or its order
+ * places, as a time of a temporary addition may be longer than the one of the permit (decision 118). A temporary permit
+ * and farm sales get their one time in Draken's one field. A time that cannot be placed, and a field that would get two
  * times, are left out of the decision and hit G34, since a wrong time would be worse than none; the times stay on the
  * errand and on the post in PartyAssets with their texts.
  */
@@ -208,8 +212,11 @@ final class DecidedScopes {
 		final var candidates = new EnumMap<Slot, List<Candidate>>(Slot.class);
 		intervals.forEach(interval -> place(permit, interval, candidates, unplaced));
 		final var placed = new EnumMap<Slot, Range>(Slot.class);
+		final var givenWay = new LinkedHashMap<Interval, List<Slot>>();
 		candidates.forEach((slot, list) -> {
-			final var chosen = list.stream().anyMatch(Candidate::named) ? list.stream().filter(Candidate::named).toList() : list;
+			final var named = list.stream().anyMatch(Candidate::named) ? list.stream().filter(Candidate::named).toList() : list;
+			final var chosen = named.stream().allMatch(Candidate::implied) ? named : named.stream().filter(not(Candidate::implied)).toList();
+			named.stream().filter(candidate -> !chosen.contains(candidate)).forEach(candidate -> givenWay.computeIfAbsent(candidate.interval(), _ -> new ArrayList<>()).add(slot));
 			final var ranges = new LinkedHashSet<>(chosen.stream().map(candidate -> candidate.interval().range()).toList());
 			if (ranges.size() == 1) {
 				placed.put(slot, ranges.getFirst());
@@ -217,15 +224,24 @@ final class DecidedScopes {
 				unplaced.add("%s: %s har olika tider".formatted(slot.displayName(), Texts.join(" och ", chosen.stream().map(candidate -> candidate.interval().toString()).toList())));
 			}
 		});
+		givenWay.forEach((interval, slots) -> {
+			if (slots.stream().noneMatch(slot -> interval.range().equals(placed.get(slot)))) {
+				unplaced.add("%s: inne, eftersom tillståndet saknar uteservering, men %s har en annan tid".formatted(interval,
+					Texts.join(" och ", slots.stream().map(Slot::displayName).toList())));
+			}
+		});
 		return placed;
 	}
 
 	/**
-	 * Adds the interval to the fields its text points out, or, when it points out none, to what cannot be placed.
+	 * Adds the interval to the fields its text points out, or indoors when the text points out none and the permit has no
+	 * outdoor serving (decision 118), or else to what cannot be placed.
 	 */
 	private static void place(final PermitRow permit, final Interval interval, final Map<Slot, List<Candidate>> candidates, final List<String> unplaced) {
 		final var text = Optional.ofNullable(interval.text()).orElse("");
-		final var places = places(text, interval.number());
+		final var stated = places(text, interval.number());
+		final var implied = stated.isEmpty() && !permit.scope().uteservering();
+		final var places = implied ? List.of(false) : stated;
 		final var named = CLOSED_COMPANY.matcher(text).find() != PUBLIC.matcher(text).find();
 		final var audiences = named ? List.of(CLOSED_COMPANY.matcher(text).find()) : audiences(permit);
 		if (places.isEmpty()) {
@@ -234,7 +250,7 @@ final class DecidedScopes {
 			unplaced.add("%s: tillståndet anger inte om serveringen är för allmänheten eller slutet sällskap".formatted(interval));
 		} else {
 			places.forEach(outdoors -> audiences.forEach(closedCompany -> candidates.computeIfAbsent(Slot.of(outdoors, closedCompany), _ -> new ArrayList<>())
-				.add(new Candidate(interval, named))));
+				.add(new Candidate(interval, named, implied))));
 		}
 	}
 
@@ -309,8 +325,10 @@ final class DecidedScopes {
 	/**
 	 * An interval that points to a field.
 	 *
-	 * @param named true when its text names the public or closed company, which goes before one that names neither
+	 * @param named   true when its text names the public or closed company, which goes before one that names neither
+	 * @param implied true when it is indoors only because the permit has no outdoor serving, which gives way to one that
+	 *                its text or its order places
 	 */
-	private record Candidate(Interval interval, boolean named) {
+	private record Candidate(Interval interval, boolean named, boolean implied) {
 	}
 }

@@ -214,6 +214,7 @@ class MigrationIT extends AbstractAppTest {
 			.extracting(request -> request.getPart("attachment").getFileName(), request -> request.getPart("category").getBody().asString())
 			.containsExactlyInAnyOrder(tuple("55555555.rtf", "Tillståndsbevis"), tuple("22222222.rtf", "Beslut"));
 		final var created = wiremock.findAll(postRequestedFor(urlEqualTo("/support-management/2281/AOT/errands"))).getFirst().getBodyAsString();
+		assertThat(JsonPath.<String>read(created, "$.description")).as("The category code of the place, which no schema has a field for yet (decision 116)").contains("<p>Kategorikod: 21</p>");
 		final List<Map<String, Object>> personParameters = JsonPath.read(created, "$.stakeholders[?(@.externalId == '22222222-aaaa-bbbb-cccc-000000000002')].parameters[*]");
 		assertThat(personParameters).extracting(parameter -> parameter.get("key"), parameter -> parameter.get("values"))
 			.containsExactly(tuple("PBI", List.of("true")), tuple("PBI_SOURCE", List.of("MANUAL")), tuple("PBI_ROLE", List.of("Verkställande direktör")));

@@ -20,7 +20,7 @@ GO
 CREATE TABLE dbo.Objekt (
     ObjektID int NOT NULL PRIMARY KEY, AgarID int NULL, RestaurangBeteckning varchar(20) NULL, ObjektGrupp1 varchar(6) NULL, ServeringsNamn varchar(40) NULL,
     ServeringsGAdress varchar(40) NULL, ServeringsPNr varchar(6) NULL, ServeringsPOrt varchar(25) NULL, TelefonNr1 varchar(15) NULL, Email varchar(40) NULL,
-    OmradesBeteckning varchar(5) NULL, ObjBifogadfil varchar(100) NULL, ObjBifogadfil2 varchar(100) NULL, ObjektGrupp2 varchar(50) NULL, ObjektGrupp3 varchar(50) NULL
+    OmradesBeteckning varchar(5) NULL, ObjBifogadfil varchar(100) NULL, ObjBifogadfil2 varchar(100) NULL, ObjektGrupp2 varchar(50) NULL, ObjektGrupp3 varchar(50) NULL, Kategorikod varchar(2) NULL
 )
 GO
 CREATE TABLE dbo.[Ägare] (
@@ -61,8 +61,8 @@ GO
 INSERT INTO dbo.[Ägare] VALUES (10, '556677-8899', 'Testbolaget AB', 'Kontakt Person', 'Box 1', NULL, '85230', 'Sundsvall', '060-100', 'testbolaget@example.com')
 INSERT INTO dbo.[Ägare] VALUES (11, '556677-0001', 'Förra ägaren AB', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 -- The first place has a marking and a second type in ObjektGrupp2 and ObjektGrupp3 (decision 95)
-INSERT INTO dbo.Objekt VALUES (1, 10, '12345678', '12', 'Krogen Ett', 'Storgatan 1', '85230', 'Sundsvall', '060-1', NULL, '01', 'skylt.jpg', NULL, 'UNG', '8')
-INSERT INTO dbo.Objekt VALUES (2, 10, '12345679', '12', 'Krogen Två', 'Storgatan 2', '85230', 'Sundsvall', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT INTO dbo.Objekt VALUES (1, 10, '12345678', '12', 'Krogen Ett', 'Storgatan 1', '85230', 'Sundsvall', '060-1', NULL, '01', 'skylt.jpg', NULL, 'UNG', '8', '21')
+INSERT INTO dbo.Objekt VALUES (2, 10, '12345679', '12', 'Krogen Två', 'Storgatan 2', '85230', 'Sundsvall', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, Vin, AretRunt, ServeringAllmanhet, Uteservering, ServeringStartTid1, ServeringSlutTid1,
     Utfardande_Datum, Utfardande_Diarienr, GTRestaurangBeteckning, BeslutsID, Noteringar, Serveringslokal)
     VALUES (1, 10, 1, 1, 1, 1, 1, '11:00', '01:00', '2019-05-01', 'IAN-2019-1', '12345678', 100, 'Inomhus', 'Matsal och bar')
@@ -92,7 +92,7 @@ INSERT INTO dbo.Klartext VALUES ('Q', '12', 'Kvartersrestaurang')
 INSERT INTO dbo.Klartext VALUES ('Q', '8', 'Hotellrestaurang')
 INSERT INTO dbo.Klartext VALUES ('Q', 'UNG', 'Ungdomlig målgrupp')
 -- A place whose files have Swedish letters in their names, in every table that names files, for the run interrupted at the activation
-INSERT INTO dbo.Objekt VALUES (3, 10, '12345680', '12', 'Krogen Tre', 'Storgatan 3', '85230', 'Sundsvall', NULL, NULL, '01', 'Översiktskarta.pdf', NULL, NULL, NULL)
+INSERT INTO dbo.Objekt VALUES (3, 10, '12345680', '12', 'Krogen Tre', 'Storgatan 3', '85230', 'Sundsvall', NULL, NULL, '01', 'Översiktskarta.pdf', NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, AretRunt, ServeringAllmanhet, ServeringStartTid1, ServeringSlutTid1, Utfardande_Datum, Utfardande_Diarienr,
     GTRestaurangBeteckning, BeslutsID)
     VALUES (3, 10, 1, 1, 1, '11:00', '23:00', '2021-02-01', 'IAN-2021-3', '12345680', 101)
@@ -102,7 +102,7 @@ INSERT INTO dbo.[Ärende_Händelser] VALUES (3, 503, NULL, 'ansökan räkenskape
 INSERT INTO dbo.[Ärende_Händelser_Filer] (HandelseID, Bifogadfil) VALUES (3, 'ritning våning 2.pdf')
 INSERT INTO dbo.[Ärende_Bilder] (ArendeID, BildDatumTid, Bildfilnamn) VALUES (503, '2019-06-10T10:00:00', 'fasad.jpg')
 -- A place in the area Timrå of AlkT, which belongs to another municipality (decision 19)
-INSERT INTO dbo.Objekt VALUES (4, 10, '12345681', '12', 'Timråkrogen', 'Köpmangatan 4', '86130', 'Timrå', NULL, NULL, 'G15', NULL, NULL, NULL, NULL)
+INSERT INTO dbo.Objekt VALUES (4, 10, '12345681', '12', 'Timråkrogen', 'Köpmangatan 4', '86130', 'Timrå', NULL, NULL, 'G15', NULL, NULL, NULL, NULL, NULL)
 INSERT INTO dbo.[Gällande_Tillstånd] (ObjektID, GTAgarID, Starkol, AretRunt, ServeringAllmanhet, Utfardande_Datum, Utfardande_Diarienr, GTRestaurangBeteckning)
     VALUES (4, 10, 1, 1, 1, '2022-03-01', 'IAN-2022-4', '12345681')
 INSERT INTO dbo.Klartext VALUES ('G', 'G15', 'Timrå')

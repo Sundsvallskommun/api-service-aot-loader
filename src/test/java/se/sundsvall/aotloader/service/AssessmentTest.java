@@ -17,6 +17,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 
@@ -48,6 +49,17 @@ class AssessmentTest {
 
 		assertThat(assessment.decision()).isEqualTo(Decision.NOT_MIGRATED);
 		assertThat(assessment.reasons()).containsExactly(RuleHit.of(PERMIT_ENDED, "GTDEU 2022-01-01"));
+	}
+
+	@Test
+	void anItemWithoutAPlaceIsNotMigratedWhateverElseItHits() {
+		// Nobody can find it in the source, so neither a review nor the exception list would make it migrated (decision 119)
+		final var hits = List.of(RuleHit.of(OWNER_DIFFERS), RuleHit.of(PLACE_MISSING, "tillsynsbesöket saknar serveringsställe"), RuleHit.of(PERMIT_ENDED),
+			RuleHit.of(NO_ISSUING_ERRAND));
+		final var expected = new Assessment(Decision.NOT_MIGRATED, List.of(RuleHit.of(PLACE_MISSING, "tillsynsbesöket saknar serveringsställe")), null);
+
+		assertThat(Assessment.of(hits, Optional.empty())).isEqualTo(expected);
+		assertThat(Assessment.of(hits, Optional.of(ExceptionOutcome.MIGRERA))).isEqualTo(expected);
 	}
 
 	@Test
