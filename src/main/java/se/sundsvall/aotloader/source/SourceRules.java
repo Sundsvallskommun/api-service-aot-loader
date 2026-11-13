@@ -16,9 +16,9 @@ public final class SourceRules {
 	private SourceRules() {}
 
 	/**
-	 * Ä1 for every errand that is not closed in the source and that the permit or notification waits for: the errands it
-	 * builds on (decisions 16 and 23), and the other errands of the place whose decisions may change it (decision 115),
-	 * since an item already migrated is not changed again (decision 11).
+	 * Ä1, as information, for every errand that is not closed in the source and whose decision may change the permit or
+	 * notification: the errands it builds on, and the other errands of the place. The permit or notification is migrated
+	 * anyway, and the business carries out in Draken what is decided in the errand (decision 120).
 	 *
 	 * @param underlying the errands the permit or notification builds on
 	 * @param others     the errands of the place that may change it; those it builds on are left out of them

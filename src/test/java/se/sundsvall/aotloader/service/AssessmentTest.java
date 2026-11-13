@@ -18,7 +18,6 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
-import static se.sundsvall.aotloader.service.model.ReviewRule.SALES_PLACE_CEASED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 
 class AssessmentTest {
@@ -81,10 +80,10 @@ class AssessmentTest {
 	}
 
 	@Test
-	void theExceptionListLiftsASharedDiaryNumberAndAnOpenErrandThePermitBuildsOn() {
+	void theExceptionListLiftsASharedDiaryNumber() {
 		final var hits = List.of(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, "IAN-2019-1"), RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 1"));
 
-		assertThat(Assessment.of(hits, Optional.empty()).decision()).isEqualTo(Decision.REVIEW);
+		assertThat(Assessment.of(hits, Optional.empty())).isEqualTo(new Assessment(Decision.REVIEW, List.of(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, "IAN-2019-1")), null));
 		assertThat(Assessment.of(hits, Optional.of(ExceptionOutcome.MIGRERA)).decision()).isEqualTo(Decision.MIGRATE);
 	}
 
@@ -97,23 +96,11 @@ class AssessmentTest {
 	}
 
 	@Test
-	void anOpenErrandOfThePlaceHoldsBackOnlyAnItemThatWouldBeMigrated() {
-		final var hold = RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2");
+	void anOpenErrandOfThePlaceOrThatThePermitBuildsOnHoldsNothingBack() {
+		final var open = List.of(RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2"), RuleHit.of(UNDERLYING_ERRAND_OPEN, "ArendeID 1"));
 
-		assertThat(Assessment.of(List.of(hold), Optional.empty())).isEqualTo(new Assessment(Decision.REVIEW, List.of(hold), null));
-		// A ceased place is not migrated, whatever errand of it is open (decision 115)
-		assertThat(Assessment.of(List.of(hold, RuleHit.of(SALES_PLACE_CEASED)), Optional.empty()))
-			.isEqualTo(new Assessment(Decision.NOT_MIGRATED, List.of(RuleHit.of(SALES_PLACE_CEASED)), null));
-	}
-
-	@Test
-	void theExceptionListCannotLiftAnOpenErrandOfThePlace() {
-		// The exception was decided for the shared diary number, before the errand was opened
-		final var assessment = Assessment.of(List.of(RuleHit.of(DIARY_NUMBER_ON_SEVERAL, "IAN-2019-1"), RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2")),
-			Optional.of(ExceptionOutcome.MIGRERA));
-
-		assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
-		assertThat(assessment.reasons()).containsExactly(RuleHit.of(PLACE_ERRAND_OPEN, "ArendeID 2"));
+		// An active permit in the source is migrated, and what is decided in the errand is carried out in Draken (decision 120)
+		assertThat(Assessment.of(open, Optional.empty())).isEqualTo(new Assessment(Decision.MIGRATE, List.of(), null));
 	}
 
 	@Test

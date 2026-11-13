@@ -794,7 +794,7 @@ class AlktCandidateFactoryTest {
 	}
 
 	@Test
-	void anOpenErrandThatIssuedThePermitIsHeldForReview() {
+	void anOpenErrandThatIssuedThePermitIsToldOf() {
 		final var snapshot = snapshot()
 			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
 			.place(place(1, 10, "12345678"))
@@ -808,10 +808,11 @@ class AlktCandidateFactoryTest {
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 501, diarienummer ian 2019 1"), tuple(CERTIFICATE_MISSING, null));
+		assertThat(Assessment.of(candidate.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
 	}
 
 	@Test
-	void anotherOpenErrandOfThePlaceHoldsThePermitBack() {
+	void anotherOpenErrandOfThePlaceIsToldOf() {
 		final var snapshot = snapshot()
 			.permit(permit(1).beslutsId(100).gtAgarId(10).gtRestaurantNumber("12345678").scope(true, false, false, false).build())
 			.place(place(1, 10, "12345678"))
@@ -830,7 +831,9 @@ class AlktCandidateFactoryTest {
 
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
-		// Decision 115: the permit waits until they are closed, as what is decided in them would not follow it afterwards
+		// The permit is migrated anyway, and the report tells of them, so that what is decided in them is carried out in Draken
+		// (decision 120)
+		assertThat(Assessment.of(candidate.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
 		assertThat(candidate.ruleHits()).filteredOn(hit -> hit.rule() == PLACE_ERRAND_OPEN).extracting(RuleHit::detail)
 			.containsExactlyInAnyOrder("ArendeID 503, diarienummer IAN-2026-3", "ArendeID 700, diarienummer TIL-2026-7");
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule).doesNotContain(UNDERLYING_ERRAND_OPEN);

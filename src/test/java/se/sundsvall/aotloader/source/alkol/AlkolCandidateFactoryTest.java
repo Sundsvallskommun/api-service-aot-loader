@@ -6,8 +6,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import se.sundsvall.aotloader.configuration.AotLoaderProperties;
+import se.sundsvall.aotloader.service.Assessment;
+import se.sundsvall.aotloader.service.Assessment.Decision;
 import se.sundsvall.aotloader.service.TestData;
 import se.sundsvall.aotloader.service.model.AssetFile;
 import se.sundsvall.aotloader.service.model.AssetSchema;
@@ -734,7 +737,7 @@ class AlkolCandidateFactoryTest {
 	}
 
 	@Test
-	void anOpenErrandThatAPermitOrNotificationBuildsOnIsHeldForReview() {
+	void anOpenErrandThatAPermitOrNotificationBuildsOnIsToldOf() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, false, false))
 			.owner(owner(10, "5566778899"))
@@ -750,10 +753,12 @@ class AlkolCandidateFactoryTest {
 		// The open notification changes nothing of the permit, nor the open application for the permit of the notification
 		assertThat(permit.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 100, diarienummer IAN-2019-100"), tuple(CERTIFICATE_MISSING, null));
 		assertThat(notification.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).containsExactly(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 102"));
+		// Both are migrated anyway (decision 120)
+		assertThat(List.of(permit, notification)).allSatisfy(candidate -> assertThat(Assessment.of(candidate.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE));
 	}
 
 	@Test
-	void anOpenErrandOfThePlaceThatMayChangeAPermitOrNotificationHoldsItBack() {
+	void anOpenErrandOfThePlaceThatMayChangeAPermitOrNotificationIsToldOf() {
 		final var data = new Data()
 			.place(place(1, 10).withFlags(true, true, true, false))
 			.owner(owner(10, "5566778899"))
@@ -782,6 +787,9 @@ class AlkolCandidateFactoryTest {
 		assertThat(notifications).filteredOn(candidate -> candidate.key().sourceId().endsWith("ECIGARETTER")).singleElement()
 			.satisfies(ecigarettes -> assertThat(ecigarettes.ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
 				.contains(tuple(UNDERLYING_ERRAND_OPEN, "ArendeID 106, diarienummer IAN-2026-6"), tuple(PLACE_ERRAND_OPEN, "ArendeID 104")));
+		// They are migrated anyway, and what is decided in the open errands is carried out in Draken (decision 120)
+		assertThat(notifications).allSatisfy(candidate -> assertThat(Assessment.of(candidate.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE));
+		assertThat(Assessment.of(permit.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
 	}
 
 	@Test

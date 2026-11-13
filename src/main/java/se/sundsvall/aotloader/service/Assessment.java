@@ -3,7 +3,6 @@ package se.sundsvall.aotloader.service;
 import java.util.List;
 import java.util.Optional;
 import se.sundsvall.aotloader.service.model.ExceptionOutcome;
-import se.sundsvall.aotloader.service.model.ReviewRule;
 import se.sundsvall.aotloader.service.model.RuleHit;
 
 import static se.sundsvall.aotloader.service.model.Severity.BLOCKING;
@@ -42,11 +41,7 @@ public record Assessment(Decision decision, List<RuleHit> reasons, String note) 
 		if (!neverMigrated.isEmpty()) {
 			return new Assessment(Decision.NOT_MIGRATED, neverMigrated, null);
 		}
-		// An item waits for an open errand of its place (decision 115) only when it would otherwise be migrated
-		final var blocking = hits.stream()
-			.filter(hit -> hit.rule().getSeverity() == BLOCKING)
-			.filter(hit -> hit.rule() != ReviewRule.PLACE_ERRAND_OPEN || notMigrated.isEmpty())
-			.toList();
+		final var blocking = hits.stream().filter(hit -> hit.rule().getSeverity() == BLOCKING).toList();
 		if (exception.isPresent()) {
 			final var notOverridable = blocking.stream().filter(hit -> !hit.rule().isOverridable()).toList();
 			if (!notOverridable.isEmpty()) {
