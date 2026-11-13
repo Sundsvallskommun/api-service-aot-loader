@@ -1,0 +1,59 @@
+{
+	"name": "party-assets-create",
+	"request": {
+		"method": "POST",
+		"urlPath": "/party-assets/2281/assets",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"sourceReference": {
+				"equalTo": "LINK|11111111-aaaa-bbbb-cccc-000000000004;case;supportmanagement;AOT|"
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "LowAlcoholBeerSalesNotification"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.municipalityId",
+					"equalTo": "2262"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2020-7"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_alcohol_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.migration.sourceSystem",
+					"equalTo": "ALKOL"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-4"
+		}
+	}
+}

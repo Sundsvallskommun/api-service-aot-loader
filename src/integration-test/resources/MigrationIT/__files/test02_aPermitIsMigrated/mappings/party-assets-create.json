@@ -1,0 +1,257 @@
+{
+	"name": "party-assets-create",
+	"request": {
+		"method": "POST",
+		"urlPath": "/party-assets/2281/assets",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"sourceReference": {
+				"equalTo": "LINK|11111111-aaaa-bbbb-cccc-000000000001;case;supportmanagement;AOT|"
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.assetId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.partyId",
+					"equalTo": "22222222-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "AlcoholServingPermit"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "ACTIVE"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.origin",
+					"equalTo": "SUPPORTMANAGEMENT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.issued",
+					"equalTo": "2019-05-01"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.title",
+					"equalTo": "Beslut om serveringstillstånd"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.additionalParameters",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_alcohol_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].schemaId",
+					"equalTo": "2281_aot_alcohol_party_asset_1.0"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.errandId",
+					"equalTo": "11111111-aaaa-bbbb-cccc-000000000001"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.caseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.servingPermitType",
+					"equalTo": "PERMANENT_SERVING"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.permitHolder.name",
+					"equalTo": "Testbolaget AB"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.permitHolder.organizationNumber",
+					"equalTo": "556677-8899"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.name",
+					"equalTo": "Krogen Ett"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.address.postalCode",
+					"equalTo": "85230"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.restaurantNumber",
+					"equalTo": "12345678"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.premises.municipalityId",
+					"equalTo": "2281"
+				}
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingTo[?(@ == 'PUBLIC')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingPeriods[?(@.period == 'ALL_YEAR')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.servingHours[?(@.from == '11:00' && @.to == '01:00')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.additionalScopes[?(@ == 'OUTDOOR_SERVING')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.beverages[?(@ == 'STRONG_BEER')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.beverages[?(@ == 'WINE')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.servingArea.description",
+					"equalTo": "Matsal och bar"
+				}
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.responsibleServingStaff[?(@.firstName == 'Olle' && @.lastName == 'Svensson' && @.dateOfBirth == '1980-01-01' && @.fromDate == '2015-03-01')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[0].value.responsibleServingStaff[?(@.firstName == 'Lisa' && @.lastName == 'Åberg' && @.dateOfBirth == '1985-05-05')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.responsibleServingStaff.length()",
+					"equalTo": "2"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.businessOrientation.description",
+					"equalTo": "Kvartersrestaurang, Hotellrestaurang"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.businessOrientation.types",
+					"absent": true
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.conditions[0]",
+					"equalTo": "Krav på bordsservering: Mat ska serveras"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.caseRegistrationNumber",
+					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.outcome",
+					"equalTo": "APPROVAL_WITH_CONDITIONS"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionText",
+					"equalTo": "Bifall med villkor"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionMaker",
+					"equalTo": "Anna Berg"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.decisionDate",
+					"equalTo": "2019-04-30"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.executionDate",
+					"equalTo": "2019-05-01"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.decision.legalBasis",
+					"equalTo": "8 kap. 2 § alkohollagen (2010:1622)"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.migration.sourceSystem",
+					"equalTo": "ALKT"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-1"
+		}
+	}
+}

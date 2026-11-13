@@ -1,0 +1,21 @@
+{
+	"id": "${json-unit.any-string}",
+	"municipalityId": "2281",
+	"dryRun": true,
+	"cleanup": false,
+	"sources": [
+		"ALKT",
+		"ALKOL"
+	],
+	"kinds": [
+		"TILLSYNSBESOK"
+	],
+	"items": [
+		"ALKOL/TILLSYNSBESOK/950",
+		"ALKT/TILLSYNSBESOK/999",
+		"ALKT/TILLSYNSBESOK/900"
+	],
+	"status": "RUNNING",
+	"started": "${json-unit.any-string}",
+	"outcomes": {}
+}

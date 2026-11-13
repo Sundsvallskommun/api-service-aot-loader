@@ -1,0 +1,34 @@
+{
+	"name": "support-management-decision-outcomes-2281",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/metadata/decisionoutcomes",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": [
+			{
+				"id": 1,
+				"name": "APPROVAL",
+				"displayName": "Bifall"
+			},
+			{
+				"id": 2,
+				"name": "APPROVAL_WITH_CONDITIONS",
+				"displayName": "Bifall med villkor"
+			}
+		]
+	}
+}

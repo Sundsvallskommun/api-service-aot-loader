@@ -1,0 +1,30 @@
+{
+	"name": "relation-find",
+	"request": {
+		"method": "GET",
+		"urlPath": "/relation/2281/relations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"filter": {
+				"equalTo": "source.resourceId:'11111111-aaaa-bbbb-cccc-000000000001' and target.resourceId:'11111111-aaaa-bbbb-cccc-000000000012'"
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"relations": []
+		}
+	}
+}

@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSYN",
+	"sourceId": "702",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"outcome": "MIGRERAD",
+	"rules": "",
+	"detail": "Relation till tillståndsärendet ALKT/TILLSTAND/1; Avvikelse: 2 relationer finns redan från tillståndsärendet till ärendet, ingen ny skapas",
+	"errandNumber": "ALKT-2026-8"
+}

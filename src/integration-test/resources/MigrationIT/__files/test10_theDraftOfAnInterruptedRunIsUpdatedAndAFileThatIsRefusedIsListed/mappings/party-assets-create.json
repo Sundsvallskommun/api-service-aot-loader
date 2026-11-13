@@ -1,0 +1,71 @@
+{
+	"name": "party-assets-create",
+	"request": {
+		"method": "POST",
+		"urlPath": "/party-assets/2281/assets",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"sourceReference": {
+				"equalTo": "LINK|11111111-aaaa-bbbb-cccc-000000000003;case;supportmanagement;AOT|"
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.type",
+					"equalTo": "TobaccoSalesPermit"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].key",
+					"equalTo": "aot_tobacco_party_asset"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].schemaId",
+					"equalTo": "2281_aot_tobacco_party_asset_1.0"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.pointOfSale.name",
+					"equalTo": "Kiosken"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.salesTypes[0]",
+					"equalTo": "RETAIL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.caseRegistrationNumber",
+					"equalTo": "IAN-2019-100"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.externalCaseRegistrationNumber",
+					"equalTo": "IAN-2019-100"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-3"
+		}
+	}
+}

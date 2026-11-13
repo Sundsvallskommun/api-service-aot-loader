@@ -1,0 +1,42 @@
+{
+	"name": "support-management-write-investigation-json-parameter",
+	"request": {
+		"method": "PUT",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000007/investigations/investigation-1/json-parameters/aot_inspection_internal",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.key",
+					"equalTo": "aot_inspection_internal"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.schemaId",
+					"equalTo": "2281_aot_inspection_internal_1.0"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"key": "aot_inspection_internal",
+			"schemaId": "2281_aot_inspection_internal_1.0",
+			"value": {},
+			"version": 0
+		}
+	}
+}
