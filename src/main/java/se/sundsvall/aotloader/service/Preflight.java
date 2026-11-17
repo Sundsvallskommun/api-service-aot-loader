@@ -166,7 +166,7 @@ public class Preflight {
 		switch (type) {
 			case SERVING_PERMIT -> types.add(JsonParameterType.PREMISES_SECTION);
 			case ALCOHOL_INSPECTION, TOBACCO_INSPECTION -> types.add(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
-			case ALCOHOL_INSPECTION_VISIT -> types.add(JsonParameterType.SERVING_PERMIT_PROTOCOL);
+			case ALCOHOL_INSPECTION_VISIT -> types.add(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL);
 			default -> {
 				// The others get no JSON parameter but that of their post
 			}

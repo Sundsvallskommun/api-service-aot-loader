@@ -453,10 +453,52 @@ class TargetMapperTest {
 	}
 
 	@Test
-	void aPlaceInAnAreaOfAnotherMunicipalityHasThatMunicipalityOnTheErrand() {
+	void aPlaceInAnAreaOfAnotherMunicipalityHasThatMunicipalityAndItsDiaryNumberOnTheErrand() {
 		final var errand = mapper.toNewDraft(TestData.permit("1", "timrå"), MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
 
-		assertThat(errand.getParameters()).filteredOn("key", "premisesMunicipalityId").extracting("values").containsExactly(List.of("2262"));
+		// The diary number is the one of Timrå's registry, which Draken shows and asks for on an errand of Timrå (decision 122)
+		assertThat(errand.getParameters()).extracting("key", "displayName", "values").containsExactly(
+			tuple("premisesMunicipalityId", "Kommun", List.of("2262")),
+			tuple("externalCaseRegistrationNumber", "Diarienummer", List.of("IAN-2019-1")));
+	}
+
+	@Test
+	void theDiaryNumberOnTheErrandOfAnotherMunicipalityLeavesOutTheDelegationReference() {
+		final var inspection = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYN, "1"), ErrandType.ALCOHOL_INSPECTION)
+			.labelPath("TAGROOT/ALCOHOL_INSPECTION")
+			.labelPath(TestData.INTERNAL_INSPECTION)
+			.place(new Place("Restaurang 1", "Storgatan 1", "852 30", "Timrå", null, null, "Timrå", "12345678"))
+			.externalTag("diarienummer", " MBN/2019:123 MBN DEL/2019 §45 ")
+			.build();
+
+		final var errand = mapper.toNewDraft(inspection, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
+
+		assertThat(errand.getParameters()).extracting("key", "values").containsExactly(
+			tuple("premisesMunicipalityId", List.of("2262")),
+			tuple("externalCaseRegistrationNumber", List.of("MBN/2019:123")));
+		// The tag keeps the diary number as the source has it, the key against the old system (decision 4)
+		assertThat(errand.getExternalTags()).extracting(ExternalTag::getKey, ExternalTag::getValue).contains(tuple("diarienummer", " MBN/2019:123 MBN DEL/2019 §45 "));
+	}
+
+	@Test
+	void anErrandOfAnotherMunicipalityWithoutADiaryNumberHasOnlyItsMunicipality() {
+		final var visit = Candidate.builder(new ItemKey(Source.ALKT, Kind.TILLSYNSBESOK, "1"), ErrandType.ALCOHOL_INSPECTION_VISIT)
+			.labelPath(TestData.EXTERNAL_INSPECTION)
+			.place(new Place("Restaurang 1", "Storgatan 1", "852 30", "Timrå", null, null, "Timrå", "12345678"))
+			.externalTag("diarienummer", " ")
+			.build();
+
+		final var errand = mapper.toNewDraft(visit, MUNICIPALITY_ID, new PartyIds(null, List.of()), TestData.labelIds());
+
+		assertThat(errand.getParameters()).extracting("key", "values").containsExactly(tuple("premisesMunicipalityId", List.of("2262")));
+	}
+
+	@Test
+	void anErrandOfTheMunicipalityOfTheRunHasNoDiaryNumberParameter() {
+		final var errand = mapper.toNewDraft(TestData.permit("1"), MUNICIPALITY_ID, new PartyIds("party-id", List.of()), TestData.labelIds());
+
+		// Its diary number is the board's, which Draken does not ask for, and stays in the tag (decision 4)
+		assertThat(errand.getParameters()).extracting("key").containsExactly("premisesMunicipalityId");
 	}
 
 	@Test
@@ -513,9 +555,9 @@ class TargetMapperTest {
 	@Test
 	void anInvestigationWithAnInspectionProtocolHasItsTemplateAsTypeAndNoParameters() {
 		final var investigation = mapper.toInvestigation(new InvestigationData("Tillsynsbesök – Krogen", null, null, InvestigationTexts.of(new Part("Anteckning", "Mycket folk.")))
-			.withProtocol("serving_permit", new JsonContent(JsonParameterType.SERVING_PERMIT_PROTOCOL, JsonFields.object().text("premisesName", "Krogen").toNode())));
+			.withProtocol("external_inspection", new JsonContent(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL, JsonFields.object().text("premisesName", "Krogen").toNode())));
 
-		assertThat(investigation.getType()).isEqualTo("serving_permit");
+		assertThat(investigation.getType()).isEqualTo("external_inspection");
 		// The fields of the protocol are its JSON parameter, which SupportManagement takes through a resource of its own
 		assertThat(investigation.getParameters()).isNull();
 		// The texts are still its conclusion

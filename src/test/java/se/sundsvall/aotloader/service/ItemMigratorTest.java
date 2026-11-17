@@ -649,7 +649,7 @@ class ItemMigratorTest {
 		// A protocol the source no longer has a field for goes too
 		migrator.process(TestData.inspectionWithProtocol("700", permitKey, new JsonContent(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL, JsonFields.object().toNode())),
 			context(false));
-		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "aot_inspection_internal");
+		verify(supportManagement).deleteInvestigationJsonParameter(MUNICIPALITY_ID, ERRAND_ID, "investigation-1", "aot_internal_inspection_protocol");
 		verify(supportManagement, never()).updateInvestigation(anyString(), anyString(), anyString(), any());
 	}
 
@@ -2055,7 +2055,7 @@ class ItemMigratorTest {
 	}
 
 	private static JsonParameter protocolParameter(final String businessName) {
-		return new JsonParameter().key("aot_inspection_internal").schemaId("2281_aot_inspection_internal_1.0").value(protocol(businessName).value());
+		return new JsonParameter().key("aot_internal_inspection_protocol").schemaId("2281_aot_internal_inspection_protocol_1.0").value(protocol(businessName).value());
 	}
 
 	/**

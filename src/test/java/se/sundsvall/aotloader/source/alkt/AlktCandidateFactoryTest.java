@@ -1376,7 +1376,7 @@ class AlktCandidateFactoryTest {
 				new Part("Anmärkningar", "Servering till minderårig: Ungdomar i baren\n77")))
 			// Draken shows it as the protocol of an inspection of a serving permit (decision 77), without the end time that
 			// cannot be read
-			.withProtocol(InspectionProtocols.SERVING_PERMIT, new JsonContent(JsonParameterType.SERVING_PERMIT_PROTOCOL, object("""
+			.withProtocol(InspectionProtocols.EXTERNAL_INSPECTION, new JsonContent(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL, object("""
 				{"premisesName":"Restaurang 1","premisesAddress":"Storgatan 1, 85230 Sundsvall","inspectionDate":"2023-11-04","visitStartTime":"21:30",\
 				"additionalRemarks":"Tillsynsomgång:\\nKrogrunda, 2023-11-04 – 2023-11-05\\nTillsammans med polisen.\\n\\nAnteckning:\\nMycket folk i baren.\\n\\n\
 				Anmärkningar:\\nServering till minderårig: Ungdomar i baren\\n77","inspector1NameAndTitle":"Anna Berg","inspector2NameAndTitle":"XYZ"}"""))));

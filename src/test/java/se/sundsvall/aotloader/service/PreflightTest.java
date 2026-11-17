@@ -315,7 +315,7 @@ class PreflightTest {
 			"Nyckel eller schema för JSON-parametern alcohol-party-asset saknas för SERVING_PERMIT (aot-loader.json-parameters.alcohol-party-asset, beslut 87, 92 och 98)",
 			"Nyckel eller schema för JSON-parametern premises-section saknas för SERVING_PERMIT (aot-loader.json-parameters.premises-section, beslut 87, 92 och 98)",
 			"Nyckel eller schema för JSON-parametern internal-inspection-protocol saknas för ALCOHOL_INSPECTION (aot-loader.json-parameters.internal-inspection-protocol, beslut 87, 92 och 98)",
-			"Nyckel eller schema för JSON-parametern serving-permit-protocol saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.serving-permit-protocol, beslut 87, 92 och 98)",
+			"Nyckel eller schema för JSON-parametern external-inspection-protocol saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.external-inspection-protocol, beslut 87, 92 och 98)",
 			"Nyckel eller schema för JSON-parametern external-inspection-form saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.json-parameters.external-inspection-form, beslut 87, 92 och 98)",
 			"Åtgärdstyp för anmärkningarna saknas för ALCOHOL_INSPECTION_VISIT (aot-loader.errand-types, beslut 57)",
 			"Etiketten för undertypen PERMANENT_SERVING saknas (aot-loader.errand-types, avsnitt 7.3.4)",
@@ -372,8 +372,8 @@ class PreflightTest {
 			new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2"),
 			new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2"),
 			new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0"),
-			new JsonParameterSettings("aot_inspection_serving_permit", "2281_aot_inspection_serving_permit_1.0"),
-			new JsonParameterSettings("aot_inspection_internal", "2281_aot_inspection_internal_1.0"),
+			new JsonParameterSettings("aot_external_inspection_protocol", "2281_aot_external_inspection_protocol_1.0"),
+			new JsonParameterSettings("aot_internal_inspection_protocol", "2281_aot_internal_inspection_protocol_1.0"),
 			new JsonParameterSettings("aot_inspection_internal_inspection", "2281_aot_inspection_internal_inspection_1.2"),
 			new JsonParameterSettings("aot_inspection_external_inspection", "2281_aot_inspection_external_inspection_1.2"),
 			new JsonParameterSettings("aot_alcohol_folkol_folkol_sales_notification", "2281_aot_alcohol_folkol_folkol_sales_notification_1.1"),
@@ -435,7 +435,7 @@ class PreflightTest {
 			case FOLKOL_SALES_NOTIFICATION, FOLKOL_SERVING_NOTIFICATION -> List.of(JsonParameterType.ALCOHOL_PARTY_ASSET);
 			case ECIGARETTE_NOTIFICATION, TOBACCO_FREE_NICOTINE_NOTIFICATION -> List.of(JsonParameterType.TOBACCO_PARTY_ASSET);
 			case ALCOHOL_INSPECTION, TOBACCO_INSPECTION -> List.of(JsonParameterType.INTERNAL_INSPECTION_PROTOCOL);
-			case ALCOHOL_INSPECTION_VISIT -> List.of(JsonParameterType.SERVING_PERMIT_PROTOCOL);
+			case ALCOHOL_INSPECTION_VISIT -> List.of(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL);
 			case TOBACCO_INSPECTION_VISIT, ALCOHOL_DOCUMENTATION, TOBACCO_DOCUMENTATION -> List.<JsonParameterType>of();
 		};
 

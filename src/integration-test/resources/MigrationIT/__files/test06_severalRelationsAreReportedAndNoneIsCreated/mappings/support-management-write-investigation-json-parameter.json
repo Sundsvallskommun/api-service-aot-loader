@@ -2,7 +2,7 @@
 	"name": "support-management-write-investigation-json-parameter",
 	"request": {
 		"method": "PUT",
-		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000008/investigations/investigation-1/json-parameters/aot_inspection_internal",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000008/investigations/investigation-1/json-parameters/aot_internal_inspection_protocol",
 		"headers": {
 			"X-Sent-By": {
 				"hasExactly": [
@@ -16,13 +16,13 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.key",
-					"equalTo": "aot_inspection_internal"
+					"equalTo": "aot_internal_inspection_protocol"
 				}
 			},
 			{
 				"matchesJsonPath": {
 					"expression": "$.schemaId",
-					"equalTo": "2281_aot_inspection_internal_1.0"
+					"equalTo": "2281_aot_internal_inspection_protocol_1.0"
 				}
 			}
 		]
@@ -33,8 +33,8 @@
 			"Content-Type": "application/json"
 		},
 		"jsonBody": {
-			"key": "aot_inspection_internal",
-			"schemaId": "2281_aot_inspection_internal_1.0",
+			"key": "aot_internal_inspection_protocol",
+			"schemaId": "2281_aot_internal_inspection_protocol_1.0",
 			"value": {},
 			"version": 0
 		}

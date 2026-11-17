@@ -23,7 +23,8 @@ import se.sundsvall.aotloader.support.Texts;
  * {@link #fields()}. A value the source does not have is
  * left out, and so is one that does not follow the schema, which {@link #omitted()} then names: a postal code, an email
  * address, a restaurant number or a number that does not have the form the schema wants. The fields are added in the
- * order of the schema.
+ * order of the schema. Draken's permit list searches the stored JSON as text and relies on that order: the name of the
+ * holder directly before its organization number, and the name of the place directly before its address.
  */
 public final class AssetContents {
 

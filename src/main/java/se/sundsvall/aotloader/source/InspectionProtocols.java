@@ -23,7 +23,7 @@ import se.sundsvall.aotloader.support.Texts;
 public final class InspectionProtocols {
 
 	/** The protocol of a visit to a place with a serving permit, "Yttre tillsyn". */
-	public static final String SERVING_PERMIT = "serving_permit";
+	public static final String EXTERNAL_INSPECTION = "external_inspection";
 	/** The protocol of an inspection of the permit holder without a visit, "Inre tillsyn". */
 	public static final String INTERNAL_INSPECTION = "internal_inspection";
 
@@ -38,7 +38,7 @@ public final class InspectionProtocols {
 	 *                           (decision 80)
 	 * @param  inspectors        who made the visit, the first two of whom fill the protocol's two fields
 	 * @param  texts             the texts of the visit, written as its description
-	 * @return                   the fields of the protocol {@link #SERVING_PERMIT}
+	 * @return                   the fields of the protocol {@link #EXTERNAL_INSPECTION}
 	 */
 	public static JsonContent visit(final Place place, final LocalDate date, final String start, final String end, final Boolean responsibleOnSite, final List<String> inspectors,
 		final InvestigationTexts texts) {
@@ -47,7 +47,7 @@ public final class InspectionProtocols {
 			fields.text("premisesName", place.name())
 				.text("premisesAddress", address(place));
 		}
-		return new JsonContent(JsonParameterType.SERVING_PERMIT_PROTOCOL, fields
+		return new JsonContent(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL, fields
 			.date("inspectionDate", date)
 			.text("visitStartTime", clock(start))
 			.text("visitEndTime", clock(end))

@@ -25,11 +25,12 @@ public enum JsonParameterType {
 	PREMISES_SECTION("premises-section", null),
 
 	/**
-	 * The fields of the inspection protocol "Yttre tillsyn" of a visit to a serving place, aot_inspection_serving_permit.
+	 * The fields of the inspection protocol "Yttre tillsyn" of a visit to a serving place,
+	 * aot_external_inspection_protocol.
 	 */
-	SERVING_PERMIT_PROTOCOL("serving-permit-protocol", null),
+	EXTERNAL_INSPECTION_PROTOCOL("external-inspection-protocol", null),
 
-	/** The fields of the inspection protocol "Inre tillsyn" of an inspection errand, aot_inspection_internal. */
+	/** The fields of the inspection protocol "Inre tillsyn" of an inspection errand, aot_internal_inspection_protocol. */
 	INTERNAL_INSPECTION_PROTOCOL("internal-inspection-protocol", null),
 
 	/** The errand data of an internal inspection errand, the form of its type, aot_inspection_internal_inspection. */

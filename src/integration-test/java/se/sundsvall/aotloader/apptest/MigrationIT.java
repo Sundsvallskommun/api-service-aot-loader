@@ -437,7 +437,7 @@ class MigrationIT extends AbstractAppTest {
 		migrateItem("ALKOL/ANMALAN/2-FOLKOL", false);
 
 		assertThat(wiremock.findAll(anyRequestedFor(urlMatching("/(support-management|party-assets|relation|party)/2262/.*"))))
-			.as("The errand of the place in Timrå is created in the municipality of the run, with 2262 as a parameter (decision 19)")
+			.as("The errand of the place in Timrå is created in the municipality of the run, with 2262 and its diary number as parameters (decisions 19 and 122)")
 			.isEmpty();
 		verifyStubs();
 

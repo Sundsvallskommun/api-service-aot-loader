@@ -60,7 +60,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.parameters.length()",
-					"equalTo": "1"
+					"equalTo": "2"
 				}
 			},
 			{
@@ -68,6 +68,9 @@
 					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
 					"equalTo": "2262"
 				}
+			},
+			{
+				"matchesJsonPath": "$.parameters[?(@.key == 'externalCaseRegistrationNumber' && @.displayName == 'Diarienummer' && @.values[0] == 'IAN-2020-7')]"
 			}
 		]
 	},

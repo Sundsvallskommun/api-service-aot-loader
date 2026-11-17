@@ -38,15 +38,18 @@ import se.sundsvall.aotloader.service.model.JsonContent;
 import se.sundsvall.aotloader.service.model.Kind;
 import se.sundsvall.aotloader.service.model.Parameter;
 import se.sundsvall.aotloader.service.model.PartyIds;
+import se.sundsvall.aotloader.support.DiaryNumbers;
 import se.sundsvall.aotloader.support.JsonValues;
 import se.sundsvall.aotloader.support.MigrationException;
 import se.sundsvall.aotloader.support.Texts;
 
 import static se.sundsvall.aotloader.Constants.LABEL_MIGRATED;
+import static se.sundsvall.aotloader.Constants.PARAMETER_EXTERNAL_CASE_REGISTRATION_NUMBER;
 import static se.sundsvall.aotloader.Constants.PARAMETER_PREMISES_MUNICIPALITY_ID;
 import static se.sundsvall.aotloader.Constants.RELATION_SERVICE_SUPPORT_MANAGEMENT;
 import static se.sundsvall.aotloader.Constants.RELATION_TYPE_LINK;
 import static se.sundsvall.aotloader.Constants.RESOURCE_TYPE_CASE;
+import static se.sundsvall.aotloader.Constants.TAG_DIARY_NUMBER;
 import static se.sundsvall.aotloader.Constants.TAG_MIGRATION_ID;
 import static se.sundsvall.aotloader.configuration.ClockConfiguration.SWEDISH_TIME;
 
@@ -128,7 +131,7 @@ public class TargetMapper {
 			.businessRelated(true)
 			.externalTags(externalTags(candidate))
 			.stakeholders(stakeholders.stakeholders(candidate, parties))
-			.parameters(ErrandParameterMapper.toParameters(List.of(premisesMunicipalityParameter(candidate, municipalityId))))
+			.parameters(ErrandParameterMapper.toParameters(parameters(candidate, municipalityId)))
 			// Always the list of JSON parameters, and of measures on a visit, also an empty one, so that an update
 			// of a draft replaces what an earlier run gave it
 			.jsonParameters(forms.toForm(candidate, municipalityId).map(form -> List.of(toJsonParameter(form))).orElse(List.of()));
@@ -431,10 +434,19 @@ public class TargetMapper {
 	}
 
 	/**
-	 * The municipality code of the place, on every errand whether it has a place or not, the only parameter of the errand,
-	 * as Draken and pw-alkt read no other (decisions 19, 94 and 100).
+	 * The parameters Draken and pw-alkt read, and no other (decisions 19, 94 and 100): the municipality code of the place,
+	 * on every errand whether it has a place or not, and, for a place in another municipality, the diary number of the
+	 * errand, which is the number in that municipality's registry, without a reference to a delegation decision written
+	 * after it (decisions 88, 89 and 122). An errand without a diary number in the source gets no such parameter.
 	 */
-	private Parameter premisesMunicipalityParameter(final Candidate candidate, final String municipalityId) {
-		return new Parameter(PARAMETER_PREMISES_MUNICIPALITY_ID, "Kommun", List.of(properties.premisesMunicipalityOf(candidate.place(), municipalityId)));
+	private List<Parameter> parameters(final Candidate candidate, final String municipalityId) {
+		final var premisesMunicipalityId = properties.premisesMunicipalityOf(candidate.place(), municipalityId);
+		final var municipality = new Parameter(PARAMETER_PREMISES_MUNICIPALITY_ID, "Kommun", List.of(premisesMunicipalityId));
+		if (premisesMunicipalityId.equals(municipalityId)) {
+			return List.of(municipality);
+		}
+		return Optional.ofNullable(Texts.trimToNull(DiaryNumbers.split(candidate.errand().externalTags().get(TAG_DIARY_NUMBER)).number()))
+			.map(number -> List.of(municipality, new Parameter(PARAMETER_EXTERNAL_CASE_REGISTRATION_NUMBER, "Diarienummer", List.of(number))))
+			.orElseGet(() -> List.of(municipality));
 	}
 }

@@ -31,7 +31,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.type",
-					"equalTo": "serving_permit"
+					"equalTo": "external_inspection"
 				}
 			},
 			{

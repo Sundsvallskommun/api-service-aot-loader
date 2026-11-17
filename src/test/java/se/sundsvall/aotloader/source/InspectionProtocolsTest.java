@@ -30,7 +30,7 @@ class InspectionProtocolsTest {
 			InvestigationTexts.of(new Part("Anteckning", "Mycket folk."), new Part("Anmärkningar", "Servering till minderårig\nBerusad gäst")));
 
 		// Draken takes midnight as 00:00, and has room for two inspectors
-		assertThat(fields.type()).isEqualTo(JsonParameterType.SERVING_PERMIT_PROTOCOL);
+		assertThat(fields.type()).isEqualTo(JsonParameterType.EXTERNAL_INSPECTION_PROTOCOL);
 		assertThat(json(fields)).isEqualTo("""
 			{"premisesName":"Krogen","premisesAddress":"Storgatan 1, 85230 Sundsvall","inspectionDate":"2023-11-04","visitStartTime":"21:30","visitEndTime":"00:00",\
 			"responsiblePerson":"present","additionalRemarks":"Anteckning:\\nMycket folk.\\n\\nAnmärkningar:\\nServering till minderårig\\nBerusad gäst",\

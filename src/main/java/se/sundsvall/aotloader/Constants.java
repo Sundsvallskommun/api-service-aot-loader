@@ -23,6 +23,11 @@ public final class Constants {
 	 */
 	public static final String PARAMETER_PREMISES_MUNICIPALITY_ID = "premisesMunicipalityId";
 	/**
+	 * The parameter of the errand with its number in the registry of the municipality of the place, which Draken shows and
+	 * asks for on an errand of Timrå (decision 122).
+	 */
+	public static final String PARAMETER_EXTERNAL_CASE_REGISTRATION_NUMBER = "externalCaseRegistrationNumber";
+	/**
 	 * The parameter that tells a person with significant influence apart from other stakeholders with the same role, as
 	 * Draken writes it, with the value true and no display name.
 	 */
