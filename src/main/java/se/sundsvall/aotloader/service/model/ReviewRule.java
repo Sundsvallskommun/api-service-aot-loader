@@ -18,6 +18,8 @@ public enum ReviewRule {
 	PERIOD_PASSED("G4", "Datumperioden har passerat", BLOCKING, true),
 	PERIOD_MISSING("G5", "Gäller inte året runt men saknar period", BLOCKING, true),
 	RESTAURANT_NUMBER_INVALID("G6", "Serveringsstället saknar serveringsställenummer, eller numret har inte 8 siffror", BLOCKING, true),
+	RESTAURANT_NUMBER_WITH_CATEGORY_CODE("G6", "Serveringsställets nummer har 10 siffror, serveringsställenumret följt av kategorikoden. Ärendet får de 8 första som serveringsställenummer och de 2 sista som kategorikod (beslut 124)",
+		INFO, true),
 	LEGAL_ID_ON_SEVERAL_OWNERS("G7", "Ägarens organisationsnummer finns på flera ägarposter", BLOCKING, true),
 	LEGAL_ID_INVALID("G8", "Ägarens nummer saknas eller har fel format", BLOCKING, false),
 	UNPARSEABLE("G9", "En säsong, period, tid, ett datum eller ett villkors giltighetsdatum går inte att tolka", BLOCKING, true),

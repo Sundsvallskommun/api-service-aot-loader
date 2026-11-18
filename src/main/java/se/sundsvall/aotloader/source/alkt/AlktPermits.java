@@ -69,6 +69,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ROWS_ON_PLA
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_INVALID;
+import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_WITH_CATEGORY_CODE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
 import static se.sundsvall.aotloader.service.model.Source.ALKT;
@@ -163,7 +164,7 @@ final class AlktPermits {
 		final var files = permitFiles(permit, place, decision, issuingErrands, hits);
 
 		final var placeName = place == null ? null : place.namn();
-		final var restaurantNumber = place == null ? null : place.restaurangBeteckning();
+		final var restaurantNumber = place == null ? null : place.restaurantNumber();
 		final var name = Optional.ofNullable(placeName).orElse(UNKNOWN_SERVING_PLACE);
 		final var premises = place == null ? null : index.place(place);
 		final var settings = index.properties().errandType(ErrandType.SERVING_PERMIT);
@@ -213,7 +214,10 @@ final class AlktPermits {
 			hits.add(RuleHit.of(OWNER_DIFFERS, "AgarID i tillståndet %d, på serveringsstället %d".formatted(permit.gtAgarId(), place.agarId())));
 		}
 		final var restaurantNumber = place.restaurangBeteckning();
-		if (restaurantNumber == null || !restaurantNumber.matches("\\d{8}")) {
+		final var codeAfterNumber = place.codeAfterNumber();
+		if (codeAfterNumber.isPresent()) {
+			hits.add(RuleHit.of(RESTAURANT_NUMBER_WITH_CATEGORY_CODE, numberWithCategoryCodeText(place, codeAfterNumber.get())));
+		} else if (restaurantNumber == null || !restaurantNumber.matches("\\d{8}")) {
 			hits.add(RuleHit.of(RESTAURANT_NUMBER_INVALID, restaurantNumber == null ? null : "'%s'".formatted(restaurantNumber)));
 		}
 		if (permit.gtRestaurangBeteckning() != null && restaurantNumber != null) {
@@ -223,6 +227,17 @@ final class AlktPermits {
 			hits.add(RuleHit.of(LEGAL_ID_INVALID, ownerText(place, owner)));
 		}
 		index.ownerNumberHits(owner, hits);
+	}
+
+	/**
+	 * The detail of G6 for a place whose restaurant number is followed by the category code. The 10 digits are not
+	 * written, since the report masks them as a personal identity number.
+	 */
+	private static String numberWithCategoryCodeText(final PlaceRow place, final String codeAfterNumber) {
+		final var text = "serveringsställenummer %s, kategorikod %s".formatted(place.restaurantNumber(), codeAfterNumber);
+		return place.categoryCode().filter(code -> !code.equals(codeAfterNumber))
+			.map(code -> text + ", men serveringsställets kategorikod är %s och gäller".formatted(code))
+			.orElse(text);
 	}
 
 	private static String ownerText(final PlaceRow place, final ContactRow owner) {
@@ -235,32 +250,33 @@ final class AlktPermits {
 	/**
 	 * G24 when the restaurant number on the permit is another than the place's. The permit may have the category code of
 	 * the place after the number, as the certificate prints it (decision 116), and G24 tells, as information, when that
-	 * code is another than the one registered on the place.
+	 * code is another than the place's category code.
 	 */
 	private static void restaurantNumberHits(final PermitRow permit, final PlaceRow place, final List<RuleHit> hits) {
-		if (digitsOf(permit.gtRestaurangBeteckning()).equals(digitsOf(place.restaurangBeteckning()))) {
+		if (digitsOf(permit.gtRestaurangBeteckning()).equals(digitsOf(place.restaurantNumber()))) {
 			return;
 		}
 		final var codeOnPermit = categoryCodeOnPermit(permit, place);
 		if (codeOnPermit.isEmpty()) {
-			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), place.restaurangBeteckning())));
+			hits.add(RuleHit.of(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(permit.gtRestaurangBeteckning(), place.restaurantNumber())));
 			return;
 		}
-		final var codeOfPlace = Texts.trimToNull(place.kategorikod());
-		if (codeOfPlace != null && !codeOfPlace.equals(codeOnPermit.get())) {
-			hits.add(RuleHit.of(CATEGORY_CODE_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(codeOnPermit.get(), codeOfPlace)));
+		final var codeOfPlace = place.categoryCode();
+		if (codeOfPlace.isPresent() && !codeOfPlace.get().equals(codeOnPermit.get())) {
+			hits.add(RuleHit.of(CATEGORY_CODE_DIFFERS, "på tillståndet %s, på serveringsstället %s".formatted(codeOnPermit.get(), codeOfPlace.get())));
 		}
 	}
 
 	/**
-	 * @return the category code of the place (decision 116): the one registered on the place, or else the two digits that
-	 *         follow its restaurant number on the permit; empty for a permit without a place, and when neither has one
+	 * @return the category code of the place (decisions 116 and 124): the one registered on the place, or else the one
+	 *         after its restaurant number on the place, or else the two digits that follow its restaurant number on the
+	 *         permit; empty for a permit without a place, and when none has one
 	 */
 	private static Optional<String> categoryCode(final PermitRow permit, final PlaceRow place) {
 		if (place == null) {
 			return Optional.empty();
 		}
-		return Optional.ofNullable(Texts.trimToNull(place.kategorikod())).or(() -> categoryCodeOnPermit(permit, place));
+		return place.categoryCode().or(() -> categoryCodeOnPermit(permit, place));
 	}
 
 	/**
@@ -268,10 +284,10 @@ final class AlktPermits {
 	 *         permit is not the place's number followed by two digits
 	 */
 	private static Optional<String> categoryCodeOnPermit(final PermitRow permit, final PlaceRow place) {
-		if (permit.gtRestaurangBeteckning() == null || place.restaurangBeteckning() == null) {
+		if (permit.gtRestaurangBeteckning() == null || place.restaurantNumber() == null) {
 			return Optional.empty();
 		}
-		final var number = digitsOf(place.restaurangBeteckning());
+		final var number = digitsOf(place.restaurantNumber());
 		final var onPermit = digitsOf(permit.gtRestaurangBeteckning());
 		if (number.isEmpty() || !onPermit.startsWith(number)) {
 			return Optional.empty();

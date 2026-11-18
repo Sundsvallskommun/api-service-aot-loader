@@ -124,7 +124,7 @@ public final class AlktCandidateFactory {
 		final var files = index.newFileList();
 		event.files().forEach(file -> files.add(file.name(), file.generated() ? DOCUMENTS : ATTACHMENTS, file.details()));
 		return documentation.builder(source, place == null ? null : index.place(place), index.ownerOf(place).orElse(null), former, index.placePermit(objektId))
-			.placeNumber(place == null ? null : place.restaurangBeteckning())
+			.placeNumber(place == null ? null : place.restaurantNumber())
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -144,7 +144,7 @@ public final class AlktCandidateFactory {
 		final var files = index.errandFiles(List.of(errand.arendeId()), index.newFileList());
 		return inspections.builder(source, place == null ? null : index.place(place), applicant, index.ownerOf(place).orElse(null), index.placePermit(errand.objektId()), decisions,
 			index.investigationTexts(List.of(errand.arendeId())))
-			.placeNumber(place == null ? null : place.restaurangBeteckning())
+			.placeNumber(place == null ? null : place.restaurantNumber())
 			.files(files.build(), files.assetFiles(), files.details())
 			.build();
 	}
@@ -153,7 +153,7 @@ public final class AlktCandidateFactory {
 		final var place = index.placeOf(visit.objektId());
 		return visits.builder(visit, index.snapshot().visits(), place == null ? null : index.place(place), index.placePermit(visit.objektId()),
 			place == null ? null : index.ownerOf(place).orElse(null), index.sharedFileNames())
-			.placeNumber(place == null ? null : place.restaurangBeteckning())
+			.placeNumber(place == null ? null : place.restaurantNumber())
 			.build();
 	}
 }

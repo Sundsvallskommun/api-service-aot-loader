@@ -83,6 +83,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_INVALID;
+import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_WITH_CATEGORY_CODE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.SUBTYPE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNDERLYING_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.UNPARSEABLE;
@@ -775,6 +776,61 @@ class AlktCandidateFactoryTest {
 		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
 
 		assertThat(candidate.ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(RESTAURANT_NUMBER_INVALID, "'1234'"));
+	}
+
+	@Test
+	void aRestaurantNumberOfThePlaceFollowedByTheCategoryCodeIsMigrated() {
+		final var snapshot = snapshot()
+			.permit(permit(1).gtRestaurantNumber("1234567841").build())
+			.permit(permit(2).gtRestaurantNumber("12345679").build())
+			.permit(permit(3).gtRestaurantNumber("1234568021").build())
+			.place(place(1, 10, "1234567841"))
+			.place(place(2, 10, "1234567941", "21"))
+			.place(place(3, 10, "1234568041"))
+			.owner(owner(10, "5566778899"))
+			.placeEvent(1, new PlaceEventRow(31020, new TextRow(LocalDateTime.of(2021, 6, 1, 8, 0), "ANT", false, "Ny serveringsansvarig", false, "IAN-2021-1"), List.of()))
+			.visit(VisitTestRows.visit(910, 1, LocalDate.of(2023, 11, 4), null, null, "04", null, null, null))
+			.build();
+		final var factory = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES);
+
+		final var permits = factory.permits().candidates();
+
+		// The place has its number as the certificate prints it, followed by the category code (decision 124)
+		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(RESTAURANT_NUMBER_WITH_CATEGORY_CODE, "serveringsställenummer 12345678, kategorikod 41"));
+		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_INVALID, RESTAURANT_NUMBER_DIFFERS, CATEGORY_CODE_DIFFERS);
+		assertThat(Assessment.of(permits.get(0).ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.MIGRATE);
+		assertThat(permits.get(0).placeNumber()).isEqualTo("12345678");
+		assertThat(permits.get(0).place().restaurantNumber()).isEqualTo("12345678");
+		assertThat(permits.get(0).errand().description()).contains("\nKategorikod: 41\n");
+		// The code registered on the place goes before the one after its number
+		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail)
+			.contains(tuple(RESTAURANT_NUMBER_WITH_CATEGORY_CODE, "serveringsställenummer 12345679, kategorikod 41, men serveringsställets kategorikod är 21 och gäller"));
+		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS, CATEGORY_CODE_DIFFERS);
+		assertThat(permits.get(1).errand().description()).contains("\nKategorikod: 21\n");
+		// A certificate with another code than the one after the place's number is told of, as information
+		assertThat(permits.get(2).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(CATEGORY_CODE_DIFFERS, "på tillståndet 21, på serveringsstället 41"));
+		assertThat(permits.get(2).ruleHits()).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_DIFFERS);
+		assertThat(permits.get(2).errand().description()).contains("\nKategorikod: 41\n");
+		// The other errands of the place get the number itself too
+		assertThat(factory.documentation().candidates()).extracting(Candidate::placeNumber, candidate -> candidate.place().restaurantNumber())
+			.containsExactly(tuple("12345678", "12345678"));
+		assertThat(factory.visits().candidates()).extracting(Candidate::placeNumber, candidate -> candidate.place().restaurantNumber())
+			.containsExactly(tuple("12345678", "12345678"));
+	}
+
+	@Test
+	void aRestaurantNumberOfThePlaceWithOtherDigitsIsReviewed() {
+		for (final var number : List.of("123456789", "12345678901", "12345678 41", "1234567A41", "123456784")) {
+			final var snapshot = snapshot().permit(permit(1).build()).place(place(1, 10, number)).owner(owner(10, "5566778899")).build();
+
+			final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+			// Only 8 digits followed by the 2 of the category code are read as the number and the code (decision 124)
+			assertThat(candidate.ruleHits()).as(number).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(RESTAURANT_NUMBER_INVALID, "'%s'".formatted(number)));
+			assertThat(candidate.ruleHits()).as(number).extracting(RuleHit::rule).doesNotContain(RESTAURANT_NUMBER_WITH_CATEGORY_CODE);
+			assertThat(candidate.placeNumber()).as(number).isEqualTo(number);
+		}
 	}
 
 	@Test

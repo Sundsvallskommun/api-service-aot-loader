@@ -4,6 +4,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import se.sundsvall.aotloader.service.model.FileDetails;
 import se.sundsvall.aotloader.source.CodeTexts;
 import se.sundsvall.aotloader.source.ContactRow;
@@ -11,6 +14,7 @@ import se.sundsvall.aotloader.source.InspectionVisitRows;
 import se.sundsvall.aotloader.source.PersonRow;
 import se.sundsvall.aotloader.source.SourceDecision;
 import se.sundsvall.aotloader.source.SourceErrand;
+import se.sundsvall.aotloader.support.Texts;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -209,10 +213,12 @@ public record AlktSnapshot(
 	/**
 	 * A row of Objekt.
 	 *
-	 * @param kategorikod   the category code that follows the restaurant number on the permit certificate, as registered
-	 *                      on the place
-	 * @param objektGrupper ObjektGrupp1-3, those filled in, in that order: codes of code list Q, the types of the place and
-	 *                      its markings
+	 * @param restaurangBeteckning the restaurant number as the source has it, which for some places is the number followed
+	 *                             by the category code; {@link #restaurantNumber()} is the number itself
+	 * @param kategorikod          the category code that follows the restaurant number on the permit certificate, as
+	 *                             registered on the place
+	 * @param objektGrupper        ObjektGrupp1-3, those filled in, in that order: codes of code list Q, the types of the
+	 *                             place and its markings
 	 */
 	public record PlaceRow(
 		Integer objektId,
@@ -229,6 +235,37 @@ public record AlktSnapshot(
 		String omrade,
 		String bifogadfil,
 		String bifogadfil2) {
+
+		/** The 8 digits of a restaurant number followed by the 2 of the category code, as the certificate prints them. */
+		private static final Pattern NUMBER_WITH_CATEGORY_CODE = Pattern.compile("(\\d{8})(\\d{2})");
+
+		/**
+		 * @return the restaurant number of the place: RestaurangBeteckning, or its first 8 digits when it holds the number
+		 *         followed by the category code (decision 124); null when the place has none
+		 */
+		public String restaurantNumber() {
+			return numberWithCategoryCode().map(matcher -> matcher.group(1)).orElse(restaurangBeteckning);
+		}
+
+		/**
+		 * @return the category code written after the restaurant number in RestaurangBeteckning (decision 124), empty when
+		 *         RestaurangBeteckning is not 10 digits
+		 */
+		public Optional<String> codeAfterNumber() {
+			return numberWithCategoryCode().map(matcher -> matcher.group(2));
+		}
+
+		/**
+		 * @return the category code of the place: Kategorikod (decision 116), or else the one written after the restaurant
+		 *         number in RestaurangBeteckning (decision 124); empty when it has neither
+		 */
+		public Optional<String> categoryCode() {
+			return Optional.ofNullable(Texts.trimToNull(kategorikod)).or(this::codeAfterNumber);
+		}
+
+		private Optional<Matcher> numberWithCategoryCode() {
+			return Optional.ofNullable(restaurangBeteckning).map(NUMBER_WITH_CATEGORY_CODE::matcher).filter(Matcher::matches);
+		}
 
 		@Override
 		public String toString() {

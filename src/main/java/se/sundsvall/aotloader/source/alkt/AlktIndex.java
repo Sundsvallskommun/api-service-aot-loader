@@ -187,7 +187,7 @@ final class AlktIndex {
 
 	Place place(final PlaceRow place) {
 		return new Place(place.namn(), place.adress(), place.postnummer(), place.postort(), place.telefon(), place.email(), snapshot.codeText(CODE_TYPE_AREA, place.omrade()),
-			place.restaurangBeteckning());
+			place.restaurantNumber());
 	}
 
 	/**
