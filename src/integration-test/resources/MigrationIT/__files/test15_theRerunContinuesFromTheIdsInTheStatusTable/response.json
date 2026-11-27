@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "3",
+	"placeNumber": "12345680",
+	"placeName": "Krogen Tre",
+	"outcome": "MIGRERAD",
+	"rules": "G29",
+	"detail": "G29 Tillståndet har inget tillståndsbevis i källsystemet och får inget i PartyAssets; Lagrum: står inte i tillståndets beslut eller bevis, så tillståndet får inget; Tillståndet i PartyAssets har 2 av 2 filer: Planritning 1, Beslut 1; Beslut: Bifall, fattat 2021-01-31, 0 villkor, 1 dokument; Beslutet från en tidigare körning är redan fattat i SupportManagement och har det källan ger nu",
+	"errandNumber": "ALKT-2026-6"
+}

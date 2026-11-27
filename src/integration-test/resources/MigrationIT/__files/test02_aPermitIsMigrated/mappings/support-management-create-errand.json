@@ -1,0 +1,137 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.lifecycle",
+					"equalTo": "DRAFT"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "ALCOHOL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "SERVING_PERMIT_APPLICATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.channel",
+					"equalTo": "MIGRATION"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.resolution",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.reporterUserId",
+					"equalTo": "alkt-migration"
+				}
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-migrated')]"
+			},
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-permanent-serving')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKT-TILLSTAND-1')]"
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'diarienummer' && @.value == 'IAN-2019-1')]"
+			},
+			{
+				"doesNotMatch": "(?s).*handelselogg.*"
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>Handläggare: Anna Berg<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'PRIMARY' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000001' && @.externalIdType == 'COMPANY' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000002' && @.firstName == 'Tolvan' && @.lastName == 'Tolvansson' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.firstName == 'Kontakt Person' && @.externalIdType == 'PRIVATE' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": "$.stakeholders[?(@.role == 'CONTACT' && @.externalId == '22222222-aaaa-bbbb-cccc-000000000003' && @.externalIdType == 'COMPANY' && @.organizationName == 'Ägarbolaget AB' && @.country == 'SVERIGE')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.stakeholders.length()",
+					"equalTo": "4"
+				}
+			},
+			{
+				"matchesJsonPath": "$[?(@.description =~ /.*<p>- Krav på bordsservering: Mat ska serveras<\\/p>.*/)]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters.length()",
+					"equalTo": "1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "0"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.parameters[?(@.key == 'premisesMunicipalityId')].values[0]",
+					"equalTo": "2281"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001"
+		}
+	}
+}

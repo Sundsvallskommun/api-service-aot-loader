@@ -1,0 +1,9 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "2",
+	"outcome": "MIGRERA",
+	"decidedBy": "handlaggare",
+	"decidedAt": "${json-unit.any-string}",
+	"comment": "Ägarbytet är utrett"
+}

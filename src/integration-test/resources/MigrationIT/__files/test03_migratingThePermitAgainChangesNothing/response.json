@@ -1,0 +1,10 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "1",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"outcome": "REDAN_MIGRERAD",
+	"rules": "",
+	"errandNumber": "ALKT-2026-1"
+}

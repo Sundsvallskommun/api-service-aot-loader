@@ -1,0 +1,33 @@
+{
+	"name": "support-management-update-attachment",
+	"request": {
+		"method": "PATCH",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000006/attachments/x",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.purpose.id",
+					"equalTo": "purpose-FLOOR_PLAN"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"id": "x"
+		}
+	}
+}

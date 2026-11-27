@@ -1,0 +1,26 @@
+{
+	"name": "party-assets-update",
+	"request": {
+		"method": "PATCH",
+		"url": "/party-assets/2281/assets/asset-internal-5",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"equalToJson": {
+					"status": "EXPIRED"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 204
+	}
+}

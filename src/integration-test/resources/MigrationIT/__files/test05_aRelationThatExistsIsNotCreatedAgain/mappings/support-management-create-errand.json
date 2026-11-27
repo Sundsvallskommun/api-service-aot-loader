@@ -1,0 +1,41 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": "$.labels[?(@.id == 'label-internal-inspection')]"
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000007"
+		}
+	}
+}

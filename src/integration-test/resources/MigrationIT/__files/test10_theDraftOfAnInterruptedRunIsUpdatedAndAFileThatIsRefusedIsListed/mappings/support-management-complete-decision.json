@@ -1,0 +1,51 @@
+{
+	"name": "support-management-complete-decision",
+	"request": {
+		"method": "PATCH",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000003/decisions/decision-1",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "COMPLETED"
+				}
+			},
+			{
+				"matchesJsonPath": "$.completedAt"
+			}
+		]
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"id": "decision-1",
+			"status": "COMPLETED"
+		}
+	}
+}

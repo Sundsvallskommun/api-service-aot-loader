@@ -1,0 +1,44 @@
+{
+	"name": "support-management-create-decision-term",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/decisions/decision-1/terms",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "mig01dec; type=adAccount"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"equalToJson": {
+					"sortOrder": 1,
+					"text": "Krav på bordsservering: Mat ska serveras"
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001/decisions/decision-1/terms/term-1"
+		}
+	}
+}

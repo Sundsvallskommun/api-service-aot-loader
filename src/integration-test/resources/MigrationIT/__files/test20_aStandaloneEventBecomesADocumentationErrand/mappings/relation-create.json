@@ -1,0 +1,41 @@
+{
+	"name": "relation-create",
+	"request": {
+		"method": "POST",
+		"url": "/relation/2281/relations",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"equalToJson": {
+					"type": "LINK",
+					"source": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000001",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					},
+					"target": {
+						"resourceId": "11111111-aaaa-bbbb-cccc-000000000012",
+						"type": "case",
+						"service": "supportmanagement",
+						"namespace": "AOT"
+					}
+				}
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/relations/relation-12"
+		}
+	}
+}

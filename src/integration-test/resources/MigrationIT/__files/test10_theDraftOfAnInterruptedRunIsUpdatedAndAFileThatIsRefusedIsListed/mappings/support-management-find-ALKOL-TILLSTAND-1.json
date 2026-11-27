@@ -1,0 +1,63 @@
+{
+	"name": "support-management-find-ALKOL-TILLSTAND-1",
+	"request": {
+		"method": "GET",
+		"urlPath": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"queryParameters": {
+			"filter": {
+				"equalTo": "externalTags.key:'migreringsid' and externalTags.value:'ALKOL-TILLSTAND-1' and (lifecycle:'DRAFT' or lifecycle:'ACTIVE')"
+			},
+			"page": {
+				"equalTo": "0"
+			},
+			"size": {
+				"equalTo": "100"
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"content": [
+				{
+					"id": "11111111-aaaa-bbbb-cccc-000000000003",
+					"errandNumber": "ALKT-2026-3",
+					"lifecycle": "DRAFT",
+					"externalTags": [
+						{
+							"key": "migreringsid",
+							"value": "ALKOL-TILLSTAND-1"
+						}
+					]
+				}
+			],
+			"last": true
+		}
+	}
+}

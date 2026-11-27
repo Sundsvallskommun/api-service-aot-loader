@@ -1,0 +1,11 @@
+{
+	"source": "ALKT",
+	"kind": "TILLSTAND",
+	"sourceId": "1",
+	"placeNumber": "12345678",
+	"placeName": "Krogen Ett",
+	"outcome": "SKULLE_RENSAS",
+	"rules": "",
+	"detail": "Tas bort: 3 relationer, tillståndet i PartyAssets, ärendet i SupportManagement och raden i statustabellen",
+	"errandNumber": "ALKT-2026-1"
+}

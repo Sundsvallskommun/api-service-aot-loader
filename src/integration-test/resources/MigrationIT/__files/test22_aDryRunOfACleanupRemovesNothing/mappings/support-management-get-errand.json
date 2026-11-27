@@ -1,0 +1,51 @@
+{
+	"name": "support-management-get-errand",
+	"request": {
+		"method": "GET",
+		"url": "/support-management/2281/AOT/errands/11111111-aaaa-bbbb-cccc-000000000001",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		}
+	},
+	"response": {
+		"status": 200,
+		"headers": {
+			"Content-Type": "application/json"
+		},
+		"jsonBody": {
+			"id": "11111111-aaaa-bbbb-cccc-000000000001",
+			"errandNumber": "ALKT-2026-1",
+			"lifecycle": "ACTIVE",
+			"externalTags": [
+				{
+					"key": "migreringsid",
+					"value": "ALKT-TILLSTAND-1"
+				},
+				{
+					"key": "diarienummer",
+					"value": "IAN-2019-1"
+				}
+			]
+		}
+	}
+}

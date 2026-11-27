@@ -1,0 +1,37 @@
+{
+	"name": "party-assets-upload-notification",
+	"request": {
+		"method": "POST",
+		"url": "/party-assets/2281/assets/asset-internal-4/attachments",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			}
+		},
+		"multipartPatterns": [
+			{
+				"matchingType": "ALL",
+				"headers": {
+					"Content-Disposition": {
+						"contains": "name=\"attachment\""
+					}
+				},
+				"bodyPatterns": [
+					{
+						"equalTo": "%PDF-1.4 anmälan folköl"
+					}
+				]
+			}
+		]
+	},
+	"response": {
+		"status": 201,
+		"headers": {
+			"Location": "/2281/assets/asset-internal-4/attachments/x"
+		}
+	}
+}

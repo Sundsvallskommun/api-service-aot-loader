@@ -1,0 +1,65 @@
+{
+	"name": "support-management-create-errand",
+	"request": {
+		"method": "POST",
+		"url": "/support-management/2281/AOT/errands",
+		"headers": {
+			"X-Sent-By": {
+				"hasExactly": [
+					{
+						"equalTo": "alkt-migration; type=migration"
+					}
+				]
+			},
+			"X-Trigger-Process": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			},
+			"X-notify": {
+				"hasExactly": [
+					{
+						"equalTo": "false"
+					}
+				]
+			}
+		},
+		"bodyPatterns": [
+			{
+				"matchesJsonPath": {
+					"expression": "$.status",
+					"equalTo": "CLOSED"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.category",
+					"equalTo": "ALCOHOL"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.classification.type",
+					"equalTo": "FOLKOL"
+				}
+			},
+			{
+				"matchesJsonPath": "$.externalTags[?(@.key == 'migreringsid' && @.value == 'ALKOL-ANMALAN-1-FOLKOL')]"
+			},
+			{
+				"matchesJsonPath": "$.jsonParameters[?(@.key == 'aot_alcohol_folkol_folkol_sales_notification' && @.schemaId == '2281_aot_alcohol_folkol_folkol_sales_notification_1.1' && @.value.invoiceAddressSameAsCompany == 'NO' && @.value.invoiceRecipient.careOf == 'Ekonomibyrån AB' && @.value.invoiceRecipient.postalCode == '85299' && @.value.invoiceReference == 'Kalle Kassör' && @.value.premisesName == 'Kiosken' && @.value.premisesAddressSameAsCompany == 'NO' && @.value.premisesAddress.street == 'Torget 1' && @.value.hasPermanentFoodSales == 'YES' && @.value.producesLowAlcoholBeerOnPremises == 'NO' && @.value.canShowDocumentationAtInspection[0] == 'CAN_SHOW_DOCUMENTATION')]"
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters.length()",
+					"equalTo": "1"
+				}
+			}
+		]
+	},
+	"response": {
+		"fault": "CONNECTION_RESET_BY_PEER"
+	}
+}

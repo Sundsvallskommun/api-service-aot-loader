@@ -1,0 +1,1334 @@
+openapi: 3.1.0
+info:
+  title: api-aot-loader
+  contact: {}
+  license:
+    name: MIT License
+    url: https://opensource.org/licenses/MIT
+  version: "1.0"
+servers:
+- url: http://localhost:53344
+  description: Generated server url
+tags:
+- name: Cleanup
+  description: "Removes migrated errands, their permits in PartyAssets and their relations\
+    \ from a test environment"
+- name: Migration
+  description: "Runs the migration of permits, notifications and inspection errands\
+    \ from AlkT and AlkOL"
+- name: Exception list
+  description: What the business decided for items that cannot be corrected in the
+    source (section 7.1.1)
+paths:
+  /{municipalityId}/migrations/exceptions/{source}/{kind}/{sourceId}:
+    put:
+      tags:
+      - Exception list
+      summary: "Put an item on the exception list, or change what the list says about\
+        \ it"
+      description: "The exception lifts the review rules that the business may decide\
+        \ about. A rule that the migration cannot do without, e.g. a permit holder\
+        \ missing in Party, keeps the item for review until the source is corrected."
+      operationId: putException
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewExceptionRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewException"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags:
+      - Exception list
+      summary: Take an item off the exception list
+      operationId: deleteException
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/runs:
+    get:
+      tags:
+      - Migration
+      summary: "List the runs, the latest first"
+      operationId: getRuns
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Run"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      tags:
+      - Migration
+      summary: Start a run
+      description: "Starts a run in the background and answers at once. A run is a\
+        \ dry run unless the request says dryRun false: it reads, applies the review\
+        \ rules, looks up the permit holders in Party and checks the files, and writes\
+        \ nothing to the target systems. Starting a run again never migrates an item\
+        \ twice: an item already migrated is left as it is, and an item that stopped\
+        \ half way continues from where it stopped. Only one run at a time. A selection\
+        \ of items, items, is taken in one run with one report and one result file."
+      operationId: startRun
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunRequest"
+        required: true
+      responses:
+        "202":
+          description: Accepted - the run has started
+          headers:
+            Location:
+              description: The run
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "409":
+          description: Conflict - another run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/runs/{runId}/stop:
+    post:
+      tags:
+      - Migration
+      summary: Stop a run before its next item
+      operationId: stopRun
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: runId
+        in: path
+        description: The run
+        required: true
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Accepted - the run stops before its next item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict - the run is not running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/items/{source}/{kind}/{sourceId}:
+    get:
+      tags:
+      - Migration
+      summary: Read an item of the status table
+      operationId: getItem
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationItem"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      tags:
+      - Migration
+      summary: "Migrate a single item, or try it in a dry run"
+      description: "Runs one item through the same flow as a full run and waits for\
+        \ it. The id is ObjektID in AlkT or FSID in AlkOL for a permit, FSID and product\
+        \ for a notification, e.g. 1234-FOLKOL, ArendeID for an inspection errand\
+        \ and TillsynsTillfalleNr for an inspection visit. An inspection errand waits\
+        \ until the permit of its place is migrated. Its row is the answer and no\
+        \ result file is written; items that belong together are taken as a selection\
+        \ in one run."
+      operationId: migrateItem
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      - name: dryRun
+        in: query
+        description: A dry run writes nothing to the target systems
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: OK - the row of the report for the item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportLine"
+        "404":
+          description: Not Found - the source has no such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict - a run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: "Unprocessable - the checks before the run failed, the source\
+            \ could not be read, or the run was stopped"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/items/{source}/{kind}/{sourceId}/cleanup:
+    post:
+      tags:
+      - Cleanup
+      summary: "Clean up a single item, or try it in a dry run"
+      description: "Removes what the migration wrote for one item of the status table,\
+        \ as a cleanup does, and waits for it."
+      operationId: cleanupItem
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: path
+        description: The source
+        required: true
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: path
+        description: The kind of item
+        required: true
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: sourceId
+        in: path
+        description: The id of the item in the source
+        required: true
+        schema:
+          type: string
+          pattern: "^\\d{1,10}(-[A-Z_]{1,30})?$"
+        example: 1234
+      - name: dryRun
+        in: query
+        description: A dry run removes nothing
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: OK - the row of the report for the item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportLine"
+        "404":
+          description: Not Found - the status table has no such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict - a run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Unprocessable - the cleanup did not start or failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/cleanups:
+    post:
+      tags:
+      - Cleanup
+      summary: Start a cleanup
+      description: "Starts a cleanup in the background and answers at once. For every\
+        \ item of the status table in the selection it removes the relations the migration\
+        \ and PartyAssets wrote from its errand, its permit in PartyAssets and its\
+        \ errand in SupportManagement, and then the item, so that the next run migrates\
+        \ it anew. A permit is removed only when its asset id is the errand's, and\
+        \ an errand only when it carries the item's tag migreringsid. A cleanup is\
+        \ a dry run unless the request says dryRun false, and then only reads and\
+        \ reports what it would remove. It is followed and stopped as a run, and its\
+        \ report has the outcomes RENSAD, SKULLE_RENSAS and FEL. Only one run or cleanup\
+        \ at a time."
+      operationId: startCleanup
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupRequest"
+        required: true
+      responses:
+        "202":
+          description: Accepted - the cleanup has started
+          headers:
+            Location:
+              description: "The cleanup, as a run"
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "409":
+          description: Conflict - another run is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/runs/{runId}:
+    get:
+      tags:
+      - Migration
+      summary: "Read a run, with the number of report rows per outcome"
+      operationId: getRun
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: runId
+        in: path
+        description: The run
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/runs/{runId}/report:
+    get:
+      tags:
+      - Migration
+      summary: Read the report of a run
+      description: "One row per item, with the review rules and what went wrong. It\
+        \ never holds names or numbers of permit holders."
+      operationId: getReport
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: runId
+        in: path
+        description: The run
+        required: true
+        schema:
+          type: string
+      - name: outcome
+        in: query
+        description: "The outcomes to list, all when left out"
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - MIGRERAD
+            - REDAN_MIGRERAD
+            - SKULLE_MIGRERAS
+            - GRANSKAS
+            - MIGRERAS_INTE
+            - VANTAR
+            - FEL
+            - EJ_KORD
+            - RENSAD
+            - SKULLE_RENSAS
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportLine"
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/runs/{runId}/report.csv:
+    get:
+      tags:
+      - Migration
+      summary: Read the report of a run as a CSV file for Excel
+      operationId: getReportCsv
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: runId
+        in: path
+        description: The run
+        required: true
+        schema:
+          type: string
+      - name: outcome
+        in: query
+        description: "The outcomes to list, all when left out"
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - MIGRERAD
+            - REDAN_MIGRERAD
+            - SKULLE_MIGRERAS
+            - GRANSKAS
+            - MIGRERAS_INTE
+            - VANTAR
+            - FEL
+            - EJ_KORD
+            - RENSAD
+            - SKULLE_RENSAS
+      responses:
+        "200":
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+        "404":
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/items:
+    get:
+      tags:
+      - Migration
+      summary: List the status table
+      operationId: getItems
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      - name: source
+        in: query
+        description: Only items of the source
+        required: false
+        schema:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+      - name: kind
+        in: query
+        description: Only items of the kind
+        required: false
+        schema:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+      - name: status
+        in: query
+        description: Only items with the status
+        required: false
+        schema:
+          type: string
+          enum:
+          - GRANSKAS
+          - MIGRERAS_INTE
+          - VANTAR
+          - TILLSTANDSHAVARE_KLAR
+          - ARENDE_SKAPAT
+          - BILAGOR_KLARA
+          - TILLSTAND_SKAPAT
+          - BESLUT_KLART
+          - RELATION_KLAR
+          - KLAR
+          - FEL
+          - RENSAS
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MigrationItem"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /{municipalityId}/migrations/exceptions:
+    get:
+      tags:
+      - Exception list
+      summary: List the exception list
+      operationId: getExceptions
+      parameters:
+      - name: municipalityId
+        in: path
+        description: Municipality ID
+        required: true
+        schema:
+          type: string
+        example: 2281
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReviewException"
+        "400":
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                - $ref: "#/components/schemas/Problem"
+                - $ref: "#/components/schemas/ConstraintViolationProblem"
+        "500":
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api-docs:
+    get:
+      tags:
+      - API
+      summary: OpenAPI
+      operationId: getApiDocs
+      responses:
+        "200":
+          description: OK
+          content:
+            application/yaml:
+              schema:
+                type: string
+      x-auth-type: None
+      x-throttling-tier: Unlimited
+      x-wso2-mutual-ssl: Optional
+components:
+  schemas:
+    ReviewExceptionRequest:
+      type: object
+      description: What the business decided for an item that cannot be corrected
+        in the source
+      properties:
+        outcome:
+          type: string
+          description: "MIGRERA to migrate the item despite the rules that hit it,\
+            \ MIGRERA_SOM_UTGANGET to migrate it with the permit as EXPIRED"
+          enum:
+          - MIGRERA
+          - MIGRERA_SOM_UTGANGET
+        decidedBy:
+          type: string
+          description: "Who decided, e.g. a user id"
+          maxLength: 100
+          minLength: 0
+        decidedAt:
+          type: string
+          format: date
+          description: "When it was decided, today when left out"
+        comment:
+          type: string
+          description: Why; no names or numbers of permit holders
+          maxLength: 1000
+          minLength: 0
+      required:
+      - decidedBy
+      - outcome
+    Problem:
+      type: object
+      properties:
+        instance:
+          type: string
+          format: uri
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        detail:
+          type: string
+        status:
+          type: integer
+          format: int32
+    ConstraintViolationProblem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        status:
+          type: integer
+          format: int32
+        violations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Violation"
+        title:
+          type: string
+        instance:
+          type: string
+          format: uri
+        detail:
+          type: string
+    Violation:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    ReviewException:
+      type: object
+      description: "A row of the exception list: what the business decided for an\
+        \ item that cannot be corrected in the source"
+      properties:
+        source:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+        kind:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+        sourceId:
+          type: string
+        outcome:
+          type: string
+          enum:
+          - MIGRERA
+          - MIGRERA_SOM_UTGANGET
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date
+        comment:
+          type: string
+    RunRequest:
+      type: object
+      description: What a run is to migrate
+      properties:
+        dryRun:
+          type: boolean
+          default: true
+          description: A dry run only reads and reports and writes nothing to the
+            target systems. A run is a dry run unless this says false.
+        sources:
+          type: array
+          description: "The sources to read, all when left out"
+          items:
+            type: string
+            enum:
+            - ALKT
+            - ALKOL
+          maxItems: 2147483647
+          minItems: 1
+        kinds:
+          type: array
+          description: "The kinds of item to migrate, all when left out. AlkT has\
+            \ no notifications."
+          items:
+            type: string
+            enum:
+            - TILLSTAND
+            - ANMALAN
+            - TILLSYN
+            - TILLSYNSBESOK
+            - DOKUMENTATION
+          maxItems: 2147483647
+          minItems: 1
+        limit:
+          type: integer
+          format: int32
+          description: "The largest number of items the run writes to the target systems,\
+            \ no limit when left out"
+          minimum: 1
+        items:
+          type: array
+          description: "The items to migrate, written as in the report: source/kind/id.\
+            \ Every item of the sources and kinds when left out. They are taken in\
+            \ one run, in the order of a full run, with one report and one result\
+            \ file. An item outside the sources and kinds is refused."
+          example:
+          - ALKT/TILLSTAND/123
+          - ALKT/TILLSYN/4567
+          items:
+            type: string
+            minLength: 1
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/(\\d{1,10}(-[A-Z_]{1,30})?|utan-id-\\\
+              d{1,10})\\s*$"
+          maxItems: 2147483647
+          minItems: 1
+    Run:
+      type: object
+      description: "A run of the migration, or of a cleanup"
+      properties:
+        id:
+          type: string
+        municipalityId:
+          type: string
+        dryRun:
+          type: boolean
+        cleanup:
+          type: boolean
+        sources:
+          type: array
+          items:
+            type: string
+        kinds:
+          type: array
+          items:
+            type: string
+        itemKey:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+        limit:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - RUNNING
+          - COMPLETED
+          - STOPPED
+          - FAILED
+          - ABORTED
+        message:
+          type: string
+        started:
+          type: string
+          format: date-time
+        finished:
+          type: string
+          format: date-time
+        outcomes:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+    ReportLine:
+      type: object
+      description: A row of the report of a run
+      properties:
+        source:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+        kind:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+        sourceId:
+          type: string
+        placeNumber:
+          type: string
+        placeName:
+          type: string
+        outcome:
+          type: string
+          enum:
+          - MIGRERAD
+          - REDAN_MIGRERAD
+          - SKULLE_MIGRERAS
+          - GRANSKAS
+          - MIGRERAS_INTE
+          - VANTAR
+          - FEL
+          - EJ_KORD
+          - RENSAD
+          - SKULLE_RENSAS
+        rules:
+          type: string
+        detail:
+          type: string
+        errandNumber:
+          type: string
+    CleanupRequest:
+      type: object
+      description: What a cleanup is to remove from the target systems
+      properties:
+        dryRun:
+          type: boolean
+          default: true
+          description: A dry run only reads and reports what it would remove. A cleanup
+            is a dry run unless this says false.
+        sources:
+          type: array
+          description: "The sources whose items to clean up, all when left out"
+          items:
+            type: string
+            enum:
+            - ALKT
+            - ALKOL
+          maxItems: 2147483647
+          minItems: 1
+        kinds:
+          type: array
+          description: "The kinds of item to clean up, all when left out"
+          items:
+            type: string
+            enum:
+            - TILLSTAND
+            - ANMALAN
+            - TILLSYN
+            - TILLSYNSBESOK
+            - DOKUMENTATION
+          maxItems: 2147483647
+          minItems: 1
+        limit:
+          type: integer
+          format: int32
+          description: "The largest number of items the cleanup takes, no limit when\
+            \ left out"
+          minimum: 1
+        items:
+          type: array
+          description: "The items to clean up, written as in the report: source/kind/id.\
+            \ Every item of the sources and kinds when left out. They are taken in\
+            \ one cleanup, with one report and one result file. An item outside the\
+            \ sources and kinds is refused."
+          example:
+          - ALKT/TILLSTAND/123
+          - ALKT/TILLSYN/4567
+          items:
+            type: string
+            minLength: 1
+            pattern: "^\\s*[A-Za-z]{1,10}/[A-Za-z]{1,20}/(\\d{1,10}(-[A-Z_]{1,30})?|utan-id-\\\
+              d{1,10})\\s*$"
+          maxItems: 2147483647
+          minItems: 1
+    MigrationItem:
+      type: object
+      description: A row of the status table
+      properties:
+        source:
+          type: string
+          enum:
+          - ALKT
+          - ALKOL
+        kind:
+          type: string
+          enum:
+          - TILLSTAND
+          - ANMALAN
+          - TILLSYN
+          - TILLSYNSBESOK
+          - DOKUMENTATION
+        sourceId:
+          type: string
+        errandType:
+          type: string
+          enum:
+          - SERVING_PERMIT
+          - TOBACCO_PERMIT
+          - FOLKOL_SALES_NOTIFICATION
+          - FOLKOL_SERVING_NOTIFICATION
+          - ECIGARETTE_NOTIFICATION
+          - TOBACCO_FREE_NICOTINE_NOTIFICATION
+          - ALCOHOL_INSPECTION
+          - TOBACCO_INSPECTION
+          - ALCOHOL_INSPECTION_VISIT
+          - TOBACCO_INSPECTION_VISIT
+          - ALCOHOL_DOCUMENTATION
+          - TOBACCO_DOCUMENTATION
+        status:
+          type: string
+          enum:
+          - GRANSKAS
+          - MIGRERAS_INTE
+          - VANTAR
+          - TILLSTANDSHAVARE_KLAR
+          - ARENDE_SKAPAT
+          - BILAGOR_KLARA
+          - TILLSTAND_SKAPAT
+          - BESLUT_KLART
+          - RELATION_KLAR
+          - KLAR
+          - FEL
+          - RENSAS
+        failedStep:
+          type: string
+          enum:
+          - LAS_OCH_BEDOM
+          - TILLSTANDSHAVARE
+          - ARENDE
+          - BILAGOR
+          - TILLSTAND
+          - BESLUT
+          - RELATION
+          - AKTIVERA
+        reason:
+          type: string
+        placeNumber:
+          type: string
+        placeName:
+          type: string
+        municipalityId:
+          type: string
+        errandId:
+          type: string
+        errandNumber:
+          type: string
+        assetId:
+          type: string
+        partyAssetsId:
+          type: string
+        relationId:
+          type: string
+        lastRunId:
+          type: string
+        modified:
+          type: string
+          format: date-time
+  securitySchemes: {}
