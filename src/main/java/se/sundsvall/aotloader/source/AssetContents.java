@@ -20,11 +20,11 @@ import se.sundsvall.aotloader.support.Texts;
 /**
  * Builds the JSON parameter of a post in PartyAssets by the AoT schemas (decision 87), and the place in the form of an
  * inspection errand, the same way for both sources: the fields both schemas have here, those of one schema through
- * {@link #fields()}. A value the source does not have is
- * left out, and so is one that does not follow the schema, which {@link #omitted()} then names: a postal code, an email
- * address, a restaurant number or a number that does not have the form the schema wants. The fields are added in the
- * order of the schema. Draken's permit list searches the stored JSON as text and relies on that order: the name of the
- * holder directly before its organization number, and the name of the place directly before its address.
+ * {@link #fields()}. A value the source does not have is left out, and so is one that does not follow the schema, which
+ * {@link #omitted()} then names: a postal code, an email address, a restaurant number, a category code or a number that
+ * does not have the form the schema wants. The fields are added in the order of the schema. Draken's permit list
+ * searches the stored JSON as text and relies on that order: the name of the holder directly before its organization
+ * number, and the name of the place directly before its address.
  */
 public final class AssetContents {
 
@@ -38,8 +38,10 @@ public final class AssetContents {
 	public static final String FIELD_DECISION_TEXT = "decisionText";
 	public static final String FIELD_LEGAL_BASIS = "legalBasis";
 	public static final String FIELD_MIGRATION = "migration";
+	public static final String FIELD_CATEGORY_CODE = "categoryCode";
 
 	private static final Pattern RESTAURANT_NUMBER = Pattern.compile("\\d{8}");
+	private static final Pattern CATEGORY_CODE = Pattern.compile("\\d{1,3}");
 	private static final Pattern COUNT = Pattern.compile("\\d{1,9}");
 
 	private final AssetSchema schema;
@@ -68,6 +70,20 @@ public final class AssetContents {
 		this.diaryNumber = diaryNumber;
 		root.text(FIELD_CASE_REGISTRATION_NUMBER, diaryNumber)
 			.text(FIELD_EXTERNAL_CASE_REGISTRATION_NUMBER, diaryNumber);
+		return this;
+	}
+
+	/**
+	 * Adds the category code of the serving place, which the permit certificate prints after the restaurant number, by the
+	 * alcohol schema (decision 125); the tobacco schema has no such field. A code that is not one to three digits is left
+	 * out.
+	 *
+	 * @param code the category code, null when the source has none
+	 */
+	public AssetContents categoryCode(final String code) {
+		if (schema == AssetSchema.ALCOHOL) {
+			root.text(FIELD_CATEGORY_CODE, omissions.checked(FIELD_CATEGORY_CODE, code, CATEGORY_CODE.asMatchPredicate(), "har inte en till tre siffror"));
+		}
 		return this;
 	}
 

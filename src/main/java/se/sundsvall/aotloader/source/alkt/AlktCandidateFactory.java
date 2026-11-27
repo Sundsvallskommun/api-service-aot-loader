@@ -79,7 +79,7 @@ public final class AlktCandidateFactory {
 	public ReaderResult inspections() {
 		final var inspections = new InspectionCandidates(ErrandType.ALCOHOL_INSPECTION, index.properties(), UNKNOWN_SERVING_PLACE, "tillsynsärendet saknar serveringsställe", index.today());
 		final var candidates = index.snapshot().errands().values().stream()
-			.filter(errand -> inspections.selects(errand.arendeTyp(), index.hasPermit(errand.objektId())))
+			.filter(errand -> inspections.selects(errand.arendeTyp(), index.hasCurrentPermit(errand.objektId())))
 			.map(errand -> inspectionErrand(errand, inspections))
 			.toList();
 		return new ReaderResult(candidates, List.of());
@@ -91,7 +91,7 @@ public final class AlktCandidateFactory {
 	public ReaderResult visits() {
 		final var visits = new InspectionVisitCandidates(ErrandType.ALCOHOL_INSPECTION_VISIT, index.properties(), UNKNOWN_SERVING_PLACE, "tillsynsbesöket saknar serveringsställe", index.today());
 		final var candidates = index.snapshot().visits().visits().stream()
-			.filter(visit -> visits.selects(index.hasPermit(visit.objektId())))
+			.filter(visit -> visits.selects(index.hasCurrentPermit(visit.objektId())))
 			.map(visit -> visit(visit, visits))
 			.toList();
 		return new ReaderResult(candidates, List.of());

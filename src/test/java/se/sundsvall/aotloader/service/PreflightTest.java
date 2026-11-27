@@ -364,12 +364,12 @@ class PreflightTest {
 			.containsExactly(tuple("ALCOHOL", "FOLKOL", List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SALES_NOTIFICATION")),
 				tuple("ALCOHOL", "FOLKOL", List.of("CATEGORYROOT/ALCOHOL/FOLKOL/FOLKOL_SERVING_NOTIFICATION")));
 		// Every JSON parameter under the name of its schema, as Draken and pw-alkt store it, by the version the test
-		// environment registers and Draken writes (decisions 87, 92, 97, 98 and 102)
+		// environment registers and Draken writes (decisions 87, 92, 97, 98, 102 and 125)
 		assertThat(result.problems()).filteredOn(problem -> problem.contains("JSON-parametern")).isEmpty();
 		assertThat(Stream.of(JsonParameterType.values()).map(properties::jsonParameter)).containsExactly(
-			new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_1.0"),
+			new JsonParameterSettings("aot_alcohol_party_asset", "2281_aot_alcohol_party_asset_1.2"),
 			new JsonParameterSettings("aot_tobacco_party_asset", "2281_aot_tobacco_party_asset_1.0"),
-			new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.2"),
+			new JsonParameterSettings("aot_alcohol_decision", "2281_aot_alcohol_decision_1.4"),
 			new JsonParameterSettings("aot_tobacco_decision", "2281_aot_tobacco_decision_1.2"),
 			new JsonParameterSettings("aot_investigation_premises_section", "2281_aot_investigation_premises_section_1.0"),
 			new JsonParameterSettings("aot_external_inspection_protocol", "2281_aot_external_inspection_protocol_1.0"),

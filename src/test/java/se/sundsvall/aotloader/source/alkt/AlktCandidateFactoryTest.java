@@ -78,6 +78,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_ON_ALL_YEAR;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ROWS_ON_PLACE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_ERRAND_OPEN;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
@@ -674,7 +675,118 @@ class AlktCandidateFactoryTest {
 			assertThat(candidate.ruleHits()).as(written).extracting(RuleHit::rule, RuleHit::detail)
 				.contains(tuple(RESTAURANT_NUMBER_DIFFERS, "på tillståndet %s, på serveringsstället 12345678".formatted(written)));
 			assertThat(candidate.errand().description()).as(written).doesNotContain("Kategorikod");
+			assertThat(candidate.asset().content().has("categoryCode")).as(written).isFalse();
 		}
+	}
+
+	@Test
+	void theCategoryCodeIsInThePostAndTheDecisionAfterTheTypeOfThePermit() {
+		final var snapshot = snapshot()
+			.permit(permit(1).beslutsId(100).build())
+			.place(place(1, 10, "12345678", "41"))
+			.owner(owner(10, "5566778899"))
+			.errand(AlktTestRows.errand(500, 1, "01", "IAN-2019-1", LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.decision(AlktTestRows.decision(100, 500, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, null))
+			.build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		// The schemas have the field since aot_alcohol_party_asset 1.1 and aot_alcohol_decision 1.3 (decision 125)
+		assertThat(candidate.asset().content().get("categoryCode").asString()).isEqualTo("41");
+		assertThat(candidate.asset().content().propertyNames()).containsSubsequence("servingPermitType", "categoryCode", "permitHolder");
+		assertThat(candidate.asset().omitted()).isEmpty();
+		assertThat(candidate.decision().content().get("categoryCode").asString()).isEqualTo("41");
+		assertThat(candidate.errand().description()).contains("\nKategorikod: 41\n");
+	}
+
+	@Test
+	void aCategoryCodeThatIsNotOneToThreeDigitsIsLeftOutOfThePost() {
+		final var snapshot = snapshot().permit(permit(1).build()).place(place(1, 10, "12345678", "4A")).owner(owner(10, "5566778899")).build();
+
+		final var candidate = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates().getFirst();
+
+		// The asset schema takes ^[0-9]{1,3}$, and the description still tells the code as the source has it
+		assertThat(candidate.asset().content().has("categoryCode")).isFalse();
+		assertThat(candidate.asset().omitted()).containsExactly("categoryCode: har inte en till tre siffror");
+		assertThat(candidate.errand().description()).contains("\nKategorikod: 4A\n");
+	}
+
+	@Test
+	void aPermitRevokedAfterItWasIssuedIsNotMigratedAndNeitherAreTheInspectionsOfItsPlace() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.permit(permit(2).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.owner(owner(10, "5566778899"))
+			// Permit 1 was issued 2019-05-01 and revoked after an inspection, permit 2 by its own decision
+			.errand(AlktTestRows.errand(700, 1, "07", "TIL-2023-1", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 6, 1), null))
+			.decision(AlktTestRows.decision(800, 700, "0540", LocalDate.of(2023, 5, 15).atStartOfDay(), null, null, null, null))
+			.errand(AlktTestRows.errand(701, 2, "03", "IAN-2024-1", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 2, 1), null))
+			.decision(AlktTestRows.decision(801, 701, "0710", LocalDate.of(2024, 2, 1).atStartOfDay(), null, null, null, null))
+			.visit(VisitTestRows.visit(900, 1, LocalDate.of(2022, 11, 4), null, null, "04", null, null, null))
+			.build();
+		final var factory = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES);
+
+		final var permits = factory.permits().candidates();
+
+		// Gällande_Tillstånd still has them, but a customer whose permit was revoked must not get it back (decision 126)
+		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ENDED, "0540 2023-05-15"));
+		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ENDED, "0710 2024-02-01"));
+		assertThat(permits).allSatisfy(permit -> assertThat(Assessment.of(permit.ruleHits(), Optional.empty()).decision()).isEqualTo(Decision.NOT_MIGRATED));
+		// The place has no current permit, so its inspections are not migrated either, as in AlkOL (decision 64)
+		assertThat(factory.inspections().candidates()).isEmpty();
+		assertThat(factory.visits().candidates()).isEmpty();
+	}
+
+	@Test
+	void aRevocationBeforeThePermitWasIssuedConcernsAnEarlierPermit() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.place(place(1, 10, "12345678"))
+			.owner(owner(10, "5566778899"))
+			// The earlier holder went bankrupt, and the current permit was issued 2019-05-01, the same day
+			.errand(AlktTestRows.errand(700, 1, "14", "IAN-2019-0", LocalDate.of(2019, 3, 1), LocalDate.of(2019, 5, 1), null))
+			.decision(AlktTestRows.decision(800, 700, "0700", LocalDate.of(2019, 5, 1).atTime(9, 0), null, null, null, null))
+			.errand(AlktTestRows.errand(701, 1, "07", "TIL-2023-1", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 6, 1), null))
+			.decision(AlktTestRows.decision(801, 701, "0520", LocalDate.of(2023, 5, 15).atStartOfDay(), null, null, null, null))
+			.build();
+		final var factory = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES);
+
+		final var permit = factory.permits().candidates().getFirst();
+
+		assertThat(permit.ruleHits()).extracting(RuleHit::rule).doesNotContain(PERMIT_ENDED);
+		assertThat(factory.inspections().candidates()).extracting(Candidate::key).containsExactly(new ItemKey(ALKT, TILLSYN, "701"));
+	}
+
+	@Test
+	void aRevocationWithoutADateCountsAsLaterUnlessItsErrandOrItsIdShowsItIsEarlier() {
+		final var snapshot = snapshot()
+			.permit(permit(1).build())
+			.permit(permit(2).build())
+			.permit(permit(3).beslutsId(810).build())
+			.place(place(1, 10, "12345678"))
+			.place(place(2, 10, "12345679"))
+			.place(place(3, 10, "12345680"))
+			.owner(owner(10, "5566778899"))
+			// Nothing tells when the revocation of place 1 was
+			.errand(AlktTestRows.errand(700, 1, "03", null, LocalDate.of(2018, 1, 1), null, null))
+			.decision(AlktTestRows.decision(800, 700, "0710", null, null, null, null, null))
+			// The errand of place 2 was closed before its permit was issued
+			.errand(AlktTestRows.errand(701, 2, "03", null, LocalDate.of(2018, 1, 1), LocalDate.of(2018, 2, 1), null))
+			.decision(AlktTestRows.decision(801, 701, "0710", null, null, null, null, null))
+			// The decision of place 3 was entered before the one its permit points to
+			.errand(AlktTestRows.errand(702, 3, "03", null, LocalDate.of(2018, 1, 1), null, null))
+			.decision(AlktTestRows.decision(802, 702, "0710", null, null, null, null, null))
+			.errand(AlktTestRows.errand(703, 3, "01", null, LocalDate.of(2019, 1, 1), LocalDate.of(2019, 5, 1), null))
+			.decision(AlktTestRows.decision(810, 703, "0100", LocalDate.of(2019, 4, 20).atStartOfDay(), null, null, null, null))
+			.build();
+
+		final var permits = new AlktCandidateFactory(snapshot, TODAY, PROPERTIES).permits().candidates();
+
+		assertThat(permits.get(0).ruleHits()).extracting(RuleHit::rule, RuleHit::detail).contains(tuple(PERMIT_ENDED, "0710 utan datum"));
+		assertThat(permits.get(1).ruleHits()).extracting(RuleHit::rule).doesNotContain(PERMIT_ENDED);
+		assertThat(permits.get(2).ruleHits()).extracting(RuleHit::rule).doesNotContain(PERMIT_ENDED);
 	}
 
 	@Test

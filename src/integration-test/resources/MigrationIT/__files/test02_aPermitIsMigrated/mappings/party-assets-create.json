@@ -81,7 +81,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.jsonParameters[0].schemaId",
-					"equalTo": "2281_aot_alcohol_party_asset_1.0"
+					"equalTo": "2281_aot_alcohol_party_asset_1.2"
 				}
 			},
 			{
@@ -106,6 +106,12 @@
 				"matchesJsonPath": {
 					"expression": "$.jsonParameters[0].value.servingPermitType",
 					"equalTo": "PERMANENT_SERVING"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.jsonParameters[0].value.categoryCode",
+					"equalTo": "21"
 				}
 			},
 			{

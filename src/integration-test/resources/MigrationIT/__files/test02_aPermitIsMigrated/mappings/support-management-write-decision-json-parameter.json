@@ -36,7 +36,7 @@
 			{
 				"matchesJsonPath": {
 					"expression": "$.schemaId",
-					"equalTo": "2281_aot_alcohol_decision_1.2"
+					"equalTo": "2281_aot_alcohol_decision_1.4"
 				}
 			},
 			{
@@ -55,6 +55,12 @@
 				"matchesJsonPath": {
 					"expression": "$.value.externalCaseRegistrationNumber",
 					"equalTo": "IAN-2019-1"
+				}
+			},
+			{
+				"matchesJsonPath": {
+					"expression": "$.value.categoryCode",
+					"equalTo": "21"
 				}
 			},
 			{
@@ -183,7 +189,7 @@
 		},
 		"jsonBody": {
 			"key": "aot_alcohol_decision",
-			"schemaId": "2281_aot_alcohol_decision_1.2",
+			"schemaId": "2281_aot_alcohol_decision_1.4",
 			"value": {},
 			"version": 0
 		}

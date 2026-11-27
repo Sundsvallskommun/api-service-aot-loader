@@ -65,6 +65,7 @@ import static se.sundsvall.aotloader.service.model.ReviewRule.OWNER_DIFFERS;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_ON_ALL_YEAR;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERIOD_PASSED;
+import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ENDED;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PERMIT_ROWS_ON_PLACE;
 import static se.sundsvall.aotloader.service.model.ReviewRule.PLACE_MISSING;
 import static se.sundsvall.aotloader.service.model.ReviewRule.RESTAURANT_NUMBER_DIFFERS;
@@ -133,6 +134,8 @@ final class AlktPermits {
 		final var holder = PartyRows.holder(owner, today);
 		final var hits = new ArrayList<RuleHit>();
 		placeAndOwnerHits(permit, place, owner, holder, hits);
+		// A permit revoked after it was issued but still in Gällande_Tillstånd is not migrated (decision 126)
+		index.revocationAfter(permit).ifPresent(revocation -> hits.add(RuleHit.of(PERMIT_ENDED, revocationText(revocation))));
 		final var decision = decisionOf(permit, hits);
 		final var periods = PermitPeriods.of(permit);
 		periodHits(permit, periods, hits);
@@ -173,7 +176,8 @@ final class AlktPermits {
 		final var granted = Optional.ofNullable(decisionData(grant.orElse(null), days, content.conditions(), files))
 			.map(data -> withCase(data, grant.orElse(null), errands, permit.utfardandeDiarienr()))
 			.orElse(null);
-		final var post = asset(content, subtype, holder, premises, place == null ? null : index.placeTypes(place), drawings, granted)
+		final var categoryCode = categoryCode(permit, place).orElse(null);
+		final var post = asset(content, subtype, categoryCode, holder, premises, place == null ? null : index.placeTypes(place), drawings, granted)
 			.asset(null, "Serveringstillstånd för " + name, permit.utfardandeDatum(), ServingPermits.validTo(permit, periods), legalBasisDocuments(permit, decision, files));
 		final var investigation = PermitInvestigations.of(title, errands.stream().map(ErrandRow::oppnad).toList(), errands.stream().map(ErrandRow::avslutad).toList(),
 			permit.utfardandeDatum(), index.investigationTexts(issuingErrands, permit.notes(), servingTimeTexts(permit)));
@@ -187,7 +191,7 @@ final class AlktPermits {
 			.persons(owner == null ? List.of() : PartyRows.persons(snapshot.personsOf(owner.id()), code -> snapshot.codeText(CODE_TYPE_POSITION, code), today))
 			.title(title)
 			.investigation(PermitInvestigations.premisesSection(permit.servingArea().serveringslokal()).map(investigation::withSection).orElse(investigation))
-			.description(description(name, categoryCode(permit, place).orElse(null), content, handlers))
+			.description(description(name, categoryCode, content, handlers))
 			.labelPaths(settings.labels())
 			.externalTag(TAG_DIARY_NUMBER, permit.utfardandeDiarienr())
 			.asset(post)
@@ -320,6 +324,16 @@ final class AlktPermits {
 			hits.add(RuleHit.of(rule, "beslutstyp %s, giltigt till %s".formatted(decision.beslutsTyp(), decision.giltigtTom())));
 		}
 		return decision;
+	}
+
+	/**
+	 * @return the decision that revoked the permit as the report tells it: its type in code list B, the text of the type
+	 *         when the code list has one, and its date, or "utan datum"
+	 */
+	private String revocationText(final DecisionRow revocation) {
+		final var type = revocation.beslutsTyp();
+		final var text = snapshot.codeText(CODE_TYPE_DECISION, type);
+		return Texts.joinWords(type, Objects.equals(text, type) ? null : text, Optional.ofNullable(SourceValues.format(revocation.beslutsDatum())).orElse("utan datum"));
 	}
 
 	/**
@@ -610,16 +624,18 @@ final class AlktPermits {
 	 * The JSON parameter of the permit by the alcohol schema (decision 87). Sittplatser2 is the number of seats indoors;
 	 * AlkT's number of seats outdoors is empty on every permit, so the post has none (analysis round 20).
 	 *
-	 * @param placeTypes the types of the serving place as one text, which is the description of the business orientation,
-	 *                   since the schema's list of orientations is not AlkT's list of types (decision 95); null for none
-	 * @param decision   the decision the permit was granted by, null when it has none
+	 * @param categoryCode the category code of the place (decisions 116, 124 and 125), null when it has none
+	 * @param placeTypes   the types of the serving place as one text, which is the description of the business
+	 *                     orientation, since the schema's list of orientations is not AlkT's list of types (decision 95);
+	 *                     null for none
+	 * @param decision     the decision the permit was granted by, null when it has none
 	 */
-	private AssetContents asset(final PermitContent content, final ServingPermitSubtype subtype, final Holder holder, final Place premises, final String placeTypes,
-		final List<String> drawings, final DecisionData decision) {
+	private AssetContents asset(final PermitContent content, final ServingPermitSubtype subtype, final String categoryCode, final Holder holder, final Place premises,
+		final String placeTypes, final List<String> drawings, final DecisionData decision) {
 		final var permit = content.permit();
 		final var contents = new AssetContents(ErrandType.SERVING_PERMIT.getAssetSchema()).caseRegistrationNumber(permit.utfardandeDiarienr());
 		contents.fields().text("servingPermitType", subtype == null ? null : subtype.name());
-		contents.permitHolder(holder).place(premises);
+		contents.categoryCode(categoryCode).permitHolder(holder).place(premises);
 		contents.fields()
 			.texts("servingTo", servingTo(permit))
 			.objects("servingPeriods", servingPeriods(permit, content.periods()))
@@ -701,7 +717,7 @@ final class AlktPermits {
 	}
 
 	/**
-	 * @param categoryCode the category code of the place, which no schema has a field for yet (decision 116), null when it
+	 * @param categoryCode the category code of the place, also in the JSON parameters (decisions 116 and 125), null when it
 	 *                     has none
 	 * @param handlers     the names of the handlers of the errands that issued the permit, or their codes when no name is
 	 *                     found (decision 51)

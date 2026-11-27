@@ -82,6 +82,20 @@ class AssetContentsTest {
 	}
 
 	@Test
+	void theCategoryCodeIsWrittenByTheAlcoholSchemaOnlyAndOnlyAsOneToThreeDigits() {
+		assertThat(json(new AssetContents(AssetSchema.ALCOHOL).categoryCode("21"))).isEqualTo("""
+			{"categoryCode":"21"}""");
+		assertThat(json(new AssetContents(AssetSchema.TOBACCO).categoryCode("21"))).isEqualTo("{}");
+		assertThat(json(new AssetContents(AssetSchema.ALCOHOL).categoryCode(null))).isEqualTo("{}");
+		for (final var code : List.of("2 1", "1234", "A1", "２１")) {
+			final var contents = new AssetContents(AssetSchema.ALCOHOL).categoryCode(code);
+
+			assertThat(json(contents)).as(code).isEqualTo("{}");
+			assertThat(contents.omitted()).as(code).containsExactly("categoryCode: har inte en till tre siffror");
+		}
+	}
+
+	@Test
 	void aNotificationHasNoDecisionForTheReferenceAndKeepsTheNumberAsItIs() {
 		final var contents = new AssetContents(AssetSchema.ALCOHOL).caseRegistrationNumber(WITH_DELEGATION).decision(null, ISSUED, null);
 

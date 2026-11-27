@@ -59,6 +59,11 @@ import static se.sundsvall.aotloader.source.alkt.AlktSnapshot.CODE_TYPE_PLACE_GR
 final class AlktIndex {
 
 	private static final Set<String> PLACE_MARKINGS = Set.of("UNG", "UTOK");
+	/** The types of decision in code list B that revoke a permit: after an inspection, for a bankruptcy, and otherwise. */
+	private static final Set<String> REVOKING_DECISIONS = Set.of("0540", "0700", "0710");
+	private static final Comparator<DecisionRow> DECISION_ORDER = Comparator
+		.comparing(DecisionRow::beslutad, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
+		.thenComparing(DecisionRow::beslutsId, Comparator.nullsFirst(Comparator.<Integer>naturalOrder()));
 	private static final String PICTURE_HEADING = "Bild";
 	private static final Comparator<PlaceDocument> DOCUMENT_ORDER = Comparator
 		.comparing(PlaceDocument::tidpunkt, Comparator.nullsFirst(Comparator.<LocalDateTime>naturalOrder()))
@@ -120,6 +125,45 @@ final class AlktIndex {
 	 */
 	boolean hasPermit(final Integer objektId) {
 		return permitRowsByPlace.containsKey(objektId);
+	}
+
+	/**
+	 * @return true when the place has a current permit that no decision has revoked since it was issued (G18), which its
+	 *         inspection errands and visits need to be migrated (decisions 29 and 126)
+	 */
+	boolean hasCurrentPermit(final Integer objektId) {
+		return hasPermit(objektId) && permitRowsOf(objektId).stream().allMatch(permit -> revocationAfter(permit).isEmpty());
+	}
+
+	/**
+	 * Finds a decision on an errand of the place that revoked a permit after the permit in Gällande_Tillstånd was issued
+	 * (G18, decision 126), whoever the errand concerned. One without a date counts as later, unless its errand was closed
+	 * before the permit was issued or it was entered before the decision the permit points to, as the ids follow the order
+	 * the decisions were entered in.
+	 *
+	 * @return the latest such decision; empty when there is none
+	 */
+	Optional<DecisionRow> revocationAfter(final PermitRow permit) {
+		return errandsOfPlace(permit.objektId()).stream()
+			.flatMap(errand -> decisionsOf(errand.arendeId()).stream()
+				.filter(decision -> CodeTexts.isOneOf(decision.beslutsTyp(), REVOKING_DECISIONS))
+				.filter(decision -> revokedAfterIssue(decision, errand, permit)))
+			.max(DECISION_ORDER);
+	}
+
+	private static boolean revokedAfterIssue(final DecisionRow decision, final ErrandRow errand, final PermitRow permit) {
+		final var issued = permit.utfardandeDatum();
+		if (issued == null) {
+			return true;
+		}
+		if (decision.beslutad() != null) {
+			return decision.beslutad().toLocalDate().isAfter(issued);
+		}
+		if (errand.avslutad() != null && errand.avslutad().isBefore(issued)) {
+			return false;
+		}
+		final var pointedTo = permit.beslutsId();
+		return pointedTo == null || pointedTo == 0 || decision.beslutsId() == null || decision.beslutsId() > pointedTo;
 	}
 
 	PlaceRow placeOf(final Integer objektId) {

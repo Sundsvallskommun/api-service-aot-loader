@@ -109,14 +109,14 @@ aot-loader:
     # The post in PartyAssets of a permit or a notification
     alcohol-party-asset:
       key: aot_alcohol_party_asset
-      schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_1.0}
+      schema-id: ${AOT_LOADER_ALCOHOL_ASSET_SCHEMA_ID:2281_aot_alcohol_party_asset_1.2}
     tobacco-party-asset:
       key: aot_tobacco_party_asset
       schema-id: ${AOT_LOADER_TOBACCO_ASSET_SCHEMA_ID:2281_aot_tobacco_party_asset_1.0}
     # What the decision of a permit says of the permit
     alcohol-decision:
       key: aot_alcohol_decision
-      schema-id: ${AOT_LOADER_ALCOHOL_DECISION_SCHEMA_ID:2281_aot_alcohol_decision_1.2}
+      schema-id: ${AOT_LOADER_ALCOHOL_DECISION_SCHEMA_ID:2281_aot_alcohol_decision_1.4}
     tobacco-decision:
       key: aot_tobacco_decision
       schema-id: ${AOT_LOADER_TOBACCO_DECISION_SCHEMA_ID:2281_aot_tobacco_decision_1.2}
